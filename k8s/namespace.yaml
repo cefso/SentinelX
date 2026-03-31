@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinelx
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sentinelx-secrets
+  namespace: sentinelx
+type: Opaque
+stringData:
+  DB_USER: postgres
+  DB_PASSWORD: your-secure-password
+  JWT_SECRET_KEY: your-jwt-secret-key-change-in-production
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinelx-config
+  namespace: sentinelx
+data:
+  APP_NAME: "SentinelX"
+  DEBUG: "false"
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "sentinelx"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"

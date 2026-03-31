@@ -41,8 +41,8 @@ class Alert(Base):
 
     __tablename__ = "alerts"
     __table_args__ = (
-        # GIN索引加速JSONB查询
-        Index("idx_alerts_labels", "tenant_id", postgresql_using="gin", postgresql_ops={"labels": "jsonb_path_ops"}),
+        # 普通索引
+        Index("idx_alerts_labels", "tenant_id", "labels"),
         Index("idx_alerts_fired_at", "tenant_id", "fired_at"),
         Index("idx_alerts_status_severity", "tenant_id", "status", "severity"),
     )

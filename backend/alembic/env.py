@@ -1,0 +1,72 @@
+"""
+Alembic 数据库迁移环境配置
+"""
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
+from alembic import context
+
+import sys
+from pathlib import Path
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from apps.core.config import settings
+from apps.core.database import Base
+from apps.tenant.models import Tenant, User, Role, UserRole, Team, UserTeam
+from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace
+from apps.rule.models import AlertRule, NotificationChannel, NotificationTemplate, NotificationRecord
+
+# Alembic Config 对象
+config = context.config
+
+# 设置数据库 URL
+config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
+
+# 设置日志
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# 目标元数据
+target_metadata = Base.metadata
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode."""
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

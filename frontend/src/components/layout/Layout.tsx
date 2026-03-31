@@ -15,11 +15,11 @@ export function Layout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-64 bg-gray-900 text-white">
+      <aside className="w-64 bg-gray-900 text-white flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-gray-800">
           <h1 className="text-xl font-bold">SentinelX</h1>
         </div>
-        <nav className="p-4 space-y-1">
+        <nav className="p-4 space-y-1 flex-1">
           {navigation.map((item) => {
             const isActive = location.pathname.startsWith(item.href)
             return (
@@ -35,7 +35,7 @@ export function Layout() {
             )
           })}
         </nav>
-        <div className="absolute bottom-0 w-64 p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-gray-800">
           <div className="flex items-center justify-between">
             <div className="text-sm">
               <div className="font-medium">{user?.username}</div>
@@ -50,7 +50,7 @@ export function Layout() {
           </div>
         </div>
       </aside>
-      <main className="flex-1 bg-gray-50 p-6">
+      <main className="flex-1 bg-gray-50 p-6 overflow-auto">
         <Outlet />
       </main>
     </div>

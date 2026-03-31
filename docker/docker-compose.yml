@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # ============ PostgreSQL + TimescaleDB ============
   postgres:
     image: timescale/timescaledb:latest-pg16
     container_name: sentinelx-postgres
@@ -12,12 +13,16 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - sentinelx-network
 
+  # ============ Redis ============
   redis:
     image: redis:7-alpine
     container_name: sentinelx-redis
@@ -30,14 +35,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - sentinelx-network
 
+  # ============ Backend API ============
   backend:
     build:
       context: ../backend
       dockerfile: ../docker/Dockerfile
     container_name: sentinelx-backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
+      - "5678:5678"  # Debug port
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -52,10 +61,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     volumes:
       - ../backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - sentinelx-network
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level info
+      "
 
+  # ============ Frontend ============
   frontend:
     build:
       context: ../frontend
@@ -66,11 +88,56 @@ services:
     environment:
       VITE_API_BASE_URL: /api
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ../frontend:/app
       - /app/node_modules
+    networks:
+      - sentinelx-network
     command: npm run dev -- --host
+
+  # ============ pgAdmin (可选 - 数据库管理) ============
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sentinelx-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sentinelx.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - tools
+    networks:
+      - sentinelx-network
+
+  # ============ Redis Commander (可选 - Redis管理) ============
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: sentinelx-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools
+    networks:
+      - sentinelx-network
+
+networks:
+  sentinelx-network:
+    driver: bridge
 
 volumes:
   postgres_data:

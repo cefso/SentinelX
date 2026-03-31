@@ -3,6 +3,7 @@ SentinelX - 规则数据模型
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Index
+from apps.core.database import Base
 
 
 class AlertRule(Base):

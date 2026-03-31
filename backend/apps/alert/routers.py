@@ -124,6 +124,96 @@ async def create_alert(
     return alert
 
 
+@router.post("/alerts/webhook/{source_type}")
+async def receive_webhook_alert(
+    source_type: str,
+    raw_data: dict,
+    background_tasks: BackgroundTasks,
+    tenant_id: str = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """
+    Webhook方式接收告警
+    自动识别数据格式并转换为标准告警
+    支持: prometheus, alertmanager, zabbix, aliyun, tencent, custom
+    """
+    from apps.alert.adapters.base import AdapterFactory
+
+    # 获取适配器
+    adapter = AdapterFactory.get_adapter(source_type)
+
+    # 解析告警
+    parsed_alert = await adapter.parse(raw_data, tenant_id)
+
+    if not parsed_alert:
+        raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
+
+    # 处理列表格式
+    if isinstance(parsed_alert, list):
+        results = []
+        for alert_data in parsed_alert:
+            trace_id = generate_trace_id()
+            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+
+            alert = Alert(
+                tenant_id=tenant_id,
+                alert_key=alert_data.alert_key,
+                fingerprint=fingerprint,
+                source=alert_data.source,
+                title=alert_data.title,
+                content=alert_data.content,
+                severity=alert_data.severity,
+                status="firing",
+                labels=alert_data.labels,
+                annotations=alert_data.annotations,
+                metric_name=alert_data.metric_name,
+                metric_value=alert_data.metric_value,
+                raw_data=alert_data.raw_data,
+                trace_id=trace_id,
+                fired_at=datetime.utcnow(),
+            )
+            db.add(alert)
+            await db.flush()
+
+            dispatcher = AlertDispatcher(db, redis)
+            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+            results.append(alert)
+
+        await db.commit()
+        return {"received": len(results), "alerts": [{"id": r.id, "trace_id": r.trace_id} for r in results]}
+    else:
+        trace_id = generate_trace_id()
+        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+
+        alert = Alert(
+            tenant_id=tenant_id,
+            alert_key=parsed_alert.alert_key,
+            fingerprint=fingerprint,
+            source=parsed_alert.source,
+            title=parsed_alert.title,
+            content=parsed_alert.content,
+            severity=parsed_alert.severity,
+            status="firing",
+            labels=parsed_alert.labels,
+            annotations=parsed_alert.annotations,
+            metric_name=parsed_alert.metric_name,
+            metric_value=parsed_alert.metric_value,
+            raw_data=parsed_alert.raw_data,
+            trace_id=trace_id,
+            fired_at=datetime.utcnow(),
+        )
+        db.add(alert)
+        await db.flush()
+
+        dispatcher = AlertDispatcher(db, redis)
+        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+
+        await db.commit()
+        await db.refresh(alert)
+        return {"id": alert.id, "trace_id": alert.trace_id}
+
+
 @router.post("/alerts/batch")
 async def create_alerts_batch(
     alerts: List[AlertCreate],

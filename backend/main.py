@@ -2,7 +2,6 @@
 SentinelX - 综合告警平台
 FastAPI 应用入口
 """
-import structlog
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,24 +11,16 @@ from fastapi.exceptions import RequestValidationError
 from apps.core.config import settings
 from apps.core.database import init_db, close_db
 from apps.core.redis import RedisClient
-from apps.core.exceptions import SentinelXException, http_exception_from_sentinelx
-
-# 配置structlog
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
+from apps.core.logging import get_logger
+from apps.core.middleware import (
+    RequestLoggingMiddleware,
+    PerformanceLoggingMiddleware,
+    TenantContextMiddleware,
+    ErrorHandlingMiddleware,
 )
+from apps.core.exceptions import SentinelXException
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -73,6 +64,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 自定义中间件
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(PerformanceLoggingMiddleware)
+app.add_middleware(TenantContextMiddleware)
 
 
 # 异常处理器
@@ -144,6 +141,53 @@ async def health_check():
     }
 
 
+@app.get("/health/ready")
+async def readiness_check():
+    """
+    就绪探针 - 检查所有依赖服务
+    Kubernetes会使用此端点判断容器是否就绪
+    """
+    checks = {
+        "database": "unknown",
+        "redis": "unknown",
+    }
+    is_ready = True
+
+    # 检查数据库
+    try:
+        from apps.core.database import async_engine
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        checks["database"] = "healthy"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {str(e)[:50]}"
+        is_ready = False
+
+    # 检查Redis
+    try:
+        from apps.core.redis import RedisClient
+        redis = await RedisClient.get_instance()
+        await redis.ping()
+        checks["redis"] = "healthy"
+    except Exception as e:
+        checks["redis"] = f"unhealthy: {str(e)[:50]}"
+        is_ready = False
+
+    return {
+        "status": "ready" if is_ready else "not_ready",
+        "checks": checks,
+    }
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """
+    存活探针 - 检查应用进程是否存活
+    Kubernetes会使用此端点判断容器是否需要重启
+    """
+    return {"status": "alive"}
+
+
 # 根路径
 @app.get("/")
 async def root():
@@ -161,12 +205,16 @@ from apps.tenant.routers import router as tenant_router
 from apps.alert.routers import router as alert_router
 from apps.rule.routers import router as rule_router
 from apps.notify.routers import router as notify_router
+from apps.ai.routers import router as ai_router
+from apps.callback.router import router as callback_router
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX, tags=["认证"])
 app.include_router(tenant_router, prefix=settings.API_V1_PREFIX, tags=["租户管理"])
 app.include_router(alert_router, prefix=settings.API_V1_PREFIX, tags=["告警"])
 app.include_router(rule_router, prefix=settings.API_V1_PREFIX, tags=["规则"])
 app.include_router(notify_router, prefix=settings.API_V1_PREFIX, tags=["通知"])
+app.include_router(ai_router, prefix=settings.API_V1_PREFIX, tags=["AI"])
+app.include_router(callback_router, prefix=settings.API_V1_PREFIX, tags=["回调"])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 SentinelX - 租户管理数据模型
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, Index
 from apps.core.database import Base
 
 
@@ -82,7 +82,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)  # null表示系统级角色
+    tenant_id = Column(Integer, nullable=True)  # null表示系统级角色
 
     name = Column(String(64), nullable=False)
     code = Column(String(64), nullable=False)  # 如: admin, viewer
@@ -146,3 +146,32 @@ class UserTeam(Base):
     team_id = Column(Integer, nullable=False, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """审计日志"""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("idx_audit_tenant_time", "tenant_id", "created_at"),
+        Index("idx_audit_user_time", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    username = Column(String(64), nullable=False)
+
+    # 操作信息
+    action = Column(String(64), nullable=False)  # create/update/delete/login等
+    resource_type = Column(String(64), nullable=False)  # alert/rule/user等
+    resource_id = Column(String(128), nullable=True)
+
+    # 详情
+    details = Column(JSON, default=dict)
+
+    # 来源
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(256), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

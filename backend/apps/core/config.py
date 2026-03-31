@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     # AI配置
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
+    DASHSCOPE_API_KEY: Optional[str] = None
     AI_MODEL: str = "gpt-4"
+    AI_PROVIDER: str = "openai"
 
     # 配额默认配置
     DEFAULT_MAX_ALERTS: int = 10000

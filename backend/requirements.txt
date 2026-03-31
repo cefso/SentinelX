@@ -8,11 +8,9 @@ sqlalchemy[asyncio]==2.0.30
 asyncpg==0.29.0
 alembic==1.13.1
 psycopg2-binary==2.9.9
-# TimescaleDB
-timescaledb==2.14.0
 
-# PGMQ (PostgreSQL Message Queue)
-pgmq==0.9.0
+# PGMQ (PostgreSQL Message Queue) - optional
+# pgmq==0.9.0
 
 # Redis
 redis==5.0.4

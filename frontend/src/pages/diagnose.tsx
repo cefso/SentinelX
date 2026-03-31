@@ -1,10 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 
 export function DiagnosePage() {
-  const [traceId, setTraceId] = useState('')
-  const [searchedTraceId, setSearchedTraceId] = useState('')
+  const [searchParams] = useSearchParams()
+  const initialTrace = searchParams.get('trace') || ''
+  const [traceId, setTraceId] = useState(initialTrace)
+  const [searchedTraceId, setSearchedTraceId] = useState(initialTrace)
+
+  useEffect(() => {
+    if (initialTrace) {
+      setSearchedTraceId(initialTrace)
+    }
+  }, [initialTrace])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['diagnose', searchedTraceId],

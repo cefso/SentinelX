@@ -2,13 +2,14 @@
 SentinelX - 租户管理路由
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from apps.core.database import get_db
 from apps.core.security import hash_password, verify_password
-from apps.auth.routers import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_superuser
+from apps.auth.services.auth import AuditService
 from apps.tenant.models import Tenant, User, Role, Team, UserRole, UserTeam
 from apps.tenant.schemas import (
     TenantCreate, TenantUpdate, TenantResponse,
