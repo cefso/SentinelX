@@ -80,10 +80,10 @@ docker-compose -f docker/docker-compose.yml up -d
 | 类型 | 值 |
 |------|------|
 | 租户 Slug | `sentinelx` |
-| 管理员邮箱 | `admin@sentinelx.local` |
-| 管理员密码 | `Admin@123456` |
+| 用户名 | `admin` |
+| 密码 | `Admin@123456` |
 
-> **注意**: 首次启动时请及时修改默认密码。
+> **注意**: 登录时使用 **用户名** `admin`，不是邮箱。
 
 ```bash
 docker-compose --profile tools up -d

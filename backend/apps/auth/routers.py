@@ -43,10 +43,10 @@ async def login(
 
         # 记录审计日志
         audit_service = auth_service
-        from apps.auth.services import AuditService
+        from apps.auth.services.auth import AuditService
         audit = AuditService(db)
         await audit.log(
-            tenant_id=user.tenant_id,
+            tenant_id=str(user.tenant_id),
             user_id=user.id,
             username=user.username,
             action="login",
