@@ -1,5 +1,6 @@
 #!/bin/bash
 # SentinelX 数据库初始化脚本
+# 首次创建数据库时执行
 
 set -e
 
@@ -19,3 +20,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 EOSQL
 
 echo "SentinelX database initialization complete."
+echo ""
+echo "注意: 默认租户和超级管理员将在 Backend 首次启动时自动创建"
+echo ""

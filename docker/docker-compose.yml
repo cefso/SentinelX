@@ -1,35 +1,58 @@
+# =============================================================================
+# SentinelX 综合告警平台 - Docker Compose 配置文件
+# =============================================================================
+# 使用说明:
+#   1. 基础启动: docker-compose up -d
+#   2. 带管理工具: docker-compose --profile tools up -d
+#   3. 查看日志: docker-compose logs -f [service_name]
+#   4. 停止服务: docker-compose down
+#   5. 清理数据: docker-compose down -v (会删除所有数据!)
+# =============================================================================
+
 version: '3.8'
 
 services:
-  # ============ PostgreSQL + TimescaleDB ============
+  # ============================================================================
+  # PostgreSQL + TimescaleDB 数据库
+  # ============================================================================
   postgres:
     image: timescale/timescaledb:latest-pg16
     container_name: sentinelx-postgres
+    # 数据库连接信息
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sentinelx
+      POSTGRES_USER: postgres          # 用户名
+      POSTGRES_PASSWORD: postgres      # 密码 (生产环境请修改)
+      POSTGRES_DB: sentinelx             # 数据库名
+    # 端口映射: 主机5432 -> 容器5432
     ports:
       - "5432:5432"
+    # 数据持久化: PostgreSQL数据存储在docker卷中
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # 初始化脚本: 首次创建数据库时执行 (启用TimescaleDB扩展)
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    # 健康检查: 使用pg_isready命令检查数据库是否就绪
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 10s        # 检查间隔
+      timeout: 5s           # 超时时间
+      retries: 5            # 重试次数
     networks:
-      - sentinelx-network
+      - sentinelx-network   # 专用网络
 
-  # ============ Redis ============
+  # ============================================================================
+  # Redis 缓存服务器
+  # ============================================================================
   redis:
     image: redis:7-alpine
     container_name: sentinelx-redis
+    # 端口映射: 主机6379 -> 容器6379
     ports:
       - "6379:6379"
+    # 数据持久化: Redis数据存储在docker卷中
     volumes:
       - redis_data:/data
+    # 健康检查: 使用redis-cli ping命令
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,55 +61,72 @@ services:
     networks:
       - sentinelx-network
 
-  # ============ Backend API ============
+  # ============================================================================
+  # Backend API 后端服务
+  # ============================================================================
   backend:
     build:
-      context: ../backend
+      context: ../backend              # Dockerfile所在目录 (相对于docker-compose.yml)
       dockerfile: ../docker/Dockerfile
     container_name: sentinelx-backend
+    # 端口映射:
+    #   8001:8000 -> 主机8001映射到容器8000 (API端口)
+    #   5678:5678 -> 主机5678映射到容器5678 (Debug端口,可选)
     ports:
       - "8001:8000"
-      - "5678:5678"  # Debug port
+      - "5678:5678"
+    # 环境变量配置
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: sentinelx
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      DEBUG: "true"
+      DB_HOST: postgres               # 数据库主机名 (服务名)
+      DB_PORT: 5432                   # 数据库端口
+      DB_USER: postgres               # 数据库用户名
+      DB_PASSWORD: postgres           # 数据库密码
+      DB_NAME: sentinelx              # 数据库名
+      REDIS_HOST: redis               # Redis主机名 (服务名)
+      REDIS_PORT: 6379                # Redis端口
+      DEBUG: "true"                   # 调试模式 (生产环境设为false)
+    # 依赖服务: 等待postgres和redis健康检查通过后再启动
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # 健康检查: 通过HTTP请求检查应用是否正常运行
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 30s                   # 检查间隔
+      timeout: 10s                    # 超时时间
+      retries: 3                      # 重试次数
+      start_period: 40s               # 启动等待时间 (给予应用足够时间启动)
+    # 代码卷挂载: 挂载本地backend目录到容器,实现代码热重载
     volumes:
       - ../backend:/app
     networks:
       - sentinelx-network
+    # 启动命令:
+    #   1. alembic upgrade head: 运行数据库迁移,创建表结构
+    #   2. uvicorn main:app: 启动FastAPI应用
     command: >
       sh -c "
         alembic upgrade head &&
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level info
       "
 
-  # ============ Frontend ============
+  # ============================================================================
+  # Frontend 前端应用
+  # ============================================================================
   frontend:
     build:
-      context: ../frontend
+      context: ../frontend             # Dockerfile所在目录
       dockerfile: ../docker/Dockerfile.frontend
     container_name: sentinelx-frontend
+    # 端口映射: 主机3000 -> 容器3000
     ports:
       - "3000:3000"
+    # 环境变量
     environment:
-      VITE_API_BASE_URL: /api
+      VITE_API_BASE_URL: /api         # API基础路径 (Nginx反向代理)
+    # 依赖服务: 等待backend健康检查通过后再启动
     depends_on:
       backend:
         condition: service_healthy
@@ -96,49 +136,69 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    # 代码卷挂载: 挂载本地frontend目录到容器,实现热重载
     volumes:
       - ../frontend:/app
-      - /app/node_modules
+      - /app/node_modules             # 保持node_modules不被覆盖
     networks:
       - sentinelx-network
+    # 启动命令: npm run dev启动开发服务器, --host允许外部访问
     command: npm run dev -- --host
 
-  # ============ pgAdmin (可选 - 数据库管理) ============
+  # ============================================================================
+  # pgAdmin 数据库管理工具 (可选)
+  # ============================================================================
+  # 使用方式: docker-compose --profile tools up -d
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: sentinelx-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@sentinelx.local
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: admin@sentinelx.local    # 登录邮箱
+      PGADMIN_DEFAULT_PASSWORD: admin                  # 登录密码
+    # 端口映射: 主机5050 -> 容器80
     ports:
       - "5050:80"
     depends_on:
       postgres:
         condition: service_healthy
+    # 仅在使用 --profile tools 时启动
     profiles:
       - tools
     networks:
       - sentinelx-network
 
-  # ============ Redis Commander (可选 - Redis管理) ============
+  # ============================================================================
+  # Redis Commander Redis管理工具 (可选)
+  # ============================================================================
+  # 使用方式: docker-compose --profile tools up -d
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: sentinelx-redis-commander
     environment:
-      REDIS_HOSTS: local:redis:6379
+      REDIS_HOSTS: local:redis:6379    # Redis连接配置
+    # 端口映射: 主机8081 -> 容器8081
     ports:
       - "8081:8081"
     depends_on:
       - redis
+    # 仅在使用 --profile tools 时启动
     profiles:
       - tools
     networks:
       - sentinelx-network
 
+# =============================================================================
+# Docker 网络配置
+# =============================================================================
 networks:
   sentinelx-network:
-    driver: bridge
+    driver: bridge                    # 桥接网络,容器间通过服务名通信
 
+# =============================================================================
+# Docker 卷配置 (数据持久化)
+# =============================================================================
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data:                     # PostgreSQL数据卷
+    driver: local
+  redis_data:                        # Redis数据卷
+    driver: local

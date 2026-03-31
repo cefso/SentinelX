@@ -34,16 +34,15 @@ docker-compose --profile tools up -d
 
 ### 4. 默认账号
 
-首次启动后需要通过 API 创建租户和超级管理员：
+应用首次启动时会自动创建默认租户和超级管理员账号：
 
-```bash
-# 创建超级管理员用户 (通过 pgAdmin 或 psql)
-# 或使用 API 创建租户后，通过租户管理员创建用户
+| 类型 | 值 |
+|------|------|
+| 租户 Slug | `sentinelx` |
+| 管理员邮箱 | `admin@sentinelx.local` |
+| 管理员密码 | `Admin@123456` |
 
-# 默认测试账号 (可在数据库中创建)
-# 超级管理员: admin@sentinelx.local / Admin@123
-# 租户用户: user@tenant.local / User@123
-```
+> **注意**: 首次启动时请及时修改默认密码。
 
 ---
 

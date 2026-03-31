@@ -75,13 +75,15 @@ docker-compose -f docker/docker-compose.yml up -d
 
 ### 4. 默认账号
 
-系统启动后需要创建初始用户。首次通过数据库或 pgAdmin 创建：
+应用首次启动时会自动创建默认租户和超级管理员账号：
 
-```sql
--- 创建超级管理员 (通过 psql 或 pgAdmin)
--- 租户 Slug: sentinelx
--- 初始用户: admin@sentinelx.local / Admin@123456
-```
+| 类型 | 值 |
+|------|------|
+| 租户 Slug | `sentinelx` |
+| 管理员邮箱 | `admin@sentinelx.local` |
+| 管理员密码 | `Admin@123456` |
+
+> **注意**: 首次启动时请及时修改默认密码。
 
 ```bash
 docker-compose --profile tools up -d

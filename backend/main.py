@@ -37,6 +37,10 @@ async def lifespan(app: FastAPI):
     await RedisClient.get_instance()
     logger.info("redis_initialized")
 
+    # 创建默认租户和超级管理员
+    from apps.core.seed import seed_default_data
+    await seed_default_data()
+
     yield
 
     # 关闭时
