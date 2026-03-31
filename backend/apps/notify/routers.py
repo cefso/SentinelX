@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from apps.core.database import get_db
-from apps.auth.routers import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.notify.models import NotificationRecord
 from apps.notify.schemas import NotificationRecordResponse
 

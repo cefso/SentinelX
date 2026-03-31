@@ -13,7 +13,7 @@ import structlog
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
-from apps.auth.routers import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
@@ -270,11 +270,11 @@ async def list_alerts(
     keyword: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警列表"""
-    query = select(Alert).where(Alert.tenant_id == tenant_id)
+    query = select(Alert).where(Alert.tenant_id == str(tenant_id))
 
     if status:
         query = query.where(Alert.status == status)
@@ -314,41 +314,77 @@ async def list_alerts(
 
 @router.get("/alerts/stats", response_model=AlertStats)
 async def get_alert_stats(
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警统计"""
-    base_query = select(Alert).where(Alert.tenant_id == tenant_id)
+    base_filter = Alert.tenant_id == str(tenant_id)
 
-    async def count_by(filter_func):
-        result = await db.execute(select(func.count()).select_from(base_query.subquery().where(filter_func)))
-        return result.scalar()
+    # Total count
+    total_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter))
+    total = total_result.scalar()
+
+    # Firing count
+    firing_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing"))
+    firing = firing_result.scalar()
+
+    # Resolved count
+    resolved_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "resolved"))
+    resolved = resolved_result.scalar()
+
+    # Suppressed count
+    suppressed_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "suppressed"))
+    suppressed = suppressed_result.scalar()
+
+    # Critical count (firing + critical severity)
+    critical_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "critical"))
+    critical = critical_result.scalar()
+
+    # High count
+    high_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "high"))
+    high = high_result.scalar()
+
+    # Medium count
+    medium_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "medium"))
+    medium = medium_result.scalar()
+
+    # Low count
+    low_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "low"))
+    low = low_result.scalar()
+
+    # Info count
+    info_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "info"))
+    info = info_result.scalar()
+
+    # Unassigned count
+    unassigned_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.assignee_id == None))
+    unassigned = unassigned_result.scalar()
 
     return AlertStats(
-        total=await count_by(True),
-        firing=await count_by(Alert.status == "firing"),
-        resolved=await count_by(Alert.status == "resolved"),
-        suppressed=await count_by(Alert.status == "suppressed"),
-        critical=await count_by(Alert.status == "firing" and Alert.severity == "critical"),
-        high=await count_by(Alert.status == "firing" and Alert.severity == "high"),
-        medium=await count_by(Alert.status == "firing" and Alert.severity == "medium"),
-        low=await count_by(Alert.status == "firing" and Alert.severity == "low"),
-        info=await count_by(Alert.status == "firing" and Alert.severity == "info"),
-        unassigned=await count_by(Alert.status == "firing" and Alert.assignee_id == None),
+        total=total,
+        firing=firing,
+        resolved=resolved,
+        suppressed=suppressed,
+        critical=critical,
+        high=high,
+        medium=medium,
+        low=low,
+        info=info,
+        unassigned=unassigned,
     )
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
 async def get_alert(
     alert_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警详情"""
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()
@@ -361,7 +397,7 @@ async def get_alert(
 async def update_alert(
     alert_id: int,
     request: AlertUpdate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -369,7 +405,7 @@ async def update_alert(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()
@@ -378,7 +414,7 @@ async def update_alert(
 
     # 记录历史
     history = AlertHistory(
-        tenant_id=tenant_id,
+        tenant_id=str(tenant_id),
         alert_id=alert_id,
         action="update",
         operator_id=current_user.id,
@@ -401,7 +437,7 @@ async def update_alert(
 @router.get("/alerts/diagnose/{trace_id}", response_model=DiagnosisResponse)
 async def diagnose_alert(
     trace_id: str,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     redis=Depends(get_redis),
 ):
     """诊断模式 - 根据Trace ID查看告警处理流程"""
@@ -411,7 +447,7 @@ async def diagnose_alert(
     if not trace_data:
         raise HTTPException(status_code=404, detail="Trace not found")
 
-    if trace_data.get("tenant_id") != tenant_id:
+    if trace_data.get("tenant_id") != str(tenant_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 获取步骤

@@ -13,14 +13,15 @@
 
 ## 特性
 
-- **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制
-- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云、腾讯云、Zabbix 等
+- **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
+- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云、腾讯云、华为云、Zabbix、Grafana 等
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
 - **多渠道通知**: 钉钉、飞书、企业微信、邮件等
 - **AI增强**: LLM接入，支持根因分析和内容润色
 - **诊断模式**: Trace ID 全链路追踪
 - **双认证**: JWT用户认证 + API Key服务认证
+- **租户切换**: 用户可同时属于多个租户，支持前端快速切换
 
 ## 技术栈
 
@@ -55,41 +56,19 @@
 cd /Users/cefso/code/SentinelX
 ```
 
-### 2. 启动服务
+### 2. 启动外部依赖
+
+使用 Docker 启动 PostgreSQL 和 Redis：
 
 ```bash
-docker-compose -f docker/docker-compose.yml up -d
+docker-compose -f docker/docker-compose.infra.yml up -d
 ```
 
 这将启动:
 - PostgreSQL (TimescaleDB) - 端口 5432
 - Redis - 端口 6379
-- Backend API - 端口 8000
-- Frontend - 端口 3000
 
-### 3. 访问应用
-
-- 前端: http://localhost:3000
-- API 文档: http://localhost:8001/docs
-- pgAdmin (可选): http://localhost:5050
-
-### 4. 默认账号
-
-应用首次启动时会自动创建默认租户和超级管理员账号：
-
-| 类型 | 值 |
-|------|------|
-| 租户 Slug | `sentinelx` |
-| 用户名 | `admin` |
-| 密码 | `Admin@123456` |
-
-> **注意**: 登录时使用 **用户名** `admin`，不是邮箱。
-
-```bash
-docker-compose --profile tools up -d
-```
-
-### 4. 本地开发
+### 3. 本地开发 (前后端不使用 Docker)
 
 **后端:**
 ```bash
@@ -101,8 +80,11 @@ pip install -r requirements.txt
 # 运行迁移
 alembic upgrade head
 
+# 如果需要重置数据库
+alembic downgrade base && alembic upgrade head
+
 # 启动开发服务器
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload --log-level debug
 ```
 
 **前端:**
@@ -111,6 +93,41 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### 4. 访问应用
+
+- 前端: http://localhost:3000
+- API 文档: http://localhost:8001/docs
+
+### 5. 默认账号
+
+应用首次启动时会自动创建默认租户和超级管理员账号：
+
+| 类型 | 值 |
+|------|------|
+| 租户 Slug | `sentinelx` |
+| 用户名 | `admin` |
+| 密码 | `Admin@123456` |
+
+> **注意**: 登录时使用 **用户名** `admin`，不是邮箱。
+
+---
+
+## Docker 部署 (可选)
+
+如需使用 Docker 运行完整服务（包括后端和前端）：
+
+```bash
+# 启动基础设施 + 后端 + 前端
+docker-compose -f docker/docker-compose.yml up -d
+
+# 启动带管理工具 (pgAdmin, Redis Commander)
+docker-compose --profile tools up -d
+```
+
+管理工具地址:
+- pgAdmin: http://localhost:5050
+- Redis Commander: http://localhost:8081
 
 ## 项目结构
 
@@ -206,6 +223,26 @@ SentinelX/
 接入 → 指纹生成 → 去重检查 → 抑制检查 → 聚合检查 → 规则匹配 → 通知发送
 ```
 
+### 多租户架构
+
+SentinelX 支持用户属于多个租户，通过 UserTenant 关联表实现 N:M 关系：
+
+```
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│    User     │       │  UserTenant  │       │   Tenant    │
+├─────────────┤       ├─────────────┤       ├─────────────┤
+│ id          │───1:N──│ user_id     │───N:1──│ id          │
+│ username    │       │ tenant_id    │       │ name        │
+│ email       │       │ role_id     │───N:1──│ slug        │
+│ is_system   │       │ is_current  │       │ is_active   │
+└─────────────┘       └─────────────┘       └─────────────┘
+```
+
+- **is_system**: 系统管理员标志，拥有全局权限
+- **is_superuser**: 租户管理员标志，在当前租户内有全部权限
+- **is_current**: 用户当前活跃的租户
+- **scope**: 角色范围，system 或 tenant
+
 ### 认证体系
 
 | 认证方式 | 用途 | Header |
@@ -252,7 +289,8 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 ```
 POST /api/v1/auth/login          # 用户登录
 POST /api/v1/auth/refresh       # 刷新Token
-POST /api/v1/auth/register       # 用户注册
+POST /api/v1/auth/switch-tenant # 切换租户
+GET  /api/v1/auth/tenants       # 获取我的租户列表
 GET  /api/v1/auth/me            # 当前用户信息
 GET  /api/v1/auth/permissions    # 获取我的权限
 POST /api/v1/auth/api-keys      # 创建API Key

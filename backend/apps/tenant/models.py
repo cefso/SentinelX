@@ -2,7 +2,7 @@
 SentinelX - 租户管理数据模型
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, Index, ForeignKey, UniqueConstraint
 from apps.core.database import Base
 
 
@@ -42,12 +42,11 @@ class Tenant(Base):
 
 
 class User(Base):
-    """用户模型"""
+    """用户模型 - 支持多租户"""
 
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
 
     # 基本信息
     username = Column(String(64), nullable=False, unique=True, index=True)
@@ -58,7 +57,8 @@ class User(Base):
     password_hash = Column(String(256), nullable=False)
 
     # 用户类型
-    is_superuser = Column(Boolean, default=False)  # 超级管理员
+    is_system = Column(Boolean, default=False)  # 系统管理员（不受租户限制）
+    is_superuser = Column(Boolean, default=False)  # 租户管理员（在本租户内）
 
     # 状态
     is_active = Column(Boolean, default=True)
@@ -73,19 +73,45 @@ class User(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     def __repr__(self):
-        return f"<User(id={self.id}, username={self.username}, tenant_id={self.tenant_id})>"
+        return f"<User(id={self.id}, username={self.username})>"
+
+
+class UserTenant(Base):
+    """用户-租户关联表（多对多）"""
+
+    __tablename__ = "user_tenants"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'tenant_id', name='uq_user_tenant'),
+        Index('idx_user_tenant_user', 'user_id'),
+        Index('idx_user_tenant_tenant', 'tenant_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+
+    # 用户在该租户中的角色ID
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+
+    # 是否为当前活跃租户（切换用）
+    is_current = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Role(Base):
     """角色模型"""
 
     __tablename__ = "roles"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'code', name='uq_role_tenant_code'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=True)  # null表示系统级角色
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)  # null表示系统级角色
 
     name = Column(String(64), nullable=False)
-    code = Column(String(64), nullable=False)  # 如: admin, viewer
+    code = Column(String(64), nullable=False)  # 如: admin, viewer, system_admin
     description = Column(Text, nullable=True)
 
     # 权限列表 (JSON)
@@ -94,24 +120,15 @@ class Role(Base):
     # 内置角色不可删除
     is_builtin = Column(Boolean, default=False)
 
+    # scope: system / tenant
+    scope = Column(String(32), default="tenant")
+
     # 时间戳
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f"<Role(id={self.id}, name={self.name}, code={self.code})>"
-
-
-class UserRole(Base):
-    """用户角色关联"""
-
-    __tablename__ = "user_roles"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    role_id = Column(Integer, nullable=False, index=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Team(Base):

@@ -59,7 +59,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=128)
-    tenant_id: int
+    # tenant_id 不需要，前端自动使用当前租户
 
 
 class UserUpdate(BaseModel):
@@ -69,14 +69,14 @@ class UserUpdate(BaseModel):
 
 
 class UserPasswordUpdate(BaseModel):
-    old_password: str
+    old_password: Optional[str] = None  # 管理员修改时不需要旧密码
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class UserResponse(UserBase):
     id: int
-    tenant_id: int
-    is_superuser: bool
+    is_system: bool  # 系统管理员标志
+    is_superuser: bool  # 保留但废弃，由UserTenant决定
     is_active: bool
     last_login_at: Optional[datetime] = None
     created_at: datetime
@@ -108,6 +108,7 @@ class RoleResponse(RoleBase):
     tenant_id: Optional[int]
     permissions: List[str]
     is_builtin: bool
+    scope: str = "tenant"  # system 或 tenant
     created_at: datetime
 
     class Config:

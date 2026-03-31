@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import AsyncSessionLocal
 from apps.core.security import hash_password
-from apps.tenant.models import Tenant, User, Role, UserRole
+from apps.tenant.models import Tenant, User, Role, UserTenant
 
 logger = structlog.get_logger()
 
@@ -50,15 +50,16 @@ async def seed_default_data():
             session.add(tenant)
             await session.flush()
 
-            # 创建系统级角色
+            # 创建系统级角色 (tenant_id = NULL)
             system_roles = [
                 Role(
                     tenant_id=None,
                     name="超级管理员",
-                    code="superadmin",
+                    code="system_admin",
                     description="系统级超级管理员，拥有所有权限",
                     permissions=["*"],
                     is_builtin=True,
+                    scope="system",
                 ),
                 Role(
                     tenant_id=None,
@@ -67,6 +68,7 @@ async def seed_default_data():
                     description="租户管理员，拥有租户内所有权限",
                     permissions=["*"],
                     is_builtin=True,
+                    scope="tenant",
                 ),
                 Role(
                     tenant_id=None,
@@ -75,6 +77,7 @@ async def seed_default_data():
                     description="只读用户",
                     permissions=["read"],
                     is_builtin=True,
+                    scope="system",
                 ),
             ]
             for role in system_roles:
@@ -90,54 +93,60 @@ async def seed_default_data():
                     description="租户内管理员",
                     permissions=["*"],
                     is_builtin=False,
+                    scope="tenant",
                 ),
                 Role(
                     tenant_id=tenant.id,
                     name="运维人员",
                     code="operator",
                     description="运维人员",
-                    permissions=["read", "write", "alert:manage"],
+                    permissions=["read", "write", "alerts:read", "alerts:write", "rules:read", "rules:write"],
                     is_builtin=False,
+                    scope="tenant",
                 ),
                 Role(
                     tenant_id=tenant.id,
                     name="只读用户",
                     code="tenant_viewer",
                     description="租户只读用户",
-                    permissions=["read"],
+                    permissions=["read", "alerts:read", "rules:read"],
                     is_builtin=False,
+                    scope="tenant",
                 ),
             ]
             for role in tenant_roles:
                 session.add(role)
             await session.flush()
 
-            # 创建超级管理员用户
+            # 创建超级管理员用户 (系统管理员)
             admin_user = User(
-                tenant_id=tenant.id,
                 username=DEFAULT_ADMIN_USERNAME,
                 email=DEFAULT_ADMIN_EMAIL,
                 phone="+86-13800138000",
                 password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
-                is_superuser=True,
+                is_system=True,  # 系统管理员
+                is_superuser=False,  # 在多租户模型中，is_superuser由UserTenant关联决定
                 is_active=True,
                 is_deleted=False,
             )
             session.add(admin_user)
             await session.flush()
 
-            # 分配超级管理员角色
+            # 分配超级管理员角色 (system_admin)
             result = await session.execute(
-                select(Role).where(Role.code == "superadmin", Role.tenant_id.is_(None))
+                select(Role).where(Role.code == "system_admin", Role.tenant_id.is_(None))
             )
-            superadmin_role = result.scalar_one_or_none()
+            system_admin_role = result.scalar_one_or_none()
 
-            if superadmin_role:
-                user_role = UserRole(
+            if system_admin_role:
+                # 关联用户到租户，并分配系统管理员角色
+                user_tenant = UserTenant(
                     user_id=admin_user.id,
-                    role_id=superadmin_role.id,
+                    tenant_id=tenant.id,
+                    role_id=system_admin_role.id,
+                    is_current=True,
                 )
-                session.add(user_role)
+                session.add(user_tenant)
 
             await session.commit()
             logger.info(

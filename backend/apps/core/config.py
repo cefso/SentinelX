@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     DEFAULT_MAX_ALERTS: int = 10000
     DEFAULT_MAX_USERS: int = 10
     DEFAULT_MAX_RULES: int = 100
+    DEFAULT_MAX_CHANNELS: int = 20
 
     # PGMQ配置
     PGMQ_ENABLED: bool = True

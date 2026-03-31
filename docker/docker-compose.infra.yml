@@ -1,0 +1,69 @@
+# =============================================================================
+# SentinelX 基础设施 - PostgreSQL + Redis
+# =============================================================================
+# 使用说明:
+#   1. 启动基础设施: docker-compose -f docker-compose.infra.yml up -d
+#   2. 查看日志: docker-compose -f docker-compose.infra.yml logs -f
+#   3. 停止服务: docker-compose -f docker-compose.infra.yml down
+#   4. 清理数据: docker-compose -f docker-compose.infra.yml down -v
+#
+# 此配置文件仅启动 PostgreSQL 和 Redis，用于本地开发时连接外部依赖
+# =============================================================================
+
+services:
+  # ============================================================================
+  # PostgreSQL + TimescaleDB 数据库
+  # ============================================================================
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: sentinelx-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sentinelx
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentinelx-network
+
+  # ============================================================================
+  # Redis 缓存服务器
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: sentinelx-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentinelx-network
+
+# =============================================================================
+# Docker 网络配置
+# =============================================================================
+networks:
+  sentinelx-network:
+    driver: bridge
+
+# =============================================================================
+# Docker 卷配置
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

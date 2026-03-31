@@ -3,38 +3,61 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
 
+interface LoginResponse {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  user: {
+    id: number
+    username: string
+    email: string
+    is_system: boolean
+  }
+  tenants: Array<{
+    id: number
+    name: string
+    slug: string
+    role: {
+      id: number
+      code: string
+      name: string
+    }
+    is_current: boolean
+    is_superuser: boolean
+    permissions: string[]
+  }>
+}
+
 export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { setTokens, setUser } = useAuthStore()
+  const { setTokens, setUser, setTenants } = useAuthStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('Login: form submitted', { username, password })
     setError('')
     setLoading(true)
 
     try {
-      const response = await apiClient.post<{
-        access_token: string
-        refresh_token: string
-      }>('/auth/login', { username, password })
+      console.log('Login: sending request to /auth/login')
+      const response = await apiClient.post<LoginResponse>('/auth/login', { username, password })
 
+      // 设置 tokens
       setTokens(response.access_token, response.refresh_token)
 
-      const userResponse = await apiClient.get<{
-        id: number
-        username: string
-        email: string
-        tenant_id: number
-        is_superuser: boolean
-      }>('/auth/me')
-      setUser(userResponse)
+      // 设置用户信息
+      setUser(response.user)
+
+      // 设置租户列表
+      setTenants(response.tenants)
 
       navigate('/')
     } catch (err: any) {
+      console.error('Login error:', err)
       setError(err.response?.data?.detail || 'Login failed')
     } finally {
       setLoading(false)

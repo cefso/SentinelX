@@ -18,12 +18,21 @@ class ApiClient {
     this.setupInterceptors()
   }
 
+  private getAccessToken(): string | null {
+    // 直接从 zustand store 访问状态，不使用 hook
+    return useAuthStore.getState().accessToken
+  }
+
+  private getRefreshToken(): string | null {
+    return useAuthStore.getState().refreshToken
+  }
+
   private setupInterceptors() {
     this.client.interceptors.request.use(
       (config) => {
-        const authStore = useAuthStore()
-        if (authStore.accessToken) {
-          config.headers.Authorization = `Bearer ${authStore.accessToken}`
+        const token = this.getAccessToken()
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`
         }
         return config
       },
@@ -36,15 +45,14 @@ class ApiClient {
         const originalRequest = error.config
 
         if (error.response?.status === 401 && originalRequest) {
-          const authStore = useAuthStore()
           try {
             const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-              refresh_token: authStore.refreshToken,
+              refresh_token: this.getRefreshToken(),
             })
-            authStore.setTokens(response.data.access_token, response.data.refresh_token)
+            useAuthStore.getState().setTokens(response.data.access_token, response.data.refresh_token)
             return this.client(originalRequest)
           } catch {
-            authStore.logout()
+            useAuthStore.getState().logout()
             window.location.href = '/login'
           }
         }

@@ -4,6 +4,7 @@ import { LoginPage } from './pages/login'
 import { Layout } from './components/layout/Layout'
 import { AlertsPage } from './pages/alerts'
 import { AlertDetailPage } from './pages/alerts/detail'
+import { AlertSourcesPage } from './pages/alerts/sources'
 import { RulesPage } from './pages/rules'
 import { ChannelsPage } from './pages/channels'
 import { DiagnosePage } from './pages/diagnose'
@@ -33,6 +34,7 @@ function App() {
       >
         <Route index element={<Navigate to="/alerts" replace />} />
         <Route path="alerts" element={<AlertsPage />} />
+        <Route path="alerts/sources" element={<AlertSourcesPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />
         <Route path="rules" element={<RulesPage />} />
         <Route path="channels" element={<ChannelsPage />} />

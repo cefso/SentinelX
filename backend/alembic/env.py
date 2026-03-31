@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from apps.core.config import settings
 from apps.core.database import Base
-from apps.tenant.models import Tenant, User, Role, UserRole, Team, UserTeam
+from apps.tenant.models import Tenant, User, Role, UserTeam, Team
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace
 from apps.rule.models import AlertRule, NotificationChannel, NotificationTemplate, NotificationRecord
 

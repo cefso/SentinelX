@@ -2,8 +2,9 @@
 SentinelX - 认证依赖注入
 """
 from typing import Optional
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, HTTPException, Header, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from apps.core.database import get_db
 from apps.core.security import verify_token
@@ -11,6 +12,22 @@ from apps.tenant.models import User
 from apps.auth.services.auth import AuthService, PermissionService, AuditService
 from apps.auth.api_key import APIKeyAuth
 from apps.core.exceptions import AuthenticationError, AuthorizationError
+
+
+# 全局变量存储当前请求的token payload
+# 在生产环境中应使用 request.state 或 contextvars
+_token_payload: Optional[dict] = None
+
+
+def set_token_payload(payload: dict):
+    """设置当前请求的token payload"""
+    global _token_payload
+    _token_payload = payload
+
+
+def get_token_payload() -> dict:
+    """获取当前请求的token payload"""
+    return _token_payload
 
 
 async def get_auth_service(
@@ -63,13 +80,25 @@ async def get_current_user(
             )
 
         # API Key认证返回虚拟用户（系统用户）
-        # 创建系统用户对象用于权限检查
+        # API Key 有全部权限，设置 is_superuser=True
         system_user = User(
             id=0,
-            tenant_id=tenant.id,
             username=f"api_key:{tenant.slug}",
+            email="",
+            password_hash="",
+            is_system=False,
             is_superuser=True,  # API Key默认有全部权限
+            is_active=True,
         )
+        # 设置token payload用于API Key场景
+        set_token_payload({
+            "user_id": 0,
+            "username": f"api_key:{tenant.slug}",
+            "current_tenant_id": tenant.id,
+            "is_system": False,
+            "is_superuser": True,
+            "permissions": ["*"],
+        })
         return system_user
 
     # JWT认证
@@ -93,8 +122,20 @@ async def get_current_user(
             detail="Invalid or expired token",
         )
 
-    user_id = payload.get("sub")
+    # 保存token payload供后续使用
+    set_token_payload(payload)
+
+    user_id = payload.get("user_id")
     if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    # JWT user_id 是整数
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
@@ -116,7 +157,19 @@ async def get_current_tenant_id(
     current_user: User = Depends(get_current_user),
 ) -> int:
     """获取当前租户ID"""
-    return current_user.tenant_id
+    payload = get_token_payload()
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    tenant_id = payload.get("current_tenant_id")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No tenant context",
+        )
+    return tenant_id
 
 
 def require_permission(permission: str):
@@ -124,7 +177,7 @@ def require_permission(permission: str):
     权限检查装饰器
     用法:
         @router.get("/alerts")
-        @require_permission("alert:read")
+        @require_permission("alerts:read")
         async def get_alerts(current_user: User = Depends(get_current_user)):
             ...
     """
@@ -132,18 +185,17 @@ def require_permission(permission: str):
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ):
-        permission_service = PermissionService(db)
-        has_permission = await permission_service.check_permission(
-            current_user.id, permission
+        payload = get_token_payload()
+        permissions = payload.get("permissions", []) if payload else []
+
+        # 检查是否有权限
+        if "*" in permissions or permission in permissions:
+            return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: {permission}",
         )
-
-        if not has_permission:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: {permission}",
-            )
-
-        return current_user
 
     return dependency
 
@@ -151,7 +203,10 @@ def require_permission(permission: str):
 def require_superuser():
     """超级管理员检查"""
     async def dependency(current_user: User = Depends(get_current_user)):
-        if not current_user.is_superuser:
+        payload = get_token_payload()
+        is_superuser = payload.get("is_superuser", False) if payload else False
+
+        if not is_superuser:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Superuser access required",

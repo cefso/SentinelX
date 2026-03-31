@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from apps.core.database import get_db
-from apps.auth.routers import get_current_tenant_id
+from apps.auth.dependencies import get_current_tenant_id
 from apps.alert.models import Alert
 from apps.ai.service import AIService
 
