@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
-import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/services/api'
+import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus } from 'lucide-react'
 
 const navigation = [
   { name: '告警', href: '/alerts', icon: Bell },
@@ -16,9 +18,11 @@ const bottomNavigation = [
 
 export function Layout() {
   const location = useLocation()
+  const queryClient = useQueryClient()
   const { user, tenants, currentTenant, switchTenant, logout } = useAuthStore()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showTenantMenu, setShowTenantMenu] = useState(false)
+  const [showCreateTenantModal, setShowCreateTenantModal] = useState(false)
   const [switching, setSwitching] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const tenantMenuRef = useRef<HTMLDivElement>(null)
@@ -46,6 +50,10 @@ export function Layout() {
     try {
       await switchTenant(tenantId)
       setShowTenantMenu(false)
+      // 切换成功后刷新所有租户相关的数据
+      await queryClient.invalidateQueries()
+      // 强制刷新当前页面
+      window.location.reload()
     } catch (error) {
       console.error('Failed to switch tenant:', error)
     } finally {
@@ -140,7 +148,7 @@ export function Layout() {
       </aside>
       <main className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
         {/* 顶部导航栏 */}
-        <header className="h-14 bg-white border-b border-gray-200 px-6 flex items-center justify-end shrink-0">
+        <header className="h-14 bg-white border-b border-gray-200 px-6 flex items-center justify-end gap-4 shrink-0">
           {/* 租户切换 */}
           {tenants.length > 0 && (
             <div className="relative" ref={tenantMenuRef}>
@@ -160,7 +168,19 @@ export function Layout() {
               </button>
 
               {showTenantMenu && (
-                <div className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg shadow-lg border border-gray-200 w-64 max-h-64 overflow-y-auto z-50">
+                <div className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg shadow-lg border border-gray-200 w-64 max-h-80 overflow-y-auto z-50">
+                  {user?.is_system === true && (
+                    <button
+                      onClick={() => {
+                        setShowTenantMenu(false)
+                        setShowCreateTenantModal(true)
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="font-medium">新增租户</span>
+                    </button>
+                  )}
                   {tenants.map((tenant) => (
                     <button
                       key={tenant.id}
@@ -187,7 +207,146 @@ export function Layout() {
         <div className="flex-1 p-6 overflow-auto">
           <Outlet />
         </div>
+
+        {/* 创建租户 Modal */}
+        {showCreateTenantModal && (
+          <CreateTenantModal
+            onClose={() => setShowCreateTenantModal(false)}
+            onSuccess={() => {
+              setShowCreateTenantModal(false)
+            }}
+          />
+        )}
       </main>
+    </div>
+  )
+}
+
+// ============ 创建租户 Modal ============
+function CreateTenantModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const queryClient = useQueryClient()
+  const { setTenants } = useAuthStore()
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    max_alerts: 10000,
+    max_users: 10,
+    max_rules: 100,
+    max_channels: 20,
+    alert_qps: 100,
+  })
+  const [error, setError] = useState('')
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      await apiClient.post('/tenants', data)
+      // 刷新用户的租户列表
+      const tenantsRes = await apiClient.get<{ tenants: any[] }>('/auth/tenants')
+      setTenants(tenantsRes.tenants)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      onSuccess()
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.detail || '创建失败')
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    createMutation.mutate(formData)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-lg">
+        <div className="p-6 border-b">
+          <h2 className="text-xl font-bold">创建新租户</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">租户名称</label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="如: 生产环境"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+            <input
+              type="text"
+              required
+              pattern="^[a-z0-9-]+$"
+              value={formData.slug}
+              onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="如: production"
+            />
+            <p className="text-xs text-gray-500 mt-1">只能包含小写字母、数字和连字符</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">告警配额</label>
+              <input
+                type="number"
+                value={formData.max_alerts}
+                onChange={(e) => setFormData({ ...formData, max_alerts: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">用户配额</label>
+              <input
+                type="number"
+                value={formData.max_users}
+                onChange={(e) => setFormData({ ...formData, max_users: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">规则配额</label>
+              <input
+                type="number"
+                value={formData.max_rules}
+                onChange={(e) => setFormData({ ...formData, max_rules: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">渠道配额</label>
+              <input
+                type="number"
+                value={formData.max_channels}
+                onChange={(e) => setFormData({ ...formData, max_channels: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {createMutation.isPending ? '创建中...' : '创建'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

@@ -1,16 +1,17 @@
-import { Cloud, Box, Zap, Code, ExternalLink, Server, Bell, BarChart3, CloudCog } from 'lucide-react'
+import { Cloud, Box, Zap, Code, ExternalLink, Server, Bell, BarChart3, CloudCog, Copy, Check } from 'lucide-react'
+import { useState } from 'react'
+import { useAuthStore } from '@/stores/auth-store'
 
-interface AlertSource {
+interface AlertSourceConfig {
   id: string
   name: string
   description: string
   icon: React.ElementType
   接入方式: string
   配置说明: string[]
-  webhookUrl: string
 }
 
-const alertSources: AlertSource[] = [
+const alertSources: AlertSourceConfig[] = [
   {
     id: 'prometheus',
     name: 'Prometheus / Alertmanager',
@@ -21,7 +22,6 @@ const alertSources: AlertSource[] = [
       '在 Alertmanager 配置文件中添加 webhook',
       '设置接收地址为平台的 Webhook URL',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/prometheus',
   },
   {
     id: 'grafana',
@@ -34,7 +34,6 @@ const alertSources: AlertSource[] = [
       '选择 Webhook 类型',
       '填入平台的 Webhook URL',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/grafana',
   },
   {
     id: 'aliyun',
@@ -48,7 +47,6 @@ const alertSources: AlertSource[] = [
       '设置请求方法为 POST，数据格式为 JSON',
       '可选配置 Headers（如需要鉴权）',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/aliyun',
   },
   {
     id: 'tencent',
@@ -61,7 +59,6 @@ const alertSources: AlertSource[] = [
       '创建告警策略，选择 Webhook 回调',
       '填入平台的 Webhook 地址',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/tencent',
   },
   {
     id: 'huawei',
@@ -74,7 +71,6 @@ const alertSources: AlertSource[] = [
       '创建主题并设置 HTTP 订阅',
       '填入平台的 Webhook 地址',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/huawei',
   },
   {
     id: 'zabbix',
@@ -87,7 +83,6 @@ const alertSources: AlertSource[] = [
       '选择 Webhook 类型',
       '填入平台的 Webhook URL',
     ],
-    webhookUrl: '/api/v1/alerts/webhook/zabbix',
   },
   {
     id: 'custom',
@@ -100,21 +95,42 @@ const alertSources: AlertSource[] = [
       '请求体为 JSON 格式',
       '包含必要字段：title, message, severity, labels',
     ],
-    webhookUrl: '/api/v1/alerts',
   },
 ]
 
 export function AlertSourcesPage() {
+  const { currentTenant } = useAuthStore()
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // 获取当前租户的 webhook URL 前缀
+  const webhookBaseUrl = currentTenant?.slug
+    ? `/api/v1/webhooks/${currentTenant.slug}`
+    : '/api/v1/webhooks/{tenant_slug}'
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
   return (
     <div className="p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">告警提供商</h1>
         <p className="text-gray-500 mt-1">配置和管理告警接入渠道</p>
+        {currentTenant && (
+          <div className="mt-2 text-sm text-blue-600">
+            当前租户：{currentTenant.name} (Slug: {currentTenant.slug})
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {alertSources.map((source) => {
           const Icon = source.icon
+          const webhookUrl = source.id === 'custom'
+            ? `${webhookBaseUrl}/custom`
+            : `${webhookBaseUrl}/${source.id}`
           return (
             <div
               key={source.id}
@@ -148,9 +164,27 @@ export function AlertSourcesPage() {
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">
-                  <div className="text-xs text-gray-500 mb-2">Webhook 地址：</div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs text-gray-500">Webhook 地址：</div>
+                    <button
+                      onClick={() => handleCopy(webhookUrl, source.id)}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      {copiedId === source.id ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          已复制
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          复制
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <code className="block text-xs bg-gray-50 px-3 py-2 rounded font-mono text-gray-700 break-all">
-                    {source.webhookUrl}
+                    {webhookUrl}
                   </code>
                 </div>
               </div>

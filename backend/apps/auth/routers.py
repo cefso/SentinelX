@@ -79,6 +79,35 @@ async def login(
         )
 
 
+@router.post("/auth/register")
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """用户注册（需管理员审批）"""
+    auth_service = AuthService(db)
+
+    try:
+        user = await auth_service.register(
+            username=request.username,
+            email=request.email,
+            password=request.password,
+            phone=request.phone,
+            tenant_id=request.tenant_id,
+        )
+
+        return {
+            "message": "Registration submitted, pending approval",
+            "user_id": user.id,
+            "username": user.username,
+        }
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e.message),
+        )
+
+
 @router.post("/auth/switch-tenant", response_model=TokenResponse)
 async def switch_tenant(
     request: SwitchTenantRequest,

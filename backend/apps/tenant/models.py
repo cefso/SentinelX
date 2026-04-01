@@ -21,6 +21,9 @@ class Tenant(Base):
     # API Token (加密存储)
     api_token = Column(String(256), nullable=True)
 
+    # Webhook API Key (用于 webhook 认证)
+    webhook_api_key = Column(String(256), nullable=True)
+
     # 配额限制
     max_alerts = Column(Integer, default=10000)  # 最大告警数
     max_users = Column(Integer, default=10)  # 最大用户数
@@ -60,6 +63,11 @@ class User(Base):
     is_system = Column(Boolean, default=False)  # 系统管理员（不受租户限制）
     is_superuser = Column(Boolean, default=False)  # 租户管理员（在本租户内）
 
+    # 审批状态
+    is_approved = Column(Boolean, default=False)  # 注册审批状态
+    approved_at = Column(DateTime, nullable=True)  # 审批时间
+    approved_by = Column(Integer, nullable=True)  # 审批人ID
+
     # 状态
     is_active = Column(Boolean, default=True)
     is_deleted = Column(Boolean, default=False)
@@ -95,6 +103,9 @@ class UserTenant(Base):
 
     # 是否为当前活跃租户（切换用）
     is_current = Column(Boolean, default=False)
+
+    # 是否为主租户
+    is_primary = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -155,6 +155,7 @@ async def get_current_user(
 
 async def get_current_tenant_id(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> int:
     """获取当前租户ID"""
     payload = get_token_payload()
@@ -169,6 +170,17 @@ async def get_current_tenant_id(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No tenant context",
         )
+
+    # 检查租户是否被禁用
+    from apps.tenant.models import Tenant
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+    if not tenant or not tenant.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant is inactive or not found",
+        )
+
     return tenant_id
 
 

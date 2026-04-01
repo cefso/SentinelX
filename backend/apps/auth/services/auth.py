@@ -50,23 +50,40 @@ class AuthService:
             logger.warning("auth_failed_inactive_user", username=username)
             raise AuthenticationError("User is inactive")
 
+        if not user.is_approved:
+            logger.warning("auth_failed_not_approved", username=username)
+            raise AuthenticationError("Registration pending approval")
+
         # 更新最后登录时间
         user.last_login_at = datetime.utcnow()
 
         # 获取用户的租户列表
         tenants = await self.get_user_tenants(user.id)
 
-        # 如果用户没有任何租户关联，抛出异常
+        # 如果用户没有任何租户关联且不是系统管理员，抛出异常
         if not tenants:
-            logger.warning("auth_failed_no_tenants", user_id=user.id, username=username)
-            raise AuthenticationError("User has no tenant associations")
+            if user.is_system:
+                # 系统管理员可以没有租户关联
+                tenants = []
+            else:
+                logger.warning("auth_failed_no_tenants", user_id=user.id, username=username)
+                raise AuthenticationError("User has no tenant associations")
 
-        # 确保有一个当前租户
-        current_tenant = next((t for t in tenants if t["is_current"]), tenants[0])
-        if not any(t["is_current"] for t in tenants):
-            # 将第一个租户设为当前租户
-            current_tenant = tenants[0]
-            await self._set_current_tenant(user.id, current_tenant["id"])
+        # 确保有一个当前租户（系统管理员可以没有）
+        if tenants:
+            current_tenant = next((t for t in tenants if t["is_current"]), tenants[0])
+            if not any(t["is_current"] for t in tenants):
+                # 将第一个租户设为当前租户
+                current_tenant = tenants[0]
+                await self._set_current_tenant(user.id, current_tenant["id"])
+            current_tenant_id = current_tenant["id"]
+            is_superuser = current_tenant.get("is_superuser", False)
+            permissions = current_tenant.get("permissions", [])
+        else:
+            current_tenant = None
+            current_tenant_id = None
+            is_superuser = True  # 系统管理员拥有全部权限
+            permissions = ["*"]
 
         await self.db.commit()
 
@@ -75,18 +92,98 @@ class AuthService:
             "sub": str(user.id),
             "user_id": user.id,
             "username": user.username,
-            "current_tenant_id": current_tenant["id"],
+            "current_tenant_id": current_tenant_id,
             "is_system": user.is_system,
-            "is_superuser": current_tenant.get("is_superuser", False),
-            "permissions": current_tenant.get("permissions", []),
+            "is_superuser": is_superuser,
+            "permissions": permissions,
         }
 
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)
 
-        logger.info("auth_success", user_id=user.id, username=username, current_tenant_id=current_tenant["id"])
+        logger.info("auth_success", user_id=user.id, username=username, current_tenant_id=current_tenant_id)
 
         return user, access_token, refresh_token, tenants
+
+    async def register(
+        self,
+        username: str,
+        email: str,
+        password: str,
+        phone: Optional[str] = None,
+        tenant_id: Optional[int] = None,
+    ) -> User:
+        """
+        用户注册
+        创建用户后 is_approved=False，需要管理员审批
+        如果指定了 tenant_id，同时创建 UserTenant 关联
+        """
+        # 检查用户名唯一性
+        result = await self.db.execute(
+            select(User).where(User.username == username)
+        )
+        if result.scalar_one_or_none():
+            raise AuthenticationError("Username already exists")
+
+        # 检查邮箱唯一性
+        result = await self.db.execute(
+            select(User).where(User.email == email)
+        )
+        if result.scalar_one_or_none():
+            raise AuthenticationError("Email already exists")
+
+        # 创建用户
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password),
+            phone=phone,
+            is_system=False,
+            is_superuser=False,
+            is_active=False,  # 注册用户默认未激活
+            is_approved=False,  # 注册用户默认未审批
+        )
+        self.db.add(user)
+        await self.db.flush()
+
+        # 如果指定了租户，创建关联（但不激活，等审批通过后激活）
+        if tenant_id:
+            # 验证租户存在且活跃
+            result = await self.db.execute(
+                select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active == True)
+            )
+            tenant = result.scalar_one_or_none()
+            if not tenant:
+                raise AuthenticationError("Tenant not found or inactive")
+
+            # 获取 viewer 角色（默认普通用户角色）
+            result = await self.db.execute(
+                select(Role).where(Role.tenant_id == tenant_id, Role.code == "viewer")
+            )
+            viewer_role = result.scalar_one_or_none()
+            if not viewer_role:
+                # 如果没有 viewer 角色，获取该租户第一个角色
+                result = await self.db.execute(
+                    select(Role).where(Role.tenant_id == tenant_id).order_by(Role.id)
+                )
+                viewer_role = result.scalar_one_or_none()
+
+            if viewer_role:
+                user_tenant = UserTenant(
+                    user_id=user.id,
+                    tenant_id=tenant_id,
+                    role_id=viewer_role.id,
+                    is_current=False,
+                    is_primary=True,
+                )
+                self.db.add(user_tenant)
+
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        logger.info("user_registered", user_id=user.id, username=username, tenant_id=tenant_id)
+
+        return user
 
     async def get_user_tenants(self, user_id: int) -> List[Dict[str, Any]]:
         """获取用户的所有租户关联"""
@@ -137,14 +234,19 @@ class AuthService:
         """切换用户当前租户"""
         # 验证用户是否属于该租户
         result = await self.db.execute(
-            select(UserTenant)
+            select(UserTenant, Tenant)
+            .join(Tenant, Tenant.id == UserTenant.tenant_id)
             .where(UserTenant.user_id == user_id)
             .where(UserTenant.tenant_id == new_tenant_id)
         )
-        user_tenant = result.scalar_one_or_none()
+        row = result.one_or_none()
 
-        if not user_tenant:
+        if not row:
             raise AuthenticationError("User does not belong to this tenant")
+
+        user_tenant, tenant = row
+        if not tenant.is_active:
+            raise AuthenticationError("Tenant is inactive")
 
         # 更新当前租户标记
         await self._set_current_tenant(user_id, new_tenant_id)

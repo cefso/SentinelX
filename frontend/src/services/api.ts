@@ -45,9 +45,16 @@ class ApiClient {
         const originalRequest = error.config
 
         if (error.response?.status === 401 && originalRequest) {
+          const refreshToken = this.getRefreshToken()
+          // 如果没有 refresh token，直接登出
+          if (!refreshToken) {
+            useAuthStore.getState().logout()
+            window.location.href = '/login'
+            return Promise.reject(error)
+          }
           try {
             const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-              refresh_token: this.getRefreshToken(),
+              refresh_token: refreshToken,
             })
             useAuthStore.getState().setTokens(response.data.access_token, response.data.refresh_token)
             return this.client(originalRequest)

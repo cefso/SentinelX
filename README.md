@@ -22,6 +22,7 @@
 - **诊断模式**: Trace ID 全链路追踪
 - **双认证**: JWT用户认证 + API Key服务认证
 - **租户切换**: 用户可同时属于多个租户，支持前端快速切换
+- **用户注册审批**: 用户注册需管理员审批通过后方可登录，支持多租户权限分配
 
 ## 技术栈
 
@@ -235,13 +236,31 @@ SentinelX 支持用户属于多个租户，通过 UserTenant 关联表实现 N:M
 │ username    │       │ tenant_id    │       │ name        │
 │ email       │       │ role_id     │───N:1──│ slug        │
 │ is_system   │       │ is_current  │       │ is_active   │
-└─────────────┘       └─────────────┘       └─────────────┘
+│ is_approved │       │ is_primary  │       │ is_active   │
+│ is_active   │       └─────────────┘       └─────────────┘
+└─────────────┘
 ```
 
 - **is_system**: 系统管理员标志，拥有全局权限
 - **is_superuser**: 租户管理员标志，在当前租户内有全部权限
+- **is_approved**: 用户注册审批状态，注册后需管理员审批
+- **is_active**: 用户账号启用/禁用状态
 - **is_current**: 用户当前活跃的租户
+- **is_primary**: 用户的主租户
 - **scope**: 角色范围，system 或 tenant
+
+### 用户注册与审批流程
+
+```
+用户注册 → 待审批状态 → 系统管理员审批 → 分配角色/租户 → 正常登录
+                              ↓
+                         审批拒绝 → 账号无效
+```
+
+- 新用户注册后 `is_approved=False`，无法登录
+- 系统管理员在 `/admin/users` 审批用户
+- 审批通过后可分配系统级角色或租户角色
+- 租户管理员可管理本租户内的用户
 
 ### 认证体系
 
@@ -288,13 +307,14 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 ### 认证
 ```
 POST /api/v1/auth/login          # 用户登录
-POST /api/v1/auth/refresh       # 刷新Token
+POST /api/v1/auth/register       # 用户注册（需管理员审批）
+POST /api/v1/auth/refresh        # 刷新Token
 POST /api/v1/auth/switch-tenant # 切换租户
-GET  /api/v1/auth/tenants       # 获取我的租户列表
-GET  /api/v1/auth/me            # 当前用户信息
+GET  /api/v1/auth/tenants        # 获取我的租户列表
+GET  /api/v1/auth/me             # 当前用户信息
 GET  /api/v1/auth/permissions    # 获取我的权限
-POST /api/v1/auth/api-keys      # 创建API Key
-GET  /api/v1/auth/api-keys      # 列出API Key
+POST /api/v1/auth/api-keys       # 创建API Key
+GET  /api/v1/auth/api-keys       # 列出API Key
 DELETE /api/v1/auth/api-keys/{key_id}  # 撤销API Key
 ```
 
@@ -304,15 +324,43 @@ GET    /api/v1/tenants           # 获取租户列表
 POST   /api/v1/tenants           # 创建租户
 GET    /api/v1/tenants/{id}      # 获取租户详情
 PUT    /api/v1/tenants/{id}      # 更新租户
+GET    /api/v1/tenants/public    # 获取公开租户列表（注册时使用）
 ```
+
+### Webhook（多租户）
+```
+POST   /api/v1/webhooks/{tenant_slug}/{source_type}  # 接收告警（多租户版本）
+GET    /api/v1/tenants/{id}/webhook-key              # 获取 Webhook URL 信息
+POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API Key
+```
+
+**多租户 Webhook URL 结构:**
+```
+/api/v1/webhooks/{tenant_slug}/prometheus
+/api/v1/webhooks/{tenant_slug}/grafana
+/api/v1/webhooks/{tenant_slug}/aliyun
+/api/v1/webhooks/{tenant_slug}/custom
+```
+
+**认证方式:** 通过 `X-API-Key` Header 传递 Webhook API Key
 
 ### 用户管理
 ```
-GET    /api/v1/users             # 获取用户列表
-POST   /api/v1/users             # 创建用户
-GET    /api/v1/users/{id}        # 获取用户详情
-PUT    /api/v1/users/{id}        # 更新用户
-PUT    /api/v1/users/{id}/password  # 修改密码
+GET    /api/v1/users                       # 获取用户列表（租户管理员）
+POST   /api/v1/users                       # 创建用户（租户管理员）
+GET    /api/v1/users/{id}                   # 获取用户详情
+PUT    /api/v1/users/{id}                   # 更新用户
+PUT    /api/v1/users/{id}/password          # 修改密码
+PUT    /api/v1/users/{id}/role             # 更新用户角色
+DELETE /api/v1/users/{id}                   # 从租户移除用户
+POST   /api/v1/users/{id}/activate          # 激活/禁用用户
+```
+
+### 系统管理员 - 用户审批
+```
+GET    /api/v1/admin/users/pending         # 获取待审批用户列表
+POST   /api/v1/admin/users/{user_id}/approve   # 审批通过用户
+POST   /api/v1/admin/users/{user_id}/reject     # 拒绝用户注册
 ```
 
 ### 告警

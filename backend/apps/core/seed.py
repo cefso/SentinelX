@@ -127,6 +127,7 @@ async def seed_default_data():
                 is_system=True,  # 系统管理员
                 is_superuser=False,  # 在多租户模型中，is_superuser由UserTenant关联决定
                 is_active=True,
+                is_approved=True,  # 默认管理员无需审批
                 is_deleted=False,
             )
             session.add(admin_user)

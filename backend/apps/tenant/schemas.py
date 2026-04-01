@@ -36,6 +36,7 @@ class TenantUpdate(BaseModel):
 class TenantResponse(TenantBase):
     id: int
     api_token: Optional[str] = None
+    webhook_api_key: Optional[str] = None  # 不返回给前端，只用于内部
     max_alerts: int
     max_users: int
     max_rules: int
@@ -44,6 +45,7 @@ class TenantResponse(TenantBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    webhook_url: Optional[str] = None  # Webhook URL 前缀
 
     class Config:
         from_attributes = True
@@ -73,15 +75,70 @@ class UserPasswordUpdate(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
+class UserRoleUpdate(BaseModel):
+    """更新用户角色"""
+    tenant_roles: List["TenantRoleInput"] = Field(default=[], description="租户角色列表")
+
+
+class TenantRoleInput(BaseModel):
+    """租户角色输入"""
+    tenant_id: int
+    role_id: int
+
+
 class UserResponse(UserBase):
     id: int
+    email: str  # 覆盖 UserBase 的 EmailStr，使用字符串以支持内部邮箱
     is_system: bool  # 系统管理员标志
     is_superuser: bool  # 保留但废弃，由UserTenant决定
     is_active: bool
+    is_approved: bool  # 审批状态
     last_login_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
+        from_attributes = True
+
+
+class UserPendingResponse(BaseModel):
+    """待审批用户信息"""
+    id: int
+    username: str
+    email: str
+    phone: Optional[str] = None
+    requested_tenant_id: Optional[int] = None
+    requested_tenant_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserApproveRequest(BaseModel):
+    """审批用户请求"""
+    system_role_id: Optional[int] = Field(None, description="系统级角色ID（可选）")
+    tenant_roles: List["TenantRoleInput"] = Field(default=[], description="租户角色列表")
+
+
+class TenantRoleInput(BaseModel):
+    """租户角色输入"""
+    tenant_id: int
+    role_id: int
+
+
+class UserRejectRequest(BaseModel):
+    """拒绝用户请求"""
+    reason: Optional[str] = None
+
+
+class PublicTenantResponse(BaseModel):
+    """公开租户信息"""
+    id: int
+    name: str
+    slug: str
+
+    class Config:
+        from_attributes = True
         from_attributes = True
 
 
@@ -108,7 +165,7 @@ class RoleResponse(RoleBase):
     tenant_id: Optional[int]
     permissions: List[str]
     is_builtin: bool
-    scope: str = "tenant"  # system 或 tenant
+    scope: Optional[str] = "tenant"  # system 或 tenant
     created_at: datetime
 
     class Config:

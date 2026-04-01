@@ -51,6 +51,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=256)
     password: str = Field(..., min_length=8, max_length=128)
     phone: Optional[str] = None
+    tenant_id: Optional[int] = None  # 注册时申请的租户ID
 
 
 class TokenPayload(BaseModel):

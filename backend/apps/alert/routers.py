@@ -6,15 +6,17 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text
 import structlog
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
+from apps.core.security import verify_password
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace
+from apps.tenant.models import Tenant
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
     AlertSourceCreate, AlertSourceUpdate, AlertSourceResponse,
@@ -150,6 +152,129 @@ async def receive_webhook_alert(
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
     # 处理列表格式
+    if isinstance(parsed_alert, list):
+        results = []
+        for alert_data in parsed_alert:
+            trace_id = generate_trace_id()
+            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+
+            alert = Alert(
+                tenant_id=tenant_id,
+                alert_key=alert_data.alert_key,
+                fingerprint=fingerprint,
+                source=alert_data.source,
+                title=alert_data.title,
+                content=alert_data.content,
+                severity=alert_data.severity,
+                status="firing",
+                labels=alert_data.labels,
+                annotations=alert_data.annotations,
+                metric_name=alert_data.metric_name,
+                metric_value=alert_data.metric_value,
+                raw_data=alert_data.raw_data,
+                trace_id=trace_id,
+                fired_at=datetime.utcnow(),
+            )
+            db.add(alert)
+            await db.flush()
+
+            dispatcher = AlertDispatcher(db, redis)
+            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+            results.append(alert)
+
+        await db.commit()
+        return {"received": len(results), "alerts": [{"id": r.id, "trace_id": r.trace_id} for r in results]}
+    else:
+        trace_id = generate_trace_id()
+        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+
+        alert = Alert(
+            tenant_id=tenant_id,
+            alert_key=parsed_alert.alert_key,
+            fingerprint=fingerprint,
+            source=parsed_alert.source,
+            title=parsed_alert.title,
+            content=parsed_alert.content,
+            severity=parsed_alert.severity,
+            status="firing",
+            labels=parsed_alert.labels,
+            annotations=parsed_alert.annotations,
+            metric_name=parsed_alert.metric_name,
+            metric_value=parsed_alert.metric_value,
+            raw_data=parsed_alert.raw_data,
+            trace_id=trace_id,
+            fired_at=datetime.utcnow(),
+        )
+        db.add(alert)
+        await db.flush()
+
+        dispatcher = AlertDispatcher(db, redis)
+        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+
+        await db.commit()
+        await db.refresh(alert)
+        return {"id": alert.id, "trace_id": alert.trace_id}
+
+
+@router.post("/webhooks/{tenant_slug}/{source_type}")
+async def receive_webhook_by_tenant(
+    tenant_slug: str,
+    source_type: str,
+    raw_data: dict,
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """
+    Webhook方式接收告警 (多租户版本)
+
+    使用租户独立的 webhook URL 和 API Key 进行认证
+    - tenant_slug: 租户 slug (如 sentinelx)
+    - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/tencent/huawei/custom)
+    - X-API-Key: 租户的 webhook API Key (可选)
+
+    如果不提供 API Key，则使用 X-Tenant-ID 头
+    """
+    from apps.alert.adapters.base import AdapterFactory
+
+    # 1. 通过 tenant_slug 获取租户
+    result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+    tenant = result.scalar_one_or_none()
+
+    if not tenant:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_slug}")
+
+    if not tenant.is_active:
+        raise HTTPException(status_code=403, detail="Tenant is inactive")
+
+    # 2. 验证 API Key
+    tenant_id = str(tenant.id)
+    if x_api_key:
+        # 使用 webhook API Key 验证
+        if not tenant.webhook_api_key:
+            raise HTTPException(status_code=401, detail="Tenant has no webhook API key configured")
+
+        if not verify_password(x_api_key, tenant.webhook_api_key):
+            raise HTTPException(status_code=401, detail="Invalid webhook API key")
+    elif x_tenant_id:
+        # 使用 X-Tenant-ID 头 (兼容旧方式)
+        if x_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant ID mismatch")
+    else:
+        raise HTTPException(status_code=401, detail="Missing authentication header (X-API-Key or X-Tenant-ID)")
+
+    # 3. 获取适配器
+    adapter = AdapterFactory.get_adapter(source_type)
+
+    # 4. 解析告警
+    parsed_alert = await adapter.parse(raw_data, tenant_id)
+
+    if not parsed_alert:
+        raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
+
+    # 5. 处理告警
     if isinstance(parsed_alert, list):
         results = []
         for alert_data in parsed_alert:
