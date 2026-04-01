@@ -159,7 +159,7 @@ jobs:
       - name: Run migrations
         run: |
           cd backend
-          alembic upgrade head
+          DB_NAME=sentinelx_test alembic upgrade head
 
       - name: Verify tables created
         run: |
