@@ -106,8 +106,8 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker
-          file: ./docker/Dockerfile
+          context: ./backend
+          file: ../docker/Dockerfile
           push: false
           tags: sentinelx/backend:test
           cache-from: type=gha
@@ -116,8 +116,8 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker
-          file: ./docker/Dockerfile.frontend
+          context: ./frontend
+          file: ../docker/Dockerfile.frontend
           push: false
           tags: sentinelx/frontend:test
           cache-from: type=gha
