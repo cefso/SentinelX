@@ -118,6 +118,34 @@ cd frontend
 cp .env.example .env.local
 ```
 
+### 容器日志配置
+
+容器日志使用 json-file 驱动，自动轮转:
+
+```yaml
+logging:
+  driver: "json-file"
+  options:
+    max-size: "10m"    # 单文件最大 10MB
+    max-file: "5"     # 最多 5 个文件
+```
+
+查看日志:
+
+```bash
+# 实时跟踪
+docker-compose logs -f backend
+
+# 最近 100 行
+docker-compose logs --tail=100 backend
+
+# 搜索错误
+docker-compose logs backend | grep ERROR
+
+# 跟踪特定请求
+docker-compose logs -f backend | grep "request_id=abc123"
+```
+
 ---
 
 ## 架构设计

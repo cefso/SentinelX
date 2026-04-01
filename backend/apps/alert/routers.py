@@ -9,7 +9,6 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text
-import structlog
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
@@ -24,7 +23,6 @@ from apps.alert.schemas import (
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 
-logger = structlog.get_logger()
 router = APIRouter()
 
 

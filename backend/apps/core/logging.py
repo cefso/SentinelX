@@ -3,16 +3,33 @@ SentinelX - 日志配置
 使用 structlog 进行结构化日志记录
 """
 import sys
+import os
+import logging
+from logging.handlers import RotatingFileHandler
 import structlog
 from structlog.types import EventDict, WrappedLogger
 from typing import Any, Dict
 from datetime import datetime
 
+from apps.core.config import settings
+
+
+def _get_log_level() -> int:
+    """获取日志级别"""
+    level = os.getenv("LOG_LEVEL", settings.LOG_LEVEL).upper()
+    levels = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    return levels.get(level, logging.INFO)
+
 
 def _is_debug() -> bool:
     """检查是否为调试模式"""
-    import os
-    return os.getenv("DEBUG", "false").lower() == "true"
+    return settings.DEBUG or os.getenv("DEBUG", "false").lower() == "true"
 
 
 def _add_service_context(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
@@ -60,6 +77,55 @@ def _console_renderer(logger: WrappedLogger, method_name: str, event_dict: Event
     return " ".join(parts)
 
 
+def _configure_root_logger():
+    """配置根日志器"""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(_get_log_level())
+
+    # 清除现有处理器
+    root_logger.handlers.clear()
+
+    # 控制台处理器
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(_get_log_level())
+
+    if settings.LOG_FORMAT == "console" or _is_debug():
+        console_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ))
+    else:
+        console_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ))
+
+    root_logger.addHandler(console_handler)
+
+    # 文件处理器（如果配置）
+    if settings.LOG_FILE:
+        try:
+            # 确保日志目录存在
+            log_dir = os.path.dirname(settings.LOG_FILE)
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+
+            file_handler = RotatingFileHandler(
+                settings.LOG_FILE,
+                maxBytes=settings.LOG_MAX_BYTES,
+                backupCount=settings.LOG_BACKUP_COUNT,
+                encoding="utf-8"
+            )
+            file_handler.setLevel(_get_log_level())
+            file_handler.setFormatter(logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            ))
+            root_logger.addHandler(file_handler)
+        except Exception as e:
+            root_logger.warning(f"Failed to setup file logger: {e}")
+
+
+# 初始化根日志器
+_configure_root_logger()
+
 # 配置 structlog
 structlog.configure(
     processors=[
@@ -72,7 +138,7 @@ structlog.configure(
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
         _add_service_context,
-        structlog.processors.JSONRenderer() if not _is_debug() else _console_renderer,
+        structlog.processors.JSONRenderer() if settings.LOG_FORMAT == "json" and not _is_debug() else _console_renderer,
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,

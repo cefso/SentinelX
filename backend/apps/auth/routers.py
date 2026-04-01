@@ -10,6 +10,7 @@ from sqlalchemy import select
 from apps.core.database import get_db
 from apps.core.security import verify_token
 from apps.core.exceptions import AuthenticationError
+from apps.core.utils import get_client_ip
 from apps.tenant.models import User
 from apps.auth.schemas import (
     LoginRequest, TokenResponse, RefreshTokenRequest, RegisterRequest,
@@ -57,7 +58,7 @@ async def login(
                 username=user.username,
                 action="login",
                 resource_type="auth",
-                ip_address=_get_client_ip(http_request),
+                ip_address=get_client_ip(http_request),
             )
 
         return TokenResponse(
@@ -136,7 +137,7 @@ async def switch_tenant(
             username=current_user.username,
             action="switch_tenant",
             resource_type="auth",
-            ip_address=_get_client_ip(http_request),
+            ip_address=get_client_ip(http_request),
         )
 
         return TokenResponse(
@@ -302,16 +303,3 @@ async def revoke_api_key(
     return {"message": "API Key revoked successfully"}
 
 
-# ============ 辅助函数 ============
-
-def _get_client_ip(request: Request) -> str:
-    """获取客户端IP"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-    if request.client:
-        return request.client.host
-    return "unknown"

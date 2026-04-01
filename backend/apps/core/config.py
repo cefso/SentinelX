@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     # PGMQ配置
     PGMQ_ENABLED: bool = True
 
+    # 日志配置
+    LOG_LEVEL: str = "INFO"  # DEBUG/INFO/WARNING/ERROR
+    LOG_FORMAT: str = "json"  # json/console
+    LOG_FILE: Optional[str] = None  # 日志文件路径
+    LOG_MAX_BYTES: int = 10485760  # 10MB
+    LOG_BACKUP_COUNT: int = 5
+
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"

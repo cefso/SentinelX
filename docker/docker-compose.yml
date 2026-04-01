@@ -55,6 +55,13 @@ services:
       - ../backend:/app
     networks:
       - sentinelx-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      service: "sentinelx-backend"
     command: >
       sh -c "
         alembic upgrade head &&
@@ -91,6 +98,13 @@ services:
     networks:
       - sentinelx-network
     command: npm run dev -- --host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      service: "sentinelx-frontend"
 
   # ============================================================================
   # PostgreSQL + TimescaleDB 数据库 (完整部署时使用)

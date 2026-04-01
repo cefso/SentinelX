@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from apps.core.logging import get_logger
+from apps.core.utils import get_client_ip
 
 log = get_logger(__name__)
 
@@ -32,7 +33,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             method=request.method,
             path=request.url.path,
-            client_ip=_get_client_ip(request),
+            client_ip=get_client_ip(request),
             user_agent=request.headers.get("User-Agent", ""),
         )
 
@@ -156,22 +157,3 @@ def _generate_request_id() -> str:
     """生成请求ID"""
     import uuid
     return str(uuid.uuid4())[:8]
-
-
-def _get_client_ip(request: Request) -> str:
-    """获取客户端IP"""
-    # 优先从 X-Forwarded-For 获取
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-
-    # 其次从 X-Real-IP 获取
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
-
-    # 最后从 client_host 获取
-    if request.client:
-        return request.client.host
-
-    return "unknown"

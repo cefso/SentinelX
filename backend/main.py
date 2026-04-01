@@ -18,6 +18,7 @@ from apps.core.middleware import (
     TenantContextMiddleware,
     ErrorHandlingMiddleware,
 )
+from apps.core.middleware_audit import AuditLoggingMiddleware
 from apps.core.exceptions import SentinelXException
 
 logger = get_logger(__name__)
@@ -74,6 +75,7 @@ app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(PerformanceLoggingMiddleware)
 app.add_middleware(TenantContextMiddleware)
+app.add_middleware(AuditLoggingMiddleware)
 
 
 # 异常处理器
