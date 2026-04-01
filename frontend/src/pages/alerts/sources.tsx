@@ -1,4 +1,4 @@
-import { Cloud, Box, Zap, Code, ExternalLink, Server, Bell, BarChart3, CloudCog, Copy, Check } from 'lucide-react'
+import { Cloud, Box, Zap, Code, ExternalLink, Server, BarChart3, CloudCog, Copy, Check } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
-import { Check, X, Users as UsersIcon, Clock } from 'lucide-react'
+import { Check, X, Users as UsersIcon } from 'lucide-react'
 
 interface PendingUser {
   id: number
@@ -19,6 +19,7 @@ interface Role {
   name: string
   code: string
   tenant_id?: number
+  scope?: string
 }
 
 export function AdminUsersPage() {

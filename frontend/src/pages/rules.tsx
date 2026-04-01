@@ -211,7 +211,6 @@ export function RulesPage() {
 }
 
 function RuleModal({ rule, onClose, onSuccess }: { rule: Rule | null; onClose: () => void; onSuccess: () => void }) {
-  const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
     name: rule?.name || '',
     code: rule?.code || '',
@@ -219,7 +218,7 @@ function RuleModal({ rule, onClose, onSuccess }: { rule: Rule | null; onClose: (
     condition_mode: rule?.condition_mode || 'and',
     priority: rule?.priority || 0,
     conditions: rule?.conditions || [{ field: 'severity', operator: 'in', value: ['critical', 'high'] }],
-    selected_channels: (rule?.actions || []).filter((a: any) => typeof a === 'number').map((a: number) => a) || [],
+    selected_channels: (rule?.actions || []).filter((a: any) => typeof a === 'number').map((a: any) => Number(a)) || [],
   })
 
   const { data: channels = [] } = useQuery<any[]>({

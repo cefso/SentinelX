@@ -35,7 +35,7 @@ const ENABLE_LOGGING = import.meta.env.VITE_ENABLE_LOGGING !== "false";
 /**
  * 格式化日志消息
  */
-function formatMessage(level: LogLevel, context: string, ...args: unknown[]): string {
+function formatMessage(level: LogLevel, context: string, ..._args: unknown[]): string {
   const timestamp = new Date().toISOString();
   const levelName = LOG_LEVEL_NAMES[level];
   return `[${timestamp}] [${levelName}] [${context}]`;

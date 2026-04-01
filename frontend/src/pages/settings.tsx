@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
-import { User, Lock, Shield, Key, Users, Sparkles, UserCircle, Plus, ShieldCheck, Check, X } from 'lucide-react'
+import { User, Lock, Shield, Key, Users, Sparkles, Plus, ShieldCheck, Check, X } from 'lucide-react'
 
 interface Tenant {
   id: number
@@ -107,11 +107,9 @@ export function SettingsPage() {
 
 // ============ 个人信息 Tab ============
 function ProfileTab() {
-  const { user, setUser } = useAuthStore()
-  const queryClient = useQueryClient()
+  const { user } = useAuthStore()
   const [formData, setFormData] = useState({
     email: user?.email || '',
-    phone: user?.phone || '',
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -157,15 +155,6 @@ function ProfileTab() {
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">手机号</label>
-          <input
-            type="tel"
-            value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
@@ -606,7 +595,7 @@ function UsersTab() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
-      apiClient.post(`/users/${id}/activate`, null, { params: { is_active } } as any),
+      apiClient.post(`/users/${id}/activate?is_active=${is_active}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
     },
@@ -618,8 +607,6 @@ function UsersTab() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
     },
   })
-
-  const tenantRoles = roles.filter(r => r.tenant_id !== null)
 
   return (
     <div className="space-y-6">
@@ -718,7 +705,6 @@ function UsersTab() {
 
       {showCreateModal && (
         <CreateUserModal
-          roles={tenantRoles}
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false)
@@ -743,8 +729,7 @@ function UsersTab() {
 }
 
 // ============ 创建用户 Modal ============
-function CreateUserModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose: () => void; onSuccess: () => void }) {
-  const queryClient = useQueryClient()
+function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -762,7 +747,6 @@ function CreateUserModal({ roles, onClose, onSuccess }: { roles: Role[]; onClose
       password: data.password,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
       onSuccess()
     },
     onError: (err: any) => {

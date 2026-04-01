@@ -53,7 +53,7 @@ export function AlertDetailPage() {
         'polish': `/alerts/${alert.id}/polish`,
         'suggest': `/alerts/${alert.id}/suggest-actions`,
         'impact': `/alerts/${alert.id}/predict-impact`,
-      }[action]
+      }[action] as string
 
       const result = await apiClient.get(endpoint)
       setAiAnalysis({ action, data: result })

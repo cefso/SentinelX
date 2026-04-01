@@ -3,6 +3,31 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 
+interface DiagnosisSummary {
+  status?: string
+  suppress_reason?: string
+  deduction_reason?: string
+}
+
+interface FlowStep {
+  step: number
+  type: string
+  title: string
+  description: string
+  status: string
+  details?: Record<string, unknown>
+  reason?: string
+  time?: string
+}
+
+interface DiagnosisData {
+  trace_id: string
+  summary: DiagnosisSummary
+  matched_rules?: string[]
+  flow_steps: FlowStep[]
+  timeline?: { time: string; event: string }[]
+}
+
 export function DiagnosePage() {
   const [searchParams] = useSearchParams()
   const initialTrace = searchParams.get('trace') || ''
@@ -15,7 +40,7 @@ export function DiagnosePage() {
     }
   }, [initialTrace])
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error } = useQuery<DiagnosisData>({
     queryKey: ['diagnose', searchedTraceId],
     queryFn: () => apiClient.get(`/alerts/diagnose/${searchedTraceId}`),
     enabled: !!searchedTraceId,

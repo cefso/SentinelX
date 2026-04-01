@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 
 interface PublicTenant {
@@ -20,7 +20,6 @@ export function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const navigate = useNavigate()
 
   // 获取公开租户列表
   useEffect(() => {
