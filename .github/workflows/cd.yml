@@ -5,7 +5,7 @@ on:
     branches: [main]
     tags: ['v*']
 
-# CD 已禁用 - 部署阶段默认不执行
+# CD - 构建并推送镜像（部署已禁用）
 
 env:
   REGISTRY: ghcr.io
@@ -63,18 +63,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}-frontend
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # ============ 部署到K8s (已禁用) ============
-  # deploy:
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Kubernetes
-        run: |
-          echo "Deploying images..."
-          # kubectl set image deployment/sentinelx-backend backend=${{ env.REGISTRY }}/${{ github.repository }}={{ steps.meta.outputs.tags }}
-          # kubectl rollout status deployment/sentinelx-backend
-          echo "Deployment would happen here"
