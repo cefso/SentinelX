@@ -48,8 +48,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ghcr.io/${{ github.repository_owner }}/sentinelx/backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -59,7 +58,6 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
-          labels: ${{ steps.meta.outputs.labels }}-frontend
+          tags: ghcr.io/${{ github.repository_owner }}/sentinelx/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
