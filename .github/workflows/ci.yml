@@ -106,7 +106,8 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ./docker
+          file: ./docker/Dockerfile
           push: false
           tags: sentinelx/backend:test
           cache-from: type=gha
@@ -115,7 +116,8 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: ./docker
+          file: ./docker/Dockerfile.frontend
           push: false
           tags: sentinelx/frontend:test
           cache-from: type=gha
@@ -150,7 +152,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install alembic psycopg2-binary asyncpg sqlalchemy
+          cd backend
+          pip install -r requirements.txt
+          pip install alembic
 
       - name: Run migrations
         run: |
