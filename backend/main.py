@@ -20,6 +20,7 @@ from apps.core.middleware import (
 )
 from apps.core.middleware_audit import AuditLoggingMiddleware
 from apps.core.exceptions import SentinelXException
+from sqlalchemy import text
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    import asyncio
+
     # 启动时
     logger.info("sentinelx_starting", version=settings.APP_VERSION)
 
@@ -42,10 +45,17 @@ async def lifespan(app: FastAPI):
     from apps.core.seed import seed_default_data
     await seed_default_data()
 
+    # 启动告警升级Worker
+    from apps.alert.services.escalation import EscalationWorker
+    escalation_worker = EscalationWorker(check_interval_seconds=60)
+    escalation_task = asyncio.create_task(escalation_worker.run())
+    logger.info("escalation_worker_started")
+
     yield
 
     # 关闭时
     logger.info("sentinelx_shutting_down")
+    escalation_task.cancel()
     await RedisClient.close()
     await close_db()
     logger.info("sentinelx_stopped")
@@ -213,10 +223,14 @@ from apps.rule.routers import router as rule_router
 from apps.notify.routers import router as notify_router
 from apps.ai.routers import router as ai_router
 from apps.callback.router import router as callback_router
+from apps.escalation.router import router as escalation_router
+from apps.maintenance.router import router as maintenance_router
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX, tags=["认证"])
 app.include_router(tenant_router, prefix=settings.API_V1_PREFIX, tags=["租户管理"])
 app.include_router(alert_router, prefix=settings.API_V1_PREFIX, tags=["告警"])
+app.include_router(escalation_router, prefix=settings.API_V1_PREFIX, tags=["告警升级"])
+app.include_router(maintenance_router, prefix=settings.API_V1_PREFIX, tags=["维护窗口"])
 app.include_router(rule_router, prefix=settings.API_V1_PREFIX, tags=["规则"])
 app.include_router(notify_router, prefix=settings.API_V1_PREFIX, tags=["通知"])
 app.include_router(ai_router, prefix=settings.API_V1_PREFIX, tags=["AI"])

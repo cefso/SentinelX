@@ -99,7 +99,7 @@ class EscalationService:
 
     async def _escalate_alert(self, alert: Alert):
         """执行告警升级"""
-        # 更新升级计数
+        old_count = alert.escalation_count
         alert.escalation_count += 1
 
         # 记录历史
@@ -108,13 +108,11 @@ class EscalationService:
             alert_id=alert.id,
             action=f"escalate_level_{alert.escalation_count}",
             description=f"告警升级至第 {alert.escalation_count} 级",
-            old_value={"escalation_count": alert.escalation_count - 1},
+            old_value={"escalation_count": old_count},
             new_value={"escalation_count": alert.escalation_count},
         )
         self.db.add(history)
 
-        # 获取匹配的规则并重新发送通知
-        # 实际应该获取升级通知渠道配置
         logger.info(
             "alert_escalated",
             alert_id=alert.id,

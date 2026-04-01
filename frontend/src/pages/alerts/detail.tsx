@@ -3,16 +3,24 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
+import { Send, CheckCircle, AlertCircle, XCircle } from 'lucide-react'
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [showAllLabels, setShowAllLabels] = useState(false)
+  const [showAllAnnotations, setShowAllAnnotations] = useState(false)
 
   const { data: alert, isLoading, error } = useQuery<AlertResponse>({
     queryKey: ['alert', id],
     queryFn: () => apiClient.get(`/alerts/${id}`),
     enabled: !!id,
+  })
+
+  const { data: users = [] } = useQuery<{ id: number; username: string }[]>({
+    queryKey: ['users-for-assign'],
+    queryFn: () => apiClient.get('/users'),
   })
 
   const updateMutation = useMutation({
@@ -37,6 +45,12 @@ export function AlertDetailPage() {
     }
   }
 
+  const handleAssign = (assigneeId: number | null) => {
+    if (alert) {
+      updateMutation.mutate({ assignee_id: assigneeId ?? undefined })
+    }
+  }
+
   const [aiAnalysis, setAiAnalysis] = useState<any>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
@@ -55,13 +69,28 @@ export function AlertDetailPage() {
         'impact': `/alerts/${alert.id}/predict-impact`,
       }[action] as string
 
-      const result = await apiClient.get(endpoint)
+      const result = await apiClient.post(endpoint, {})
       setAiAnalysis({ action, data: result })
     } catch (err: any) {
       setAiError(err.response?.data?.detail || 'AI请求失败')
     } finally {
       setAiLoading(false)
     }
+  }
+
+  // 构建时间线
+  const timeline = []
+  if (alert?.fired_at) {
+    timeline.push({ time: alert.fired_at, event: '告警触发', icon: AlertCircle, color: 'text-red-500' })
+  }
+  if (alert?.acknowledged_at) {
+    timeline.push({ time: alert.acknowledged_at, event: '已确认', icon: CheckCircle, color: 'text-yellow-500' })
+  }
+  if (alert?.resolved_at) {
+    timeline.push({ time: alert.resolved_at, event: '已解决', icon: CheckCircle, color: 'text-green-500' })
+  }
+  if (alert?.silenced_until) {
+    timeline.push({ time: alert.silenced_until, event: '已静默', icon: XCircle, color: 'text-gray-500' })
   }
 
   if (isLoading) {
@@ -79,9 +108,15 @@ export function AlertDetailPage() {
     )
   }
 
+  const labelEntries = Object.entries(alert.labels || {})
+  const annotationEntries = Object.entries(alert.annotations || {})
+  const displayedLabels = showAllLabels ? labelEntries : labelEntries.slice(0, 5)
+  const displayedAnnotations = showAllAnnotations ? annotationEntries : annotationEntries.slice(0, 5)
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* 顶部操作栏 */}
+      <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate('/alerts')} className="text-gray-500 hover:text-gray-700">
             ← 返回
@@ -117,19 +152,26 @@ export function AlertDetailPage() {
               诊断
             </button>
           )}
-          <button
-            onClick={() => handleAIAction('analyze')}
-            disabled={aiLoading}
-            className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 disabled:opacity-50"
-          >
-            🤖 AI分析
-          </button>
+          <div className="relative group">
+            <button
+              className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+            >
+              🤖 AI
+            </button>
+            <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border hidden group-hover:block z-10">
+              <button onClick={() => handleAIAction('analyze')} disabled={aiLoading} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-t-lg disabled:opacity-50">🔍 根因分析</button>
+              <button onClick={() => handleAIAction('polish')} disabled={aiLoading} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm disabled:opacity-50">✨ 内容润色</button>
+              <button onClick={() => handleAIAction('suggest')} disabled={aiLoading} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm disabled:opacity-50">💡 建议操作</button>
+              <button onClick={() => handleAIAction('impact')} disabled={aiLoading} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-b-lg disabled:opacity-50">📊 影响预测</button>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* AI分析结果 */}
       {aiLoading && (
         <div className="bg-white rounded-lg shadow p-6 text-center">
-          <div className="text-purple-600">🤖 AI分析中...</div>
+          <div className="text-purple-600 animate-pulse">🤖 AI分析中...</div>
         </div>
       )}
 
@@ -141,12 +183,15 @@ export function AlertDetailPage() {
 
       {aiAnalysis && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">
-            {aiAnalysis.action === 'analyze' && '🤖 根因分析'}
-            {aiAnalysis.action === 'polish' && '✨ 润色内容'}
-            {aiAnalysis.action === 'suggest' && '💡 建议操作'}
-            {aiAnalysis.action === 'impact' && '📊 影响预测'}
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium">
+              {aiAnalysis.action === 'analyze' && '🤖 根因分析'}
+              {aiAnalysis.action === 'polish' && '✨ 润色内容'}
+              {aiAnalysis.action === 'suggest' && '💡 建议操作'}
+              {aiAnalysis.action === 'impact' && '📊 影响预测'}
+            </h2>
+            <button onClick={() => setAiAnalysis(null)} className="text-gray-500 hover:text-gray-700">×</button>
+          </div>
           <div className="prose prose-sm max-w-none">
             {aiAnalysis.action === 'suggest' ? (
               <ul className="list-disc pl-5 space-y-1">
@@ -163,114 +208,218 @@ export function AlertDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">基本信息</h2>
-          <dl className="space-y-3">
-            <div className="flex">
-              <dt className="w-24 text-gray-500">告警标题</dt>
-              <dd className="font-medium">{alert.title}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-24 text-gray-500">告警来源</dt>
-              <dd>{alert.source}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-24 text-gray-500">Alert Key</dt>
-              <dd className="font-mono text-sm">{alert.alert_key}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-24 text-gray-500">指纹</dt>
-              <dd className="font-mono text-sm">{alert.fingerprint}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-24 text-gray-500">触发时间</dt>
-              <dd>{alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : '-'}</dd>
-            </div>
-            {alert.resolved_at && (
-              <div className="flex">
-                <dt className="w-24 text-gray-500">解决时间</dt>
-                <dd>{new Date(alert.resolved_at).toLocaleString('zh-CN')}</dd>
+      {/* 主要内容区域 */}
+      <div className="grid grid-cols-3 gap-6">
+        {/* 左侧 - 基本信息和时间线 */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-medium mb-4">基本信息</h2>
+            <dl className="space-y-3">
+              <div className="flex flex-col">
+                <dt className="text-sm text-gray-500 mb-1">告警标题</dt>
+                <dd className="font-medium break-words">{alert.title}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">告警来源</dt>
+                <dd className="font-medium">{alert.source}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Alert Key</dt>
+                <dd className="font-mono text-sm">{alert.alert_key}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">触发次数</dt>
+                <dd>{alert.fire_count} (重复: {alert.repeat_count})</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">升级次数</dt>
+                <dd>{alert.escalation_count}</dd>
+              </div>
+              {alert.trace_id && (
+                <div className="flex flex-col">
+                  <dt className="text-sm text-gray-500 mb-1">Trace ID</dt>
+                  <dd className="font-mono text-sm text-blue-600">{alert.trace_id}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+
+          {/* 告警内容 */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-medium mb-4">告警内容</h2>
+            <div className="text-gray-700 whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
+            {alert.metric_name && (
+              <div className="mt-4 p-3 bg-gray-50 rounded">
+                <div className="text-sm text-gray-500">指标名称</div>
+                <div className="font-mono text-sm">{alert.metric_name}</div>
+                {alert.metric_value && (
+                  <>
+                    <div className="text-sm text-gray-500 mt-2">指标值</div>
+                    <div className="font-mono text-sm">{JSON.stringify(alert.metric_value)}</div>
+                  </>
+                )}
               </div>
             )}
-            <div className="flex">
-              <dt className="w-24 text-gray-500">触发次数</dt>
-              <dd>{alert.fire_count} (重复: {alert.repeat_count})</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-24 text-gray-500">升级次数</dt>
-              <dd>{alert.escalation_count}</dd>
-            </div>
-          </dl>
-        </div>
+          </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">告警内容</h2>
-          <div className="text-gray-700 whitespace-pre-wrap">{alert.content || '无'}</div>
-          {alert.metric_name && (
-            <div className="mt-4 p-3 bg-gray-50 rounded">
-              <div className="text-sm text-gray-500">指标名称</div>
-              <div className="font-mono">{alert.metric_name}</div>
-              {alert.metric_value && (
-                <>
-                  <div className="text-sm text-gray-500 mt-2">指标值</div>
-                  <div className="font-mono">{JSON.stringify(alert.metric_value)}</div>
-                </>
-              )}
+          {/* 时间线 */}
+          {timeline.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-medium mb-4">处理时间线</h2>
+              <div className="relative">
+                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
+                <div className="space-y-4">
+                  {timeline.map((item, index) => {
+                    const Icon = item.icon
+                    return (
+                      <div key={index} className="relative flex items-start gap-3 pl-8">
+                        <div className={`absolute left-0 w-4 h-4 rounded-full bg-white border-2 ${item.color.replace('text-', 'border-')}`}>
+                          <Icon className={`w-3 h-3 absolute top-0.5 left-0.5 ${item.color}`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{item.event}</div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(item.time).toLocaleString('zh-CN')}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>
 
-        {alert.labels && Object.keys(alert.labels).length > 0 && (
+        {/* 中间 - 标签、注解、规则 */}
+        <div className="space-y-6">
+          {/* 指派 */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-medium mb-4">标签</h2>
-            <div className="space-y-2">
-              {Object.entries(alert.labels).map(([key, value]) => (
-                <div key={key} className="flex">
-                  <span className="w-32 text-gray-500">{key}</span>
-                  <span className="font-mono text-sm">{String(value)}</span>
-                </div>
+            <h2 className="text-lg font-medium mb-4">处理人</h2>
+            <select
+              value={alert.assignee_id || ''}
+              onChange={(e) => handleAssign(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3 py-2 border rounded-lg"
+            >
+              <option value="">未指派</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>{user.username}</option>
               ))}
-            </div>
+            </select>
           </div>
-        )}
 
-        {alert.annotations && Object.keys(alert.annotations).length > 0 && (
+          {/* 标签 */}
+          {labelEntries.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium">标签</h2>
+                {labelEntries.length > 5 && (
+                  <button
+                    onClick={() => setShowAllLabels(!showAllLabels)}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    {showAllLabels ? '收起' : `查看全部 (${labelEntries.length})`}
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {displayedLabels.map(([key, value]) => (
+                  <span key={key} className="inline-flex items-center px-2 py-1 bg-gray-100 rounded text-sm">
+                    <span className="text-gray-500">{key}:</span>
+                    <span className="font-mono ml-1">{String(value)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 注解 */}
+          {annotationEntries.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium">注解</h2>
+                {annotationEntries.length > 5 && (
+                  <button
+                    onClick={() => setShowAllAnnotations(!showAllAnnotations)}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    {showAllAnnotations ? '收起' : `查看全部 (${annotationEntries.length})`}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {displayedAnnotations.map(([key, value]) => (
+                  <div key={key} className="flex flex-col">
+                    <span className="text-sm text-gray-500">{key}</span>
+                    <span className="text-sm">{String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 匹配规则 */}
+          {alert.matched_rules && alert.matched_rules.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-medium mb-4">匹配规则</h2>
+              <div className="space-y-2">
+                {alert.matched_rules.map((rule: any, index: number) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded">
+                    <div className="font-medium">{rule.name}</div>
+                    <div className="text-sm text-gray-500">优先级: {rule.priority}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 通知渠道 */}
+          {alert.notification_channels && alert.notification_channels.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-medium mb-4">通知渠道</h2>
+              <div className="flex flex-wrap gap-2">
+                {alert.notification_channels.map((channel: any, index: number) => (
+                  <span key={index} className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm">
+                    <Send className="w-3 h-3 mr-1" />
+                    {channel.name || channel}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 右侧 - 原始数据 */}
+        <div>
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-medium mb-4">注解</h2>
-            <div className="space-y-2">
-              {Object.entries(alert.annotations).map(([key, value]) => (
-                <div key={key} className="flex">
-                  <span className="w-32 text-gray-500">{key}</span>
-                  <span className="text-sm">{String(value)}</span>
+            <h2 className="text-lg font-medium mb-4">指纹信息</h2>
+            <dl className="space-y-2">
+              <div className="flex flex-col">
+                <dt className="text-sm text-gray-500 mb-1">指纹</dt>
+                <dd className="font-mono text-sm break-all">{alert.fingerprint}</dd>
+              </div>
+              <div className="flex flex-col">
+                <dt className="text-sm text-gray-500 mb-1">触发时间</dt>
+                <dd className="text-sm">{alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : '-'}</dd>
+              </div>
+              {alert.resolved_at && (
+                <div className="flex flex-col">
+                  <dt className="text-sm text-gray-500 mb-1">解决时间</dt>
+                  <dd className="text-sm">{new Date(alert.resolved_at).toLocaleString('zh-CN')}</dd>
                 </div>
-              ))}
-            </div>
+              )}
+            </dl>
           </div>
-        )}
 
-        {alert.matched_rules && alert.matched_rules.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-medium mb-4">匹配规则</h2>
-            <div className="space-y-2">
-              {alert.matched_rules.map((rule: any, index: number) => (
-                <div key={index} className="p-3 bg-gray-50 rounded">
-                  <div className="font-medium">{rule.name}</div>
-                  <div className="text-sm text-gray-500">优先级: {rule.priority}</div>
-                </div>
-              ))}
+          {alert.raw_data && Object.keys(alert.raw_data).length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6 mt-6">
+              <h2 className="text-lg font-medium mb-4">原始数据</h2>
+              <pre className="bg-gray-900 text-gray-100 p-4 rounded overflow-auto text-xs max-h-96">
+                {JSON.stringify(alert.raw_data, null, 2)}
+              </pre>
             </div>
-          </div>
-        )}
-
-        {alert.raw_data && Object.keys(alert.raw_data).length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6 col-span-2">
-            <h2 className="text-lg font-medium mb-4">原始数据</h2>
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded overflow-auto text-xs">
-              {JSON.stringify(alert.raw_data, null, 2)}
-            </pre>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

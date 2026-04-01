@@ -6,6 +6,7 @@ from apps.core.security import (
     hash_password,
     verify_password,
     create_access_token,
+    decode_token,
     verify_token,
     generate_signature,
     verify_signature,
@@ -27,7 +28,7 @@ def test_password_hash_and_verify():
 
 def test_access_token():
     """测试JWT访问令牌"""
-    data = {"sub": 1, "tenant_id": 1, "username": "test"}
+    data = {"sub": "1", "tenant_id": 1, "username": "test"}
 
     token = create_access_token(data)
     assert isinstance(token, str)
@@ -35,7 +36,7 @@ def test_access_token():
 
     payload = decode_token(token)
     assert payload is not None
-    assert payload["sub"] == 1
+    assert payload["sub"] == "1"
     assert payload["tenant_id"] == 1
 
 

@@ -130,6 +130,13 @@ docker-compose --profile tools up -d
 - pgAdmin: http://localhost:5050
 - Redis Commander: http://localhost:8081
 
+## 文档
+
+详细文档请参考 `docs/` 目录：
+
+- [API 文档](docs/API.md) - 完整的 API 接口说明
+- [部署指南](docs/DEPLOYMENT.md) - Docker Compose 和 Kubernetes 部署
+
 ## 项目结构
 
 ```
@@ -167,8 +174,33 @@ SentinelX/
 │   │   ├── services/          # API服务
 │   │   └── stores/            # 状态管理
 │   └── package.json
-├── docker/                    # Docker配置
+├── common/                    # 共享模块（后端/Agent共用）
+│   ├── constants.py          # 共享常量
+│   ├── types.py              # Pydantic 类型定义
+│   └── utils.py               # 工具函数
+├── agent/                     # 内网 Agent（Python）
+├── docker/                    # Docker 配置
+│   ├── docker-compose.yml    # 完整服务
+│   ├── docker-compose.infra.yml # 基础设施
+│   ├── Dockerfile             # 后端镜像
+│   ├── Dockerfile.frontend   # 前端镜像
+│   ├── init-db.sh            # 数据库初始化
+│   ├── .env.docker            # Docker 环境配置
+│   └── README.md              # Docker 详细说明
+├── k8s/                       # Kubernetes 部署配置
+│   ├── namespace.yaml         # 命名空间/ConfigMap/Secret
+│   ├── postgres-deployment.yaml # PostgreSQL
+│   ├── redis-deployment.yaml   # Redis
+│   ├── backend-deployment.yaml # 后端
+│   ├── frontend-deployment.yaml # 前端+Ingress
+│   ├── backend-hpa.yaml       # 后端自动扩缩容
+│   └── frontend-hpa.yaml      # 前端自动扩缩容
+├── docs/                      # 详细文档
+│   ├── API.md                 # API 文档
+│   └── DEPLOYMENT.md          # 部署指南
 ├── .github/workflows/          # CI/CD配置
+│   ├── ci.yml                # 持续集成
+│   └── cd.yml                # 持续部署
 └── README.md
 ```
 
@@ -294,10 +326,90 @@ REDIS_PORT=6379
 
 # JWT (生产环境必须修改)
 JWT_SECRET_KEY=your-secret-key-change-in-production
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # AI (可选)
 OPENAI_API_KEY=sk-xxx
 ANTHROPIC_API_KEY=sk-ant-xxx
+DASHSCOPE_API_KEY=sk-xxx
+AI_MODEL=gpt-4
+AI_PROVIDER=openai
+
+# 日志配置
+LOG_LEVEL=INFO              # DEBUG/INFO/WARNING/ERROR
+LOG_FORMAT=json            # json/console
+LOG_FILE=                   # 日志文件路径（可选，留空输出到stdout）
+
+# PGMQ (PostgreSQL消息队列)
+PGMQ_ENABLED=true
+```
+
+## 日志配置
+
+### 后端日志级别
+
+| 环境变量 | 说明 | 默认值 | 可选值 |
+|----------|------|--------|--------|
+| `LOG_LEVEL` | 日志级别 | INFO | DEBUG/INFO/WARNING/ERROR |
+| `LOG_FORMAT` | 日志格式 | json | json/console |
+| `LOG_FILE` | 日志文件路径 | - | 绝对路径（可选） |
+
+### 日志格式
+
+**JSON 格式（生产环境）**:
+```json
+{
+  "event": "request_completed",
+  "timestamp": "2024-01-01T10:00:00.000Z",
+  "level": "info",
+  "service": "sentinelx",
+  "request_id": "abc123",
+  "method": "POST",
+  "path": "/api/v1/alerts",
+  "status_code": 200,
+  "duration_ms": 45.23
+}
+```
+
+**控制台格式（开发环境）**:
+```
+2024-01-01T10:00:00.000Z [apps.alert.routers] INFO: request_completed
+  method=POST
+  path=/api/v1/alerts
+  status_code=200
+  duration_ms=45.23
+```
+
+### 前端日志
+
+| 环境变量 | 说明 | 默认值 | 可选值 |
+|----------|------|--------|--------|
+| `VITE_LOG_LEVEL` | 日志级别 | info | debug/info/warn/error |
+| `VITE_ENABLE_LOGGING` | 是否启用日志 | true | true/false |
+
+### Docker 日志
+
+容器日志使用 json-file 驱动，自动轮转:
+
+查看容器日志:
+```bash
+# 查看所有日志
+docker-compose logs -f
+
+# 查看后端日志
+docker-compose logs -f backend
+
+# 查看最近 100 行
+docker-compose logs --tail=100 backend
+```
+
+### 请求追踪
+
+每个请求带有 `X-Request-ID` 响应头，用于关联日志:
+```bash
+curl -v http://localhost:8001/api/v1/alerts 2>&1 | grep -i x-request-id
 ```
 
 ## API 文档
@@ -445,6 +557,62 @@ GitHub Actions 自动处理:
 - 数据库迁移验证
 
 推送代码后自动触发CI流程。
+
+## 故障排查
+
+### 常见问题
+
+#### 1. 登录失败，提示 "Invalid credentials"
+- 检查默认账号: 用户名 `admin`，密码 `Admin@123456`
+- 检查数据库是否正确初始化: `alembic upgrade head`
+- 检查 Redis 是否运行: `docker-compose ps redis`
+
+#### 2. 告警未收到通知
+- 检查规则是否正确配置
+- 检查通知渠道是否启用
+- 查看后端日志: `docker-compose logs -f backend | grep notification`
+
+#### 3. 性能问题
+- 检查数据库索引是否创建
+- 检查 Redis 连接数
+- 查看慢请求日志: 设置 `LOG_LEVEL=DEBUG`
+
+#### 4. Docker 容器无法启动
+- 检查端口占用: `lsof -i :8001` 或 `lsof -i :3000`
+- 检查日志: `docker-compose logs`
+- 清理重建: `docker-compose down && docker-compose up -d`
+
+#### 5. 前端无法连接后端
+- 检查 API 代理配置: `VITE_API_PROXY_TARGET`
+- 检查后端 CORS 配置: `DEBUG=true`
+- 查看浏览器控制台日志
+
+### 日志分析
+
+#### 查看错误日志
+```bash
+# 本地开发
+cd backend
+grep -i error logs/*.log
+
+# Docker 环境
+docker-compose logs backend | grep -i error
+```
+
+#### 追踪请求
+每个请求带有 `X-Request-ID` 响应头，用于关联日志:
+```bash
+curl -v http://localhost:8001/api/v1/alerts 2>&1 | grep -i x-request-id
+```
+
+#### 审计日志
+审计日志记录在 `audit_logs` 表中，可通过 API 查询敏感操作记录。
+
+### 获取帮助
+
+- 查看 API 文档: http://localhost:8001/docs
+- 查看前端控制台日志
+- 查看后端日志追踪请求
 
 ## 许可证
 

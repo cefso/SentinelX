@@ -5,6 +5,8 @@ on:
     branches: [main]
     tags: ['v*']
 
+# CD 已禁用 - 部署阶段默认不执行
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -60,11 +62,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ============ 部署到K8s (可选) ============
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # ============ 部署到K8s (已禁用) ============
+  # deploy:
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 

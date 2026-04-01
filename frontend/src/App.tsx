@@ -22,6 +22,29 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function SystemAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (user?.is_system !== true) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-8 bg-white rounded-lg shadow">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">访问受限</h2>
+          <p className="text-gray-500 mb-4">此页面仅系统管理员可访问</p>
+          <Navigate to="/alerts" replace />
+        </div>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <Routes>
@@ -43,7 +66,11 @@ function App() {
         <Route path="channels" element={<ChannelsPage />} />
         <Route path="diagnose" element={<DiagnosePage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="admin/users" element={<AdminUsersPage />} />
+        <Route path="admin/users" element={
+          <SystemAdminRoute>
+            <AdminUsersPage />
+          </SystemAdminRoute>
+        } />
       </Route>
     </Routes>
   )
