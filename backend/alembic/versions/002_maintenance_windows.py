@@ -1,7 +1,7 @@
 """Add maintenance_windows table
 
 Revision ID: 002_maintenance_windows
-Revises: 001_initial
+Revises: 002_multi_tenant
 Create Date: 2024-04-01 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '002_maintenance_windows'
-down_revision: Union[str, None] = '001_initial'
+down_revision: Union[str, None] = '002_multi_tenant'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

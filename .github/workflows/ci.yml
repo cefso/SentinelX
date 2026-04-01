@@ -107,7 +107,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          file: ../docker/Dockerfile
+          file: ./Dockerfile
           push: false
           tags: sentinelx/backend:test
           cache-from: type=gha
@@ -117,7 +117,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          file: ../docker/Dockerfile.frontend
+          file: ./Dockerfile
           push: false
           tags: sentinelx/frontend:test
           cache-from: type=gha
