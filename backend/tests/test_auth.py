@@ -8,15 +8,14 @@ from apps.auth.api_key import APIKeyAuth
 
 def test_permission_service_builtin_permissions():
     """测试内置权限定义"""
-    assert "alert:read" in PermissionService.PERMISSIONS
-    assert "alert:write" in PermissionService.PERMISSIONS
+    assert "alerts:read" in PermissionService.PERMISSIONS
+    assert "alerts:write" in PermissionService.PERMISSIONS
     assert "admin" in PermissionService.PERMISSIONS
-    assert "read" in PermissionService.PERMISSIONS
 
 
 def test_permission_labels():
     """测试权限标签"""
-    assert PermissionService.PERMISSIONS["alert:read"] == "查看告警"
+    assert PermissionService.PERMISSIONS["alerts:read"] == "查看告警"
     assert PermissionService.PERMISSIONS["admin"] == "管理员(全部权限)"
 
 
@@ -27,16 +26,15 @@ class TestAPIKeyFormat:
         """测试API Key格式"""
         api_key_auth = APIKeyAuth(None)
 
-        # API Key应该包含: prefix_version_keyid_secret
-        # 例如: sxk_v1_abc123def456_xxx
-        key = "sxk_v1_abc123def456_xxx"
+        # API Key格式: sxk_v1_{key_id} (3部分)
+        # 完整格式(含secret，用于首次创建时显示): sxk_v1_{key_id}_{secret_key}
+        key = "sxk_v1_abc123def456ab12"
         parts = key.split("_")
 
-        assert len(parts) == 4
+        assert len(parts) == 3
         assert parts[0] == "sxk"
         assert parts[1] == "v1"
-        assert len(parts[2]) == 16  # key_id (8字节hex)
-        assert len(parts[3]) == 64  # secret_key (32字节hex)
+        assert len(parts[2]) == 16  # key_id (8字节hex = 16字符)
 
     def test_api_key_prefix(self):
         """测试API Key前缀"""

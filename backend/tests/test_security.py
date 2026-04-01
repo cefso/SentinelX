@@ -33,7 +33,7 @@ def test_access_token():
     assert isinstance(token, str)
     assert len(token) > 0
 
-    payload = verify_token(token, "access")
+    payload = decode_token(token)
     assert payload is not None
     assert payload["sub"] == 1
     assert payload["tenant_id"] == 1

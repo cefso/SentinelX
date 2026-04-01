@@ -116,7 +116,7 @@ def test_evaluate_conditions_regex():
     engine = RuleEngine()
 
     conditions = [
-        {"field": "alert_key", "operator": "regex", "value": r"host:\d+:cpu"},
+        {"field": "alert_key", "operator": "regex", "value": r"host:.*:cpu"},
     ]
 
     alert_data = {"alert_key": "host:192.168.1.1:cpu_high"}

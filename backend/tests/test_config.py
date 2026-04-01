@@ -7,7 +7,7 @@ from apps.core.config import Settings, get_settings
 
 def test_settings_defaults():
     """测试默认配置"""
-    settings = Settings()
+    settings = Settings(DEBUG=False)
 
     assert settings.APP_NAME == "SentinelX"
     assert settings.APP_VERSION == "1.0.0"
