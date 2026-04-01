@@ -1,7 +1,7 @@
 """Add tenant webhook_api_key
 
 Revision ID: 003_tenant_webhook
-Revises: 002_multi_tenant
+Revises: 002_maintenance_windows
 Create Date: 2026-03-31 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '003_tenant_webhook'
-down_revision: Union[str, None] = '002_multi_tenant'
+down_revision: Union[str, None] = '002_maintenance_windows'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
