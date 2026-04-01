@@ -36,7 +36,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          images: ghcr.io/cefso/sentinelx/backend
           tags: |
             type=semver,pattern={{version}}
             type=sha,prefix=
@@ -48,9 +48,19 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/sentinelx/backend:latest
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Extract metadata for frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/cefso/sentinelx/frontend
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+            type=raw,value=latest
 
       - name: Build and push frontend
         uses: docker/build-push-action@v5
@@ -58,6 +68,6 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/sentinelx/frontend:latest
+          tags: ${{ steps.meta-frontend.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
