@@ -59,7 +59,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-frontend
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
           labels: ${{ steps.meta.outputs.labels }}-frontend
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -24,9 +24,7 @@ services:
   # 注意: 本地开发时，后端直接在本地运行，不使用 Docker
   # 本地开发命令: cd backend && uvicorn main:app --reload
   backend:
-    build:
-      context: ../backend
-      dockerfile: ../docker/Dockerfile
+    image: ghcr.io/cefso/sentinelx/backend:latest
     container_name: sentinelx-backend
     ports:
       - "8001:8000"
@@ -74,9 +72,7 @@ services:
   # 注意: 本地开发时，前端直接在本地运行，不使用 Docker
   # 本地开发命令: cd frontend && npm run dev
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: ../docker/Dockerfile.frontend
+    image: ghcr.io/cefso/sentinelx/frontend:latest
     container_name: sentinelx-frontend
     ports:
       - "3000:3000"
