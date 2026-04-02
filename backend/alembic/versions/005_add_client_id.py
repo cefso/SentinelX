@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         'alert_sources',
-        op.Column('client_id', sa.String(32), nullable=False, unique=True, index=True)
+        sa.Column('client_id', sa.String(32), nullable=False, unique=True, index=True)
     )
 
 
