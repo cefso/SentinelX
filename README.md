@@ -14,7 +14,7 @@
 ## 特性
 
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
-- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云、腾讯云、华为云、Zabbix、Grafana 等
+- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控1.0、阿里云云监控2.0、腾讯云、华为云、Zabbix、Grafana 等
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
 - **多渠道通知**: 钉钉、飞书、企业微信、邮件等
@@ -455,6 +455,7 @@ POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API
 ```
 /api/v1/webhooks/{tenant_slug}/prometheus
 /api/v1/webhooks/{tenant_slug}/grafana
+/api/v1/webhooks/{tenant_slug}/aliyun_cms
 /api/v1/webhooks/{tenant_slug}/aliyun
 /api/v1/webhooks/{tenant_slug}/custom
 ```
