@@ -28,6 +28,9 @@ class AlertSource(Base):
     is_active = Column(String(8), default="active")  # active/inactive
     description = Column(Text, nullable=True)
 
+    # 客户端生成的唯一ID（用于 webhook URL）
+    client_id = Column(String(32), unique=True, nullable=False, index=True)
+
     # 统计
     alert_count = Column(Integer, default=0)  # 累计接收告警数
     last_alert_at = Column(DateTime, nullable=True)  # 最后接收时间

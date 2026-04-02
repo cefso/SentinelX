@@ -2,7 +2,21 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
-import { AlertResponse, AlertStats } from '@/types/alert'
+import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
+
+interface AlertSource {
+  id: number
+  name: string
+  code: string
+  source_type: string
+  config: Record<string, any>
+  description?: string
+  is_active: boolean
+  alert_count: number
+  last_alert_at?: string
+  created_at: string
+}
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint } from 'lucide-react'
 
 export function AlertsPage() {
   const navigate = useNavigate()
@@ -11,90 +25,91 @@ export function AlertsPage() {
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
-    source: '',
+    sourceId: '' as number | '',
     keyword: '',
   })
+  const [aggregateMode, setAggregateMode] = useState(true)
 
   const { data: stats } = useQuery<AlertStats>({
     queryKey: ['alertStats'],
     queryFn: () => apiClient.get('/alerts/stats'),
   })
 
+  const { data: sources = [] } = useQuery<AlertSource[]>({
+    queryKey: ['alert-sources'],
+    queryFn: () => apiClient.get('/sources'),
+  })
+
   const { data: alerts, isLoading, refetch } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
-    queryKey: ['alerts', page, pageSize, filters],
+    queryKey: ['alerts', page, pageSize, filters, aggregateMode],
     queryFn: () => apiClient.get('/alerts', {
       page,
       page_size: pageSize,
       status: filters.status || undefined,
       severity: filters.severity ? [filters.severity] : undefined,
-      source: filters.source || undefined,
+      source_id: filters.sourceId || undefined,
       keyword: filters.keyword || undefined,
+      aggregate: aggregateMode || undefined,
     }),
   })
 
   const totalPages = Math.ceil((alerts?.total || 0) / pageSize)
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">告警列表</h1>
-        <p className="text-gray-600">管理和监控所有告警事件</p>
-      </div>
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold">告警列表</h1>
 
+      {/* 统计卡片 - 5个带渐变和图标 */}
       <div className="grid grid-cols-5 gap-4">
-        <StatCard title="总告警" value={stats?.total || 0} color="blue" />
-        <StatCard title="触发中" value={stats?.firing || 0} color="red" />
-        <StatCard title="已恢复" value={stats?.resolved || 0} color="green" />
-        <StatCard title="已抑制" value={stats?.suppressed || 0} color="gray" />
-        <StatCard title="未分配" value={stats?.unassigned || 0} color="yellow" />
+        <StatCard
+          title="总告警"
+          value={stats?.total || 0}
+          subtitle="全部告警"
+          icon={Bell}
+          gradient="from-blue-500 to-blue-600"
+        />
+        <StatCard
+          title="去重告警"
+          value={stats?.unique || 0}
+          subtitle="不同指纹"
+          icon={Fingerprint}
+          gradient="from-purple-500 to-purple-600"
+        />
+        <StatCard
+          title="触发中"
+          value={stats?.firing || 0}
+          subtitle="正在触发"
+          icon={AlertTriangle}
+          gradient="from-orange-500 to-orange-600"
+        />
+        <StatCard
+          title="Critical"
+          value={stats?.firing_critical || 0}
+          subtitle="严重级别"
+          icon={XCircle}
+          gradient="from-red-500 to-red-600"
+        />
+        <StatCard
+          title="High"
+          value={stats?.firing_high || 0}
+          subtitle="高级别"
+          icon={AlertCircle}
+          gradient="from-amber-500 to-amber-600"
+        />
       </div>
 
       <div className="bg-white rounded-lg shadow">
+        {/* 过滤栏 - 分段控件风格 */}
         <div className="p-4 border-b space-y-3">
-          <input
-            type="text"
-            placeholder="搜索告警标题或内容..."
-            className="w-full px-3 py-2 border rounded-md"
-            value={filters.keyword}
-            onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
-          />
-          <div className="flex gap-3 flex-wrap">
-            <select
-              className="px-3 py-2 border rounded-md"
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            >
-              <option value="">全部状态</option>
-              <option value="firing">触发中</option>
-              <option value="resolved">已恢复</option>
-              <option value="suppressed">已抑制</option>
-              <option value="acknowledged">已确认</option>
-            </select>
-            <select
-              className="px-3 py-2 border rounded-md"
-              value={filters.severity}
-              onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
-            >
-              <option value="">全部级别</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-              <option value="info">Info</option>
-            </select>
-            <select
-              className="px-3 py-2 border rounded-md"
-              value={filters.source}
-              onChange={(e) => setFilters({ ...filters, source: e.target.value })}
-            >
-              <option value="">全部来源</option>
-              <option value="prometheus">Prometheus</option>
-              <option value="alertmanager">Alertmanager</option>
-              <option value="zabbix">Zabbix</option>
-              <option value="aliyun">阿里云</option>
-              <option value="tencent">腾讯云</option>
-              <option value="custom">自定义</option>
-            </select>
+          <div className="flex gap-3 items-center">
+            <Search className="w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索告警标题或内容..."
+              className="flex-1 px-3 py-2 border rounded-md"
+              value={filters.keyword}
+              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+            />
             <button
               onClick={() => { setPage(1); refetch(); }}
               className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
@@ -102,77 +117,234 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', source: '', keyword: '' })}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '' })}
+              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
+              <RotateCcw className="w-3 h-3" />
               重置
             </button>
           </div>
-        </div>
 
-        <div className="divide-y">
-          {isLoading ? (
-            <div className="p-8 text-center text-gray-500">加载中...</div>
-          ) : alerts?.items.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">暂无告警</div>
-          ) : (
-            alerts?.items.map((alert) => (
-              <div
-                key={alert.id}
-                className="p-4 hover:bg-gray-50 cursor-pointer"
-                onClick={() => navigate(`/alerts/${alert.id}`)}
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* 聚合模式切换 */}
+            <span className="text-sm text-gray-500 py-1.5">视图:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {[
+                { value: true, label: '聚合' },
+                { value: false, label: '列表' },
+              ].map(opt => (
+                <button
+                  key={String(opt.value)}
+                  onClick={() => { setAggregateMode(opt.value); setPage(1); }}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    aggregateMode === opt.value
+                      ? 'bg-white shadow text-gray-900 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-sm text-gray-500 py-1.5">状态:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {[
+                { value: '', label: '全部' },
+                { value: 'firing', label: '触发中' },
+                { value: 'resolved', label: '已恢复' },
+                { value: 'suppressed', label: '已抑制' },
+                { value: 'acknowledged', label: '已确认' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setFilters({ ...filters, status: opt.value })}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    filters.status === opt.value
+                      ? 'bg-white shadow text-gray-900 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-sm text-gray-500 py-1.5">级别:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {[
+                { value: '', label: '全部' },
+                { value: 'critical', label: '严重' },
+                { value: 'high', label: '重要' },
+                { value: 'medium', label: '次要' },
+                { value: 'low', label: '提示' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setFilters({ ...filters, severity: opt.value })}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    filters.severity === opt.value
+                      ? 'bg-white shadow text-gray-900 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-sm text-gray-500 py-1.5">来源:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              <button
+                key="all"
+                onClick={() => setFilters({ ...filters, sourceId: '' })}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  filters.sourceId === ''
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <SeverityBadge severity={alert.severity} />
-                    <div>
-                      <div className="font-medium">{alert.title}</div>
-                      <div className="text-sm text-gray-500">
-                        {alert.source} • {alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : ''}
-                        {alert.fire_count > 1 && <span className="ml-2 text-orange-500">×{alert.fire_count}</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {alert.trace_id && (
-                      <span className="text-xs text-gray-400">Trace: {alert.trace_id}</span>
-                    )}
-                    <StatusBadge status={alert.status} />
-                  </div>
-                </div>
-                {alert.labels && Object.keys(alert.labels).length > 0 && (
-                  <div className="mt-2 flex gap-1 flex-wrap">
-                    {Object.entries(alert.labels).slice(0, 5).map(([key, value]) => (
-                      <span key={key} className="text-xs bg-gray-100 px-2 py-0.5 rounded">
-                        {key}: {String(value)}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+                全部
+              </button>
+              {sources.map(source => (
+                <button
+                  key={source.id}
+                  onClick={() => setFilters({ ...filters, sourceId: source.id })}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    filters.sourceId === source.id
+                      ? 'bg-white shadow text-gray-900 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {source.name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
+        {/* 告警列表 - 表格布局 */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">#</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">告警名称</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">级别</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">来源</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">时间</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">状态</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">加载中...</td>
+                </tr>
+              ) : alerts?.items.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
+                </tr>
+              ) : aggregateMode ? (
+                (alerts?.items as unknown as AlertAggregatedItem[]).map((item, idx) => (
+                  <tr
+                    key={item.fingerprint}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/alerts/${item.latest.id}`)}
+                  >
+                    <td className="px-3 py-2 text-sm text-gray-400">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 truncate max-w-md">{item.latest.title}</span>
+                        <span className="flex items-center gap-0.5 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
+                          <Fingerprint className="w-3 h-3" />
+                          ×{item.count}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5 font-mono">{item.fingerprint}</div>
+                    </td>
+                    <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{item.latest.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
+                      {item.latest.fired_at ? new Date(item.latest.fired_at).toLocaleString('zh-CN') : '-'}
+                    </td>
+                    <td className="px-3 py-2"><StatusBadge status={item.latest.status} /></td>
+                  </tr>
+                ))
+              ) : (
+                alerts?.items.map((alert, idx) => (
+                  <tr
+                    key={alert.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/alerts/${alert.id}`)}
+                  >
+                    <td className="px-3 py-2 text-sm text-gray-400">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 truncate max-w-md">{alert.title}</span>
+                        {alert.fire_count > 1 && (
+                          <span className="text-xs text-orange-500 font-medium">×{alert.fire_count}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2"><SeverityBadge severity={alert.severity} /></td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{alert.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
+                      {alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : '-'}
+                    </td>
+                    <td className="px-3 py-2"><StatusBadge status={alert.status} /></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 紧凑分页 */}
         {totalPages > 1 && (
-          <div className="p-4 border-t flex items-center justify-between">
+          <div className="px-4 py-3 border-t flex items-center justify-between">
             <div className="text-sm text-gray-500">
               共 {alerts?.total} 条，第 {page} / {totalPages} 页
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-1">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="px-3 py-1 border rounded disabled:opacity-50 hover:bg-gray-50"
+                className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                上一页
+                <ChevronLeft className="w-4 h-4" />
               </button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (page <= 3) {
+                  pageNum = i + 1
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = page - 2 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 text-sm rounded border ${
+                      page === pageNum
+                        ? 'bg-primary text-white border-primary'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                className="px-3 py-1 border rounded disabled:opacity-50 hover:bg-gray-50"
+                className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                下一页
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -182,24 +354,37 @@ export function AlertsPage() {
   )
 }
 
-function StatCard({ title, value, color }: { title: string; value: number; color: string }) {
-  const colors = {
-    blue: 'bg-blue-50 text-blue-700',
-    red: 'bg-red-50 text-red-700',
-    green: 'bg-green-50 text-green-700',
-    gray: 'bg-gray-50 text-gray-700',
-  }
-
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  gradient,
+}: {
+  title: string
+  value: number
+  subtitle: string
+  icon: React.ComponentType<{ className?: string }>
+  gradient: string
+}) {
   return (
-    <div className={`p-4 rounded-lg ${colors[color as keyof typeof colors]}`}>
-      <div className="text-sm font-medium">{title}</div>
-      <div className="text-2xl font-bold">{value}</div>
+    <div className={`rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-sm`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-medium opacity-80">{title}</div>
+          <div className="text-2xl font-bold mt-0.5">{value.toLocaleString()}</div>
+          <div className="text-xs opacity-60 mt-0.5">{subtitle}</div>
+        </div>
+        <div className="p-2 bg-white/20 rounded-lg">
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
     </div>
   )
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const colors = {
+  const styles: Record<string, string> = {
     critical: 'bg-red-100 text-red-800',
     high: 'bg-orange-100 text-orange-800',
     medium: 'bg-yellow-100 text-yellow-800',
@@ -208,28 +393,30 @@ function SeverityBadge({ severity }: { severity: string }) {
   }
 
   return (
-    <span className={`px-2 py-1 text-xs font-medium rounded ${colors[severity as keyof typeof colors] || colors.info}`}>
+    <span className={`px-2 py-0.5 text-xs font-medium rounded ${styles[severity] || styles.info}`}>
       {severity.toUpperCase()}
     </span>
   )
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colors = {
+  const styles: Record<string, string> = {
     firing: 'bg-red-100 text-red-800',
     resolved: 'bg-green-100 text-green-800',
     suppressed: 'bg-gray-100 text-gray-800',
+    acknowledged: 'bg-blue-100 text-blue-800',
   }
 
-  const labels = {
+  const labels: Record<string, string> = {
     firing: '触发中',
     resolved: '已恢复',
     suppressed: '已抑制',
+    acknowledged: '已确认',
   }
 
   return (
-    <span className={`px-2 py-1 text-xs font-medium rounded ${colors[status as keyof typeof colors] || colors.firing}`}>
-      {labels[status as keyof typeof labels] || status}
+    <span className={`px-2 py-0.5 text-xs font-medium rounded ${styles[status] || styles.firing}`}>
+      {labels[status] || status}
     </span>
   )
 }

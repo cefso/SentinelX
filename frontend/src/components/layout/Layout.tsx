@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus } from 'lucide-react'
+import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft } from 'lucide-react'
 
 const navigation = [
   { name: '告警', href: '/alerts', icon: Bell },
@@ -24,6 +24,7 @@ export function Layout() {
   const [showTenantMenu, setShowTenantMenu] = useState(false)
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const tenantMenuRef = useRef<HTMLDivElement>(null)
 
@@ -63,11 +64,20 @@ export function Layout() {
 
   return (
     <div className="h-screen flex overflow-hidden">
-      <aside className="w-64 bg-gray-900 text-white flex flex-col overflow-y-auto">
-        <div className="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
-          <h1 className="text-xl font-bold">SentinelX</h1>
+      <aside className={`bg-gray-900 text-white flex flex-col overflow-y-auto shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+        <div className="h-16 flex items-center border-b border-gray-800 shrink-0">
+          {!sidebarCollapsed && (
+            <h1 className="text-xl font-bold px-6">SentinelX</h1>
+          )}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-4 hover:bg-gray-800 transition-colors ml-auto"
+            title={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
+          >
+            {sidebarCollapsed ? <PanelLeft className="w-5 h-5 text-gray-400" /> : <PanelLeftClose className="w-5 h-5 text-gray-400" />}
+          </button>
         </div>
-        <nav className="p-4 space-y-1 flex-1">
+        <nav className={`p-4 space-y-1 flex-1 ${sidebarCollapsed ? 'px-2' : ''}`}>
           {navigation.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname.startsWith(item.href)
@@ -77,17 +87,18 @@ export function Layout() {
                 to={item.href}
                 className={`flex items-center gap-3 px-4 py-2 rounded-md ${
                   isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
-                }`}
+                } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                title={sidebarCollapsed ? item.name : undefined}
               >
-                <Icon className="w-5 h-5" />
-                {item.name}
+                <Icon className="w-5 h-5 shrink-0" />
+                {!sidebarCollapsed && item.name}
               </Link>
             )
           })}
         </nav>
         <div className="mt-auto border-t border-gray-800">
           {/* 告警提供商 */}
-          <nav className="p-2 space-y-1">
+          <nav className={`p-2 space-y-1 ${sidebarCollapsed ? 'px-2' : ''}`}>
             {bottomNavigation.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname.startsWith(item.href)
@@ -97,10 +108,11 @@ export function Layout() {
                   to={item.href}
                   className={`flex items-center gap-3 px-4 py-2 rounded-md ${
                     isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
-                  }`}
+                  } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <Icon className="w-5 h-5" />
-                  {item.name}
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {!sidebarCollapsed && item.name}
                 </Link>
               )
             })}
@@ -110,15 +122,19 @@ export function Layout() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-full p-4 flex items-center justify-between hover:bg-gray-800 transition-colors"
+              className={`w-full hover:bg-gray-800 transition-colors flex items-center ${sidebarCollapsed ? 'justify-center p-3' : 'p-4 justify-between'}`}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
                   <UserCircle className="w-6 h-6 text-gray-400" />
                 </div>
-                <div className="text-sm font-medium truncate">{user?.username}</div>
+                {!sidebarCollapsed && (
+                  <div className="text-sm font-medium truncate">{user?.username}</div>
+                )}
               </div>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              {!sidebarCollapsed && (
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              )}
             </button>
 
             {showUserMenu && (

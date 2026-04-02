@@ -31,6 +31,10 @@ export interface AlertResponse {
 
 export interface AlertStats {
   total: number
+  unique: number
+  today: number
+  firing_critical: number
+  firing_high: number
   firing: number
   resolved: number
   suppressed: number
@@ -40,6 +44,12 @@ export interface AlertStats {
   low: number
   info: number
   unassigned: number
+}
+
+export interface AlertAggregatedItem {
+  fingerprint: string
+  count: number
+  latest: AlertResponse
 }
 
 export interface AlertFilter {

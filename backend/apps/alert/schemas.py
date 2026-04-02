@@ -17,7 +17,7 @@ class AlertSourceBase(BaseModel):
 
 
 class AlertSourceCreate(AlertSourceBase):
-    pass
+    client_id: str = Field(..., min_length=1, max_length=32)
 
 
 class AlertSourceUpdate(BaseModel):
@@ -34,6 +34,7 @@ class AlertSourceResponse(AlertSourceBase):
     alert_count: int
     last_alert_at: Optional[datetime] = None
     created_at: datetime
+    client_id: str
 
     class Config:
         from_attributes = True
@@ -58,6 +59,7 @@ class AlertCreate(AlertBase):
     """创建告警请求"""
     fingerprint: Optional[str] = None  # 可选，不提供则自动生成
     trace_id: Optional[str] = None
+    source_id: Optional[int] = None
 
 
 class AlertUpdate(BaseModel):
@@ -104,6 +106,24 @@ class AlertListResponse(BaseModel):
     page_size: int
 
 
+class AlertAggregatedItem(BaseModel):
+    """聚合告警项"""
+    fingerprint: str
+    count: int
+    latest: AlertResponse
+
+    class Config:
+        from_attributes = True
+
+
+class AlertAggregatedResponse(BaseModel):
+    """聚合告警响应"""
+    items: List[AlertAggregatedItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class AlertFilter(BaseModel):
     """告警过滤条件"""
     status: Optional[str] = None
@@ -130,6 +150,10 @@ class AlertStats(BaseModel):
     low: int
     info: int
     unassigned: int
+    unique: int
+    today: int
+    firing_critical: int
+    firing_high: int
 
 
 # ============ 告警历史Schema ============
