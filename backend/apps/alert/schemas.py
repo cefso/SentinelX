@@ -104,6 +104,24 @@ class AlertListResponse(BaseModel):
     page_size: int
 
 
+class AlertAggregatedItem(BaseModel):
+    """聚合告警项"""
+    fingerprint: str
+    count: int
+    latest: AlertResponse
+
+    class Config:
+        from_attributes = True
+
+
+class AlertAggregatedResponse(BaseModel):
+    """聚合告警响应"""
+    items: List[AlertAggregatedItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class AlertFilter(BaseModel):
     """告警过滤条件"""
     status: Optional[str] = None
@@ -130,6 +148,10 @@ class AlertStats(BaseModel):
     low: int
     info: int
     unassigned: int
+    unique: int
+    today: int
+    firing_critical: int
+    firing_high: int
 
 
 # ============ 告警历史Schema ============

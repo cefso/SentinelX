@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, text, Integer, case
+from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, cast, Date
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
@@ -216,7 +216,7 @@ async def receive_webhook_alert(
     自动识别数据格式并转换为标准告警
     支持: prometheus, alertmanager, zabbix, aliyun, tencent, custom
     """
-    from apps.alert.adapters.base import AdapterFactory
+    from apps.alert.adapters import AdapterFactory
 
     # 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
@@ -249,7 +249,7 @@ async def receive_webhook_by_tenant(
     - X-API-Key: 租户的 webhook API Key (可选)
     支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
-    from apps.alert.adapters.base import AdapterFactory
+    from apps.alert.adapters import AdapterFactory
     from urllib.parse import unquote_plus
 
     # 1. 通过 tenant_slug 获取租户
@@ -310,7 +310,7 @@ async def receive_aliyun_cms_webhook(
     接收 application/x-www-form-urlencoded 格式的告警
     推荐使用: POST /webhooks/{tenant_slug}/aliyun_cms
     """
-    from apps.alert.adapters.base import AdapterFactory
+    from apps.alert.adapters import AdapterFactory
     from urllib.parse import unquote_plus
 
     # 1. 通过 tenant_slug 获取租户
@@ -396,7 +396,7 @@ async def create_alerts_batch(
 
 # ============ 告警查询 ============
 
-@router.get("/alerts", response_model=AlertListResponse)
+@router.get("/alerts")
 async def list_alerts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -406,36 +406,92 @@ async def list_alerts(
     keyword: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
+    aggregate: bool = Query(False),
+    fingerprint: Optional[str] = None,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取告警列表"""
-    query = select(Alert).where(Alert.tenant_id == str(tenant_id))
+    """获取告警列表，支持聚合模式"""
+    base_filter = [Alert.tenant_id == str(tenant_id)]
 
     if status:
-        query = query.where(Alert.status == status)
+        base_filter.append(Alert.status == status)
     if severity:
-        query = query.where(Alert.severity == severity)
+        base_filter.append(Alert.severity == severity)
     if source:
-        query = query.where(Alert.source == source)
+        base_filter.append(Alert.source == source)
     if keyword:
-        query = query.where(
-            or_(
-                Alert.title.ilike(f"%{keyword}%"),
-                Alert.content.ilike(f"%{keyword}%")
-            )
-        )
+        base_filter.append(or_(
+            Alert.title.ilike(f"%{keyword}%"),
+            Alert.content.ilike(f"%{keyword}%")
+        ))
     if start_time:
-        query = query.where(Alert.fired_at >= start_time)
+        base_filter.append(Alert.fired_at >= start_time)
     if end_time:
-        query = query.where(Alert.fired_at <= end_time)
+        base_filter.append(Alert.fired_at <= end_time)
+    if fingerprint:
+        base_filter.append(Alert.fingerprint == fingerprint)
 
-    # 总数
+    # 聚合模式
+    if aggregate:
+        from apps.alert.schemas import AlertAggregatedResponse, AlertAggregatedItem
+
+        # 子查询: 每 fingerprint 的最新告警 ID 和数量
+        subq = (
+            select(
+                Alert.fingerprint,
+                func.max(Alert.id).label("max_id"),
+                func.count(Alert.id).label("count"),
+            )
+            .where(and_(*base_filter))
+            .group_by(Alert.fingerprint)
+            .subquery()
+        )
+
+        # 总分组数
+        total_result = await db.execute(select(func.count()).select_from(subq))
+        total = total_result.scalar() or 0
+
+        # 分页子查询
+        paginated_subq = (
+            select(subq.c.fingerprint, subq.c.max_id, subq.c.count)
+            .order_by(subq.c.max_id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .subquery()
+        )
+
+        # 关联获取完整告警
+        result = await db.execute(
+            select(Alert, paginated_subq.c.count)
+            .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+            .order_by(Alert.fired_at.desc())
+        )
+        rows = result.all()
+
+        items = [
+            AlertAggregatedItem(
+                fingerprint=row.Alert.fingerprint,
+                count=row.count,
+                latest=row.Alert,
+            )
+            for row in rows
+        ]
+
+        return AlertAggregatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    # 普通模式
+    query = select(Alert).where(and_(*base_filter))
+
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    # 分页
     query = query.order_by(Alert.fired_at.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     alerts = result.scalars().all()
@@ -490,6 +546,21 @@ async def get_alert_stats(
     info = sev_row[4] or 0
     unassigned = sev_row[5] or 0
 
+    # 查询3: 去重数量 (不同 fingerprint)
+    unique_result = await db.execute(
+        select(func.count(distinct(Alert.fingerprint))).where(tenant_filter)
+    )
+    unique = unique_result.scalar() or 0
+
+    # 查询4: 今日新增
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_result = await db.execute(
+        select(func.count()).where(
+            and_(tenant_filter, Alert.fired_at >= today_start)
+        )
+    )
+    today = today_result.scalar() or 0
+
     return AlertStats(
         total=total,
         firing=firing,
@@ -501,6 +572,10 @@ async def get_alert_stats(
         low=low,
         info=info,
         unassigned=unassigned,
+        unique=unique,
+        today=today,
+        firing_critical=critical,
+        firing_high=high,
     )
 
 
