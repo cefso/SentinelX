@@ -62,11 +62,11 @@ cd /Users/cefso/code/SentinelX
 使用 Docker 启动 PostgreSQL 和 Redis：
 
 ```bash
-docker-compose -f docker/docker-compose.infra.yml up -d
+docker compose -f docker/docker-compose.infra.yml up -d
 ```
 
 这将启动:
-- PostgreSQL (TimescaleDB) - 端口 5432
+- PostgreSQL (TimescaleDB + TimescaleDB 扩展) - 端口 5432
 - Redis - 端口 6379
 
 ### 3. 本地开发 (前后端不使用 Docker)
@@ -114,16 +114,20 @@ npm run dev
 
 ---
 
-## Docker 部署 (可选)
+## Docker 部署
 
-如需使用 Docker 运行完整服务（包括后端和前端）：
+使用 Docker 运行完整服务（包括后端和前端）：
 
 ```bash
-# 启动基础设施 + 后端 + 前端
-docker-compose -f docker/docker-compose.yml up -d
+# 启动所有服务（后端、前端、PostgreSQL、Redis）
+docker compose -f docker/docker-compose.yml up -d
 
 # 启动带管理工具 (pgAdmin, Redis Commander)
-docker-compose --profile tools up -d
+docker compose -f docker/docker-compose.yml --profile tools up -d
+
+# 本地构建镜像后启动
+cd docker
+docker compose up -d --build
 ```
 
 管理工具地址:
@@ -184,7 +188,9 @@ SentinelX/
 │   ├── docker-compose.infra.yml # 基础设施
 │   ├── Dockerfile             # 后端镜像
 │   ├── Dockerfile.frontend   # 前端镜像
-│   ├── init-db.sh            # 数据库初始化
+│   ├── postgres/              # PostgreSQL 镜像（含初始化脚本）
+│   │   └── Dockerfile
+│   ├── init-db.sh            # 数据库初始化脚本
 │   ├── .env.docker            # Docker 环境配置
 │   └── README.md              # Docker 详细说明
 ├── k8s/                       # Kubernetes 部署配置
