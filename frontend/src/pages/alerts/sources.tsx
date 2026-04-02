@@ -64,9 +64,9 @@ const alertSourceTypes: AlertSourceConfig[] = [
     ],
   },
   {
-    id: 'aliyun',
+    id: 'aliyun_cms2',
     name: '阿里云云监控2.0',
-    description: '接入阿里云云监控告警，支持阈值报警和事件报警，通过自定义 Webhook 回调',
+    description: '接入阿里云云监控2.0告警，支持阈值报警和事件报警，JSON 格式回调',
     icon: Cloud,
     接入方式: 'Webhook',
     配置说明: [
@@ -304,11 +304,9 @@ export function AlertSourcesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {alertSourceTypes.map((sourceType) => {
             const Icon = sourceType.icon
-            // 阿里云云监控1.0使用 form-data 专用端点
+            // 统一使用 /aliyun_cms 端点（支持 JSON 和 Form Data）
             const webhookUrl = sourceType.id === 'custom'
               ? `${webhookBaseUrl}/custom`
-              : sourceType.id === 'aliyun_cms'
-              ? `${webhookBaseUrl}/aliyun_cms/form`
               : `${webhookBaseUrl}/${sourceType.id}`
             const isConfigured = isSourceConfigured(sourceType.id)
             return (
@@ -515,11 +513,9 @@ function SourceModal({
   }
 
   const currentType = alertSourceTypes.find(t => t.id === formData.source_type)
-  // 阿里云云监控1.0使用 form-data 专用端点
+  // 统一使用 /{source_type} 端点（支持 JSON 和 Form Data）
   const webhookUrl = formData.source_type === 'custom'
     ? `${webhookBaseUrl}/custom`
-    : formData.source_type === 'aliyun_cms'
-    ? `${webhookBaseUrl}/aliyun_cms/form`
     : `${webhookBaseUrl}/${formData.source_type}`
 
   return (

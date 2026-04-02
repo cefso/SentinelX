@@ -324,6 +324,7 @@ class AdapterFactory:
         "zabbix": ZabbixAdapter,
         "aliyun": AlibabaCloudAdapter,
         "aliyun_cms": "AliyunCmsAdapter",  # 延迟导入
+        "aliyun_cms2": "AliyunCms2Adapter",  # 延迟导入
         "tencent": TencentCloudAdapter,
         "custom": CustomWebhookAdapter,
     }
@@ -334,8 +335,12 @@ class AdapterFactory:
         adapter_class = cls._adapters.get(source_type.lower(), CustomWebhookAdapter)
         # 延迟导入处理
         if isinstance(adapter_class, str):
-            from apps.alert.adapters.aliyun_cms import AliyunCmsAdapter
-            adapter_class = AliyunCmsAdapter
+            if adapter_class == "AliyunCmsAdapter":
+                from apps.alert.adapters.aliyun_cms import AliyunCmsAdapter
+                adapter_class = AliyunCmsAdapter
+            elif adapter_class == "AliyunCms2Adapter":
+                from apps.alert.adapters.aliyun_cms2 import AliyunCms2Adapter
+                adapter_class = AliyunCms2Adapter
         return adapter_class()
 
     @classmethod

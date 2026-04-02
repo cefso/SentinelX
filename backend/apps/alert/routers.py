@@ -234,7 +234,7 @@ async def receive_webhook_alert(
 async def receive_webhook_by_tenant(
     tenant_slug: str,
     source_type: str,
-    raw_data: dict,
+    request: Request,
     background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: AsyncSession = Depends(get_db),
@@ -245,10 +245,12 @@ async def receive_webhook_by_tenant(
 
     使用租户独立的 webhook URL 和 API Key 进行认证
     - tenant_slug: 租户 slug (如 sentinelx)
-    - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/tencent/huawei/custom)
+    - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/aliyun_cms/aliyun_cms2/tencent/huawei/custom)
     - X-API-Key: 租户的 webhook API Key (可选)
+    支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
     from apps.alert.adapters.base import AdapterFactory
+    from urllib.parse import unquote_plus
 
     # 1. 通过 tenant_slug 获取租户
     result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
@@ -266,16 +268,31 @@ async def receive_webhook_by_tenant(
         if not verify_password(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
-    # 3. 获取适配器
+    # 3. 根据 Content-Type 解析请求数据
+    content_type = request.headers.get("content-type", "").lower()
+
+    if "application/x-www-form-urlencoded" in content_type:
+        # Form Data 格式
+        form_data = await request.form()
+        raw_data = {}
+        for key, value in form_data.items():
+            if isinstance(value, bytes):
+                value = unquote_plus(value.decode('utf-8'))
+            raw_data[key] = value
+    else:
+        # JSON 格式 (默认)
+        raw_data = await request.json()
+
+    # 4. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
 
-    # 4. 解析告警
+    # 5. 解析告警
     parsed_alert = await adapter.parse(raw_data, tenant_id)
 
     if not parsed_alert:
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    # 5. 处理告警
+    # 6. 处理告警
     return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
 
 
@@ -289,8 +306,9 @@ async def receive_aliyun_cms_webhook(
     redis=Depends(get_redis),
 ):
     """
-    阿里云云监控1.0 Webhook (Form Data格式)
+    阿里云云监控1.0 Webhook (Form Data格式) [已废弃]
     接收 application/x-www-form-urlencoded 格式的告警
+    推荐使用: POST /webhooks/{tenant_slug}/aliyun_cms
     """
     from apps.alert.adapters.base import AdapterFactory
     from urllib.parse import unquote_plus

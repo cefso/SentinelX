@@ -26,7 +26,7 @@ class AlertDispatcher:
     def __init__(self, db: AsyncSession, redis: Redis):
         self.db = db
         self.redis = redis
-        self.rule_engine = RuleEngine(db)
+        self.rule_engine = RuleEngine()
 
     async def dispatch(self, alert: Alert, trace_id: str):
         """主分发流程"""
