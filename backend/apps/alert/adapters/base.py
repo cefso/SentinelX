@@ -1,6 +1,8 @@
 """
 SentinelX - 告警适配器基类
 """
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from apps.alert.schemas import AlertCreate
@@ -26,9 +28,6 @@ class AlertAdapter(ABC):
 
     def generate_fingerprint(self, alert_key: str, source: str, labels: Dict[str, Any]) -> str:
         """生成告警指纹"""
-        import hashlib
-        import json
-
         fp_data = {
             "source": source,
             "alert_key": alert_key,

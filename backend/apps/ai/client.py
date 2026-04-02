@@ -2,6 +2,7 @@
 SentinelX - AI服务
 LLM客户端封装，支持 OpenAI、Claude、Qwen 等
 """
+import httpx
 import json
 from typing import Optional, Dict, Any, List
 from abc import ABC, abstractmethod
@@ -59,7 +60,6 @@ class OpenAIClient(LLMClient):
         max_tokens: int = 1000,
     ) -> tuple[str, Optional[str]]:
         """生成文本"""
-        import httpx
 
         messages = []
         if system:
@@ -99,7 +99,6 @@ class OpenAIClient(LLMClient):
         max_tokens: int = 1000,
     ) -> tuple[str, Optional[str]]:
         """对话"""
-        import httpx
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
@@ -144,7 +143,6 @@ class AnthropicClient(LLMClient):
         max_tokens: int = 1000,
     ) -> tuple[str, Optional[str]]:
         """生成文本"""
-        import httpx
 
         messages = [{"role": "user", "content": prompt}]
 
@@ -208,7 +206,6 @@ class QwenClient(LLMClient):
         max_tokens: int = 1000,
     ) -> tuple[str, Optional[str]]:
         """生成文本"""
-        import httpx
 
         messages = []
         if system:
@@ -250,7 +247,6 @@ class QwenClient(LLMClient):
         max_tokens: int = 1000,
     ) -> tuple[str, Optional[str]]:
         """对话"""
-        import httpx
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:

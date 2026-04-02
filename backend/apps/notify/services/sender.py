@@ -6,7 +6,7 @@ from datetime import datetime
 import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from apps.notify.models import NotificationRecord
 from apps.notify.channels import ChannelFactory
@@ -163,6 +163,3 @@ class NotificationService:
                 retried += 1
 
         return retried
-
-
-from sqlalchemy import or_

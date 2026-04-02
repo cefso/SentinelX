@@ -2,6 +2,7 @@
 SentinelX - 升级服务
 处理告警升级逻辑
 """
+import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import structlog
@@ -165,7 +166,6 @@ class EscalationWorker:
 
     async def run(self):
         """运行Worker"""
-        import asyncio
         from apps.core.database import async_session_factory
 
         while True:
