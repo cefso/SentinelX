@@ -203,3 +203,39 @@ class AuditLog(Base):
     user_agent = Column(String(256), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class APIKey(Base):
+    """API Key 索引表 - 提供 O(1) key_id 到 tenant_id 的映射查找"""
+
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        Index("idx_api_keys_key_id", "key_id", unique=True),
+        Index("idx_api_keys_tenant", "tenant_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
+
+    # Key ID (API Key 的一部分, 如 abc123def456)
+    key_id = Column(String(32), nullable=False, unique=True, index=True)
+
+    # 名称和描述
+    name = Column(String(128), nullable=True)
+    description = Column(Text, nullable=True)
+
+    # 签名 (HMAC-SHA256, 用于验证)
+    secret_signature = Column(String(128), nullable=False)
+
+    # 加密存储的完整密钥
+    encrypted_secret = Column(String(512), nullable=True)
+
+    # 状态
+    is_active = Column(Boolean, default=True)
+
+    # 过期时间
+    expires_at = Column(DateTime, nullable=True)
+
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

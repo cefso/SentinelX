@@ -4,6 +4,7 @@ SentinelX - 中间件
 """
 import time
 import traceback
+import uuid
 from typing import Callable
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -155,5 +156,4 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
 
 def _generate_request_id() -> str:
     """生成请求ID"""
-    import uuid
     return str(uuid.uuid4())[:8]

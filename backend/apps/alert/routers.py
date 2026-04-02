@@ -6,9 +6,9 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, text
+from sqlalchemy import select, func, and_, or_, text, Integer, case
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
@@ -41,6 +41,84 @@ def generate_fingerprint(alert: AlertCreate, tenant_id: str) -> str:
 def generate_trace_id() -> str:
     """生成12位Trace ID"""
     return str(uuid.uuid4())[:12]
+
+
+async def _create_alerts_from_parsed(
+    parsed_alert: AlertCreate | List[AlertCreate],
+    tenant_id: str,
+    db: AsyncSession,
+    redis,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """
+    根据解析后的告警数据创建 Alert 记录并启动分发
+    支持单条和批量创建
+    """
+    dispatcher = AlertDispatcher(db, redis)
+
+    if isinstance(parsed_alert, list):
+        results = []
+        for alert_data in parsed_alert:
+            trace_id = generate_trace_id()
+            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+
+            alert = Alert(
+                tenant_id=tenant_id,
+                alert_key=alert_data.alert_key,
+                fingerprint=fingerprint,
+                source=alert_data.source,
+                title=alert_data.title,
+                content=alert_data.content,
+                severity=alert_data.severity,
+                status="firing",
+                labels=alert_data.labels,
+                annotations=alert_data.annotations,
+                metric_name=alert_data.metric_name,
+                metric_value=alert_data.metric_value,
+                raw_data=alert_data.raw_data,
+                trace_id=trace_id,
+                fired_at=datetime.utcnow(),
+            )
+            db.add(alert)
+            await db.flush()
+
+            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+            results.append({"id": None, "db_alert": alert})
+
+        await db.commit()
+        return {
+            "received": len(results),
+            "alerts": [{"id": r["db_alert"].id, "trace_id": r["db_alert"].trace_id} for r in results]
+        }
+    else:
+        trace_id = generate_trace_id()
+        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+
+        alert = Alert(
+            tenant_id=tenant_id,
+            alert_key=parsed_alert.alert_key,
+            fingerprint=fingerprint,
+            source=parsed_alert.source,
+            title=parsed_alert.title,
+            content=parsed_alert.content,
+            severity=parsed_alert.severity,
+            status="firing",
+            labels=parsed_alert.labels,
+            annotations=parsed_alert.annotations,
+            metric_name=parsed_alert.metric_name,
+            metric_value=parsed_alert.metric_value,
+            raw_data=parsed_alert.raw_data,
+            trace_id=trace_id,
+            fired_at=datetime.utcnow(),
+        )
+        db.add(alert)
+        await db.flush()
+
+        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+
+        await db.commit()
+        await db.refresh(alert)
+        return {"id": alert.id, "trace_id": alert.trace_id}
 
 
 # ============ 告警源管理 ============
@@ -149,79 +227,16 @@ async def receive_webhook_alert(
     if not parsed_alert:
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    # 处理列表格式
-    if isinstance(parsed_alert, list):
-        results = []
-        for alert_data in parsed_alert:
-            trace_id = generate_trace_id()
-            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
-
-            alert = Alert(
-                tenant_id=tenant_id,
-                alert_key=alert_data.alert_key,
-                fingerprint=fingerprint,
-                source=alert_data.source,
-                title=alert_data.title,
-                content=alert_data.content,
-                severity=alert_data.severity,
-                status="firing",
-                labels=alert_data.labels,
-                annotations=alert_data.annotations,
-                metric_name=alert_data.metric_name,
-                metric_value=alert_data.metric_value,
-                raw_data=alert_data.raw_data,
-                trace_id=trace_id,
-                fired_at=datetime.utcnow(),
-            )
-            db.add(alert)
-            await db.flush()
-
-            dispatcher = AlertDispatcher(db, redis)
-            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
-            results.append(alert)
-
-        await db.commit()
-        return {"received": len(results), "alerts": [{"id": r.id, "trace_id": r.trace_id} for r in results]}
-    else:
-        trace_id = generate_trace_id()
-        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
-
-        alert = Alert(
-            tenant_id=tenant_id,
-            alert_key=parsed_alert.alert_key,
-            fingerprint=fingerprint,
-            source=parsed_alert.source,
-            title=parsed_alert.title,
-            content=parsed_alert.content,
-            severity=parsed_alert.severity,
-            status="firing",
-            labels=parsed_alert.labels,
-            annotations=parsed_alert.annotations,
-            metric_name=parsed_alert.metric_name,
-            metric_value=parsed_alert.metric_value,
-            raw_data=parsed_alert.raw_data,
-            trace_id=trace_id,
-            fired_at=datetime.utcnow(),
-        )
-        db.add(alert)
-        await db.flush()
-
-        dispatcher = AlertDispatcher(db, redis)
-        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
-
-        await db.commit()
-        await db.refresh(alert)
-        return {"id": alert.id, "trace_id": alert.trace_id}
+    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
 
 
 @router.post("/webhooks/{tenant_slug}/{source_type}")
 async def receive_webhook_by_tenant(
     tenant_slug: str,
     source_type: str,
-    raw_data: dict,
+    request: Request,
     background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
-    x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID"),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -230,12 +245,12 @@ async def receive_webhook_by_tenant(
 
     使用租户独立的 webhook URL 和 API Key 进行认证
     - tenant_slug: 租户 slug (如 sentinelx)
-    - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/tencent/huawei/custom)
+    - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/aliyun_cms/aliyun_cms2/tencent/huawei/custom)
     - X-API-Key: 租户的 webhook API Key (可选)
-
-    如果不提供 API Key，则使用 X-Tenant-ID 头
+    支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
     from apps.alert.adapters.base import AdapterFactory
+    from urllib.parse import unquote_plus
 
     # 1. 通过 tenant_slug 获取租户
     result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
@@ -247,94 +262,92 @@ async def receive_webhook_by_tenant(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    # 2. 验证 API Key
+    # 2. 验证 API Key (可选，如果有配置的话)
     tenant_id = str(tenant.id)
-    if x_api_key:
-        # 使用 webhook API Key 验证
-        if not tenant.webhook_api_key:
-            raise HTTPException(status_code=401, detail="Tenant has no webhook API key configured")
-
+    if x_api_key and tenant.webhook_api_key:
         if not verify_password(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
-    elif x_tenant_id:
-        # 使用 X-Tenant-ID 头 (兼容旧方式)
-        if x_tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Tenant ID mismatch")
-    else:
-        raise HTTPException(status_code=401, detail="Missing authentication header (X-API-Key or X-Tenant-ID)")
 
-    # 3. 获取适配器
+    # 3. 根据 Content-Type 解析请求数据
+    content_type = request.headers.get("content-type", "").lower()
+
+    if "application/x-www-form-urlencoded" in content_type:
+        # Form Data 格式
+        form_data = await request.form()
+        raw_data = {}
+        for key, value in form_data.items():
+            if isinstance(value, bytes):
+                value = unquote_plus(value.decode('utf-8'))
+            raw_data[key] = value
+    else:
+        # JSON 格式 (默认)
+        raw_data = await request.json()
+
+    # 4. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
 
-    # 4. 解析告警
+    # 5. 解析告警
     parsed_alert = await adapter.parse(raw_data, tenant_id)
 
     if not parsed_alert:
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    # 5. 处理告警
-    if isinstance(parsed_alert, list):
-        results = []
-        for alert_data in parsed_alert:
-            trace_id = generate_trace_id()
-            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+    # 6. 处理告警
+    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
 
-            alert = Alert(
-                tenant_id=tenant_id,
-                alert_key=alert_data.alert_key,
-                fingerprint=fingerprint,
-                source=alert_data.source,
-                title=alert_data.title,
-                content=alert_data.content,
-                severity=alert_data.severity,
-                status="firing",
-                labels=alert_data.labels,
-                annotations=alert_data.annotations,
-                metric_name=alert_data.metric_name,
-                metric_value=alert_data.metric_value,
-                raw_data=alert_data.raw_data,
-                trace_id=trace_id,
-                fired_at=datetime.utcnow(),
-            )
-            db.add(alert)
-            await db.flush()
 
-            dispatcher = AlertDispatcher(db, redis)
-            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
-            results.append(alert)
+@router.post("/webhooks/{tenant_slug}/aliyun_cms/form")
+async def receive_aliyun_cms_webhook(
+    tenant_slug: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """
+    阿里云云监控1.0 Webhook (Form Data格式) [已废弃]
+    接收 application/x-www-form-urlencoded 格式的告警
+    推荐使用: POST /webhooks/{tenant_slug}/aliyun_cms
+    """
+    from apps.alert.adapters.base import AdapterFactory
+    from urllib.parse import unquote_plus
 
-        await db.commit()
-        return {"received": len(results), "alerts": [{"id": r.id, "trace_id": r.trace_id} for r in results]}
-    else:
-        trace_id = generate_trace_id()
-        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+    # 1. 通过 tenant_slug 获取租户
+    result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+    tenant = result.scalar_one_or_none()
 
-        alert = Alert(
-            tenant_id=tenant_id,
-            alert_key=parsed_alert.alert_key,
-            fingerprint=fingerprint,
-            source=parsed_alert.source,
-            title=parsed_alert.title,
-            content=parsed_alert.content,
-            severity=parsed_alert.severity,
-            status="firing",
-            labels=parsed_alert.labels,
-            annotations=parsed_alert.annotations,
-            metric_name=parsed_alert.metric_name,
-            metric_value=parsed_alert.metric_value,
-            raw_data=parsed_alert.raw_data,
-            trace_id=trace_id,
-            fired_at=datetime.utcnow(),
-        )
-        db.add(alert)
-        await db.flush()
+    if not tenant:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_slug}")
 
-        dispatcher = AlertDispatcher(db, redis)
-        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+    if not tenant.is_active:
+        raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-        await db.commit()
-        await db.refresh(alert)
-        return {"id": alert.id, "trace_id": alert.trace_id}
+    # 2. 验证 API Key (可选，如果有配置的话)
+    tenant_id = str(tenant.id)
+    if x_api_key and tenant.webhook_api_key:
+        if not verify_password(x_api_key, tenant.webhook_api_key):
+            raise HTTPException(status_code=401, detail="Invalid webhook API key")
+
+    # 3. 解析 form data
+    form_data = await request.form()
+    raw_data = {}
+    for key, value in form_data.items():
+        if isinstance(value, bytes):
+            value = unquote_plus(value.decode('utf-8'))
+        raw_data[key] = value
+
+    # 4. 获取适配器
+    adapter = AdapterFactory.get_adapter("aliyun_cms")
+
+    # 5. 解析告警
+    parsed_alert = await adapter.parse(raw_data, tenant_id)
+
+    if not parsed_alert:
+        raise HTTPException(status_code=400, detail="Unsupported alert format for source: aliyun_cms")
+
+    # 6. 处理告警
+    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
 
 
 @router.post("/alerts/batch")
@@ -441,47 +454,41 @@ async def get_alert_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警统计"""
-    base_filter = Alert.tenant_id == str(tenant_id)
+    tenant_filter = Alert.tenant_id == str(tenant_id)
 
-    # Total count
-    total_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter))
-    total = total_result.scalar()
+    # 查询1: 总数 + 按状态分布 (1次DB调用)
+    status_result = await db.execute(
+        select(
+            func.count(),
+            func.sum(case((Alert.status == "firing", 1), else_=0)),
+            func.sum(case((Alert.status == "resolved", 1), else_=0)),
+            func.sum(case((Alert.status == "suppressed", 1), else_=0)),
+        ).where(tenant_filter)
+    )
+    row = status_result.one()
+    total = row[0] or 0
+    firing = row[1] or 0
+    resolved = row[2] or 0
+    suppressed = row[3] or 0
 
-    # Firing count
-    firing_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing"))
-    firing = firing_result.scalar()
-
-    # Resolved count
-    resolved_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "resolved"))
-    resolved = resolved_result.scalar()
-
-    # Suppressed count
-    suppressed_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "suppressed"))
-    suppressed = suppressed_result.scalar()
-
-    # Critical count (firing + critical severity)
-    critical_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "critical"))
-    critical = critical_result.scalar()
-
-    # High count
-    high_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "high"))
-    high = high_result.scalar()
-
-    # Medium count
-    medium_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "medium"))
-    medium = medium_result.scalar()
-
-    # Low count
-    low_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "low"))
-    low = low_result.scalar()
-
-    # Info count
-    info_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.severity == "info"))
-    info = info_result.scalar()
-
-    # Unassigned count
-    unassigned_result = await db.execute(select(func.count()).select_from(Alert).where(base_filter, Alert.status == "firing", Alert.assignee_id == None))
-    unassigned = unassigned_result.scalar()
+    # 查询2: 按严重级别分布 (仅 firing 状态, 1次DB调用)
+    severity_result = await db.execute(
+        select(
+            func.sum(case((and_(Alert.status == "firing", Alert.severity == "critical"), 1), else_=0)),
+            func.sum(case((and_(Alert.status == "firing", Alert.severity == "high"), 1), else_=0)),
+            func.sum(case((and_(Alert.status == "firing", Alert.severity == "medium"), 1), else_=0)),
+            func.sum(case((and_(Alert.status == "firing", Alert.severity == "low"), 1), else_=0)),
+            func.sum(case((and_(Alert.status == "firing", Alert.severity == "info"), 1), else_=0)),
+            func.sum(case((and_(Alert.status == "firing", Alert.assignee_id == None), 1), else_=0)),
+        ).where(tenant_filter)
+    )
+    sev_row = severity_result.one()
+    critical = sev_row[0] or 0
+    high = sev_row[1] or 0
+    medium = sev_row[2] or 0
+    low = sev_row[3] or 0
+    info = sev_row[4] or 0
+    unassigned = sev_row[5] or 0
 
     return AlertStats(
         total=total,

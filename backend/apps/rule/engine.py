@@ -38,21 +38,6 @@ class RuleEngine:
     def __init__(self):
         pass
 
-    async def match(self, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
-        """
-        匹配告警到规则
-        返回所有匹配的规则，按优先级排序
-        """
-        # 查询启用的规则
-        result = await select(AlertRule).where(
-            AlertRule.tenant_id == tenant_id,
-            AlertRule.is_active == True
-        ).order_by(AlertRule.priority.desc())
-
-        # 这里需要session，但engine可能没有session
-        # 简化实现，实际使用需要传入session
-        return []
-
     async def match_rules(self, db: AsyncSession, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
         """匹配规则（带数据库会话）"""
         result = await db.execute(

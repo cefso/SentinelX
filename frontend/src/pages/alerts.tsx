@@ -26,7 +26,7 @@ export function AlertsPage() {
       page,
       page_size: pageSize,
       status: filters.status || undefined,
-      severity: filters.severity || undefined,
+      severity: filters.severity ? [filters.severity] : undefined,
       source: filters.source || undefined,
       keyword: filters.keyword || undefined,
     }),

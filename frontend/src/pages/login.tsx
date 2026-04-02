@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
+import { toast } from '@/stores/toast-store'
 import { Eye, EyeOff } from 'lucide-react'
 
 interface LoginResponse {
@@ -59,7 +60,7 @@ export function LoginPage() {
     } catch (err: any) {
       console.error('Login error:', err)
       const errorMessage = err.response?.data?.detail || '登录失败，请检查用户名和密码'
-      alert(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }

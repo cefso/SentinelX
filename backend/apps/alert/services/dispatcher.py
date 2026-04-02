@@ -26,7 +26,7 @@ class AlertDispatcher:
     def __init__(self, db: AsyncSession, redis: Redis):
         self.db = db
         self.redis = redis
-        self.rule_engine = RuleEngine(db)
+        self.rule_engine = RuleEngine()
 
     async def dispatch(self, alert: Alert, trace_id: str):
         """主分发流程"""
@@ -212,7 +212,7 @@ class AlertDispatcher:
         }
 
         # 使用规则引擎匹配
-        matched_rules = await self.rule_engine.match_rules(alert.tenant_id, alert_data)
+        matched_rules = await self.rule_engine.match_rules(self.db, alert.tenant_id, alert_data)
 
         matched_rules_info = [
             {"id": r.id, "name": r.name, "priority": r.priority, "actions": r.actions or []}
@@ -252,7 +252,6 @@ class AlertDispatcher:
         alert.status = "firing"
         alert.fire_count = 1
         alert.notification_channels = channel_ids
-        await self.db.commit()
 
         # 记录历史
         history = AlertHistory(

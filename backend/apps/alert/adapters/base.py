@@ -1,6 +1,8 @@
 """
 SentinelX - 告警适配器基类
 """
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from apps.alert.schemas import AlertCreate
@@ -26,9 +28,6 @@ class AlertAdapter(ABC):
 
     def generate_fingerprint(self, alert_key: str, source: str, labels: Dict[str, Any]) -> str:
         """生成告警指纹"""
-        import hashlib
-        import json
-
         fp_data = {
             "source": source,
             "alert_key": alert_key,
@@ -324,6 +323,8 @@ class AdapterFactory:
         "alertmanager": PrometheusAdapter,  # alertmanager使用prometheus适配器
         "zabbix": ZabbixAdapter,
         "aliyun": AlibabaCloudAdapter,
+        "aliyun_cms": "AliyunCmsAdapter",  # 延迟导入
+        "aliyun_cms2": "AliyunCms2Adapter",  # 延迟导入
         "tencent": TencentCloudAdapter,
         "custom": CustomWebhookAdapter,
     }
@@ -332,6 +333,14 @@ class AdapterFactory:
     def get_adapter(cls, source_type: str) -> AlertAdapter:
         """获取适配器"""
         adapter_class = cls._adapters.get(source_type.lower(), CustomWebhookAdapter)
+        # 延迟导入处理
+        if isinstance(adapter_class, str):
+            if adapter_class == "AliyunCmsAdapter":
+                from apps.alert.adapters.aliyun_cms import AliyunCmsAdapter
+                adapter_class = AliyunCmsAdapter
+            elif adapter_class == "AliyunCms2Adapter":
+                from apps.alert.adapters.aliyun_cms2 import AliyunCms2Adapter
+                adapter_class = AliyunCms2Adapter
         return adapter_class()
 
     @classmethod

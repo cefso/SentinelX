@@ -18,10 +18,10 @@ git clone https://github.com/your-repo/SentinelX.git
 cd SentinelX
 
 # 启动所有服务
-docker-compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 查看状态
-docker-compose -f docker/docker-compose.yml ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 ### 仅启动基础设施
@@ -29,13 +29,13 @@ docker-compose -f docker/docker-compose.yml ps
 本地开发时，后端和前端在本地运行，只启动数据库和缓存：
 
 ```bash
-docker-compose -f docker/docker-compose.infra.yml up -d
+docker compose -f docker/docker-compose.infra.yml up -d
 ```
 
 ### 带管理工具
 
 ```bash
-docker-compose --profile tools up -d
+docker compose --profile tools up -d
 ```
 
 访问地址：
@@ -233,10 +233,10 @@ kubectl exec -n sentinelx deploy/sentinelx-backend -- python -c "from apps.core.
 
 ```bash
 # 拉取新镜像
-docker-compose pull
+docker compose pull
 
 # 重启服务
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Kubernetes 升级

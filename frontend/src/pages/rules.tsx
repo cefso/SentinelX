@@ -166,7 +166,8 @@ export function RulesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleMutation.mutate({ ruleId: rule.id, is_active: !rule.is_active })}
-                      className={`px-2 py-1 text-xs rounded ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                      disabled={toggleMutation.isPending}
+                      className={`px-2 py-1 text-xs rounded disabled:opacity-50 ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                     >
                       {rule.is_active ? '启用' : '停用'}
                     </button>
@@ -184,7 +185,8 @@ export function RulesPage() {
                           deleteMutation.mutate(rule.id)
                         }
                       }}
-                      className="text-red-600 hover:text-red-800"
+                      disabled={deleteMutation.isPending}
+                      className="text-red-600 hover:text-red-800 disabled:opacity-50"
                     >
                       删除
                     </button>

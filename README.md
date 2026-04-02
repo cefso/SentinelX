@@ -14,7 +14,7 @@
 ## 特性
 
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
-- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云、腾讯云、华为云、Zabbix、Grafana 等
+- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控1.0、阿里云云监控2.0、腾讯云、华为云、Zabbix、Grafana 等
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
 - **多渠道通知**: 钉钉、飞书、企业微信、邮件等
@@ -401,13 +401,13 @@ PGMQ_ENABLED=true
 查看容器日志:
 ```bash
 # 查看所有日志
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # 查看后端日志
-docker-compose logs -f backend
+docker compose -f docker/docker-compose.yml logs -f backend
 
 # 查看最近 100 行
-docker-compose logs --tail=100 backend
+docker compose -f docker/docker-compose.yml logs --tail=100 backend
 ```
 
 ### 请求追踪
@@ -455,6 +455,7 @@ POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API
 ```
 /api/v1/webhooks/{tenant_slug}/prometheus
 /api/v1/webhooks/{tenant_slug}/grafana
+/api/v1/webhooks/{tenant_slug}/aliyun_cms
 /api/v1/webhooks/{tenant_slug}/aliyun
 /api/v1/webhooks/{tenant_slug}/custom
 ```
@@ -570,12 +571,12 @@ GitHub Actions 自动处理:
 #### 1. 登录失败，提示 "Invalid credentials"
 - 检查默认账号: 用户名 `admin`，密码 `Admin@123456`
 - 检查数据库是否正确初始化: `alembic upgrade head`
-- 检查 Redis 是否运行: `docker-compose ps redis`
+- 检查 Redis 是否运行: `docker compose -f docker/docker-compose.yml ps redis`
 
 #### 2. 告警未收到通知
 - 检查规则是否正确配置
 - 检查通知渠道是否启用
-- 查看后端日志: `docker-compose logs -f backend | grep notification`
+- 查看后端日志: `docker compose -f docker/docker-compose.yml logs -f backend | grep notification`
 
 #### 3. 性能问题
 - 检查数据库索引是否创建
@@ -584,8 +585,8 @@ GitHub Actions 自动处理:
 
 #### 4. Docker 容器无法启动
 - 检查端口占用: `lsof -i :8001` 或 `lsof -i :3000`
-- 检查日志: `docker-compose logs`
-- 清理重建: `docker-compose down && docker-compose up -d`
+- 检查日志: `docker compose -f docker/docker-compose.yml logs`
+- 清理重建: `docker compose -f docker/docker-compose.yml down && docker compose -f docker/docker-compose.yml up -d`
 
 #### 5. 前端无法连接后端
 - 检查 API 代理配置: `VITE_API_PROXY_TARGET`
@@ -601,7 +602,7 @@ cd backend
 grep -i error logs/*.log
 
 # Docker 环境
-docker-compose logs backend | grep -i error
+docker compose -f docker/docker-compose.yml logs backend | grep -i error
 ```
 
 #### 追踪请求

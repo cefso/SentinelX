@@ -2,6 +2,7 @@
 SentinelX - 初始数据种子脚本
 应用启动时自动创建默认租户和超级管理员
 """
+import asyncio
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -164,5 +165,4 @@ async def seed_default_data():
 
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(seed_default_data())
