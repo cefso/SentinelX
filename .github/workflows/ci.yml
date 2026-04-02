@@ -123,6 +123,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build postgres image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.pg
+          push: false
+          tags: sentinelx/postgres:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ============ 数据库迁移测试 ============
   migration-test:
     runs-on: ubuntu-latest
