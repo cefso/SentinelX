@@ -25,16 +25,16 @@ logging:
 
 ```bash
 # 实时跟踪
-docker-compose logs -f backend
+docker compose -f docker/docker-compose.yml logs -f backend
 
 # 最近 100 行
-docker-compose logs --tail=100 backend
+docker compose -f docker/docker-compose.yml logs --tail=100 backend
 
 # 搜索错误
-docker-compose logs backend | grep ERROR
+docker compose -f docker/docker-compose.yml logs backend | grep ERROR
 
 # 跟踪特定请求
-docker-compose logs -f backend | grep "request_id=abc123"
+docker compose -f docker/docker-compose.yml logs -f backend | grep "request_id=abc123"
 ```
 
 ## 文件说明
@@ -56,8 +56,8 @@ PostgreSQL 初始化脚本（`init-db.sh`）仅在数据库首次创建时执行
 
 ```bash
 # 删除数据卷并重新创建（会丢失所有数据！）
-docker compose down -v
-docker compose up -d
+docker compose -f docker/docker-compose.yml down -v
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ## 环境变量
@@ -74,19 +74,19 @@ docker compose up -d
 
 ```bash
 # 使用自定义配置启动
-docker-compose --env-file ./docker/.env.docker up -d
+docker compose -f docker/docker-compose.yml --env-file ./docker/.env.docker up -d
 
 # 带管理工具 (pgAdmin, Redis Commander)
-docker-compose --profile tools up -d
+docker compose -f docker/docker-compose.yml --profile tools up -d
 
 # 仅启动基础设施（本地开发时，后端和前端在本地运行）
-docker-compose -f docker-compose.infra.yml up -d
+docker compose -f docker-compose.infra.yml up -d
 
 # 停止服务
-docker-compose down
+docker compose -f docker/docker-compose.yml down
 
 # 清理所有数据
-docker-compose down -v
+docker compose -f docker/docker-compose.yml down -v
 ```
 
 ## 构建自定义镜像

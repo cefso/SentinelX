@@ -2,18 +2,18 @@
 # SentinelX 综合告警平台 - Docker Compose 配置文件
 # =============================================================================
 # 使用说明:
-#   1. 启动完整服务: docker compose up -d
-#   2. 带管理工具: docker compose --profile tools up -d
-#   3. 查看日志: docker compose logs -f [service_name]
-#   4. 停止服务: docker compose down
-#   5. 清理数据: docker compose down -v (会删除所有数据!)
+#   1. 启动完整服务: docker compose -f docker/docker-compose.yml up -d
+#   2. 带管理工具: docker compose -f docker/docker-compose.yml --profile tools up -d
+#   3. 查看日志: docker compose -f docker/docker-compose.yml logs -f [service_name]
+#   4. 停止服务: docker compose -f docker/docker-compose.yml down
+#   5. 清理数据: docker compose -f docker/docker-compose.yml down -v (会删除所有数据!)
 #
 # 注意: 后端和前端默认使用 GitHub Packages 镜像运行
-#       如需本地构建: docker compose up -d --build
+#       如需本地构建: docker compose -f docker/docker-compose.yml up -d --build
 #
 # 自定义配置:
 #   复制 .env.example 为 .env.docker，修改后运行:
-#   docker compose --env-file ./docker/.env.docker up -d
+#   docker compose -f docker/docker-compose.yml --env-file ./docker/.env.docker up -d
 # =============================================================================
 
 services:
@@ -75,7 +75,7 @@ services:
       - "3000:3000"
     environment:
       VITE_API_BASE_URL: /api/v1
-      VITE_API_PROXY_TARGET: http://sentinelx-backend:8000
+      VITE_API_PROXY_TARGET: http://backend:8000
     depends_on:
       backend:
         condition: service_healthy
@@ -143,7 +143,7 @@ services:
   # ============================================================================
   # pgAdmin 数据库管理工具 (可选)
   # ============================================================================
-  # 使用方式: docker-compose --profile tools up -d
+  # 使用方式: docker compose -f docker/docker-compose.yml --profile tools up -d
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: sentinelx-pgadmin
