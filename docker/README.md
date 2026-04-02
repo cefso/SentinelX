@@ -41,11 +41,24 @@ docker-compose logs -f backend | grep "request_id=abc123"
 
 | 文件 | 说明 |
 |------|------|
-| `Dockerfile` | 后端 Python 镜像 |
+| `Dockerfile` | 后端 Python 镜像（含自动迁移） |
 | `Dockerfile.frontend` | 前端 Node 镜像 |
 | `Dockerfile.pg` | PostgreSQL + TimescaleDB 镜像（含初始化脚本） |
+| `backend-entrypoint.sh` | 后端启动脚本（自动运行数据库迁移） |
 | `init-db.sh` | PostgreSQL + TimescaleDB 初始化脚本 |
 | `.env.docker` | Docker 环境配置模板 |
+
+## 版本升级与迁移
+
+后端容器启动时会**自动运行数据库迁移**（`alembic upgrade head`），确保每次版本升级都能自动应用最新的数据库 Schema 变更。
+
+PostgreSQL 初始化脚本（`init-db.sh`）仅在数据库首次创建时执行，用于创建 TimescaleDB 扩展。如需重新初始化数据库，请先删除数据卷：
+
+```bash
+# 删除数据卷并重新创建（会丢失所有数据！）
+docker compose down -v
+docker compose up -d
+```
 
 ## 环境变量
 
