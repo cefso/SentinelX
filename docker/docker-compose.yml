@@ -48,8 +48,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    volumes:
-      - ../backend:/app
     networks:
       - sentinelx-network
     logging:
@@ -88,9 +86,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
     networks:
       - sentinelx-network
     command: npm run dev -- --host
