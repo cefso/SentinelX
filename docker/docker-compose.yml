@@ -57,6 +57,11 @@ services:
         max-file: "5"
     labels:
       service: "sentinelx-backend"
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level info
+      "
 
   # ============================================================================
   # Frontend 前端应用
