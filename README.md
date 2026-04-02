@@ -188,8 +188,7 @@ SentinelX/
 │   ├── docker-compose.infra.yml # 基础设施
 │   ├── Dockerfile             # 后端镜像
 │   ├── Dockerfile.frontend   # 前端镜像
-│   ├── postgres/              # PostgreSQL 镜像（含初始化脚本）
-│   │   └── Dockerfile
+│   ├── Dockerfile.pg         # PostgreSQL + TimescaleDB 镜像
 │   ├── init-db.sh            # 数据库初始化脚本
 │   ├── .env.docker            # Docker 环境配置
 │   └── README.md              # Docker 详细说明
