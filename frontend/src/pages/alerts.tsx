@@ -3,6 +3,19 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
+
+interface AlertSource {
+  id: number
+  name: string
+  code: string
+  source_type: string
+  config: Record<string, any>
+  description?: string
+  is_active: boolean
+  alert_count: number
+  last_alert_at?: string
+  created_at: string
+}
 import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint } from 'lucide-react'
 
 export function AlertsPage() {
@@ -12,7 +25,7 @@ export function AlertsPage() {
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
-    source: '',
+    sourceId: '' as number | '',
     keyword: '',
   })
   const [aggregateMode, setAggregateMode] = useState(true)
@@ -22,6 +35,11 @@ export function AlertsPage() {
     queryFn: () => apiClient.get('/alerts/stats'),
   })
 
+  const { data: sources = [] } = useQuery<AlertSource[]>({
+    queryKey: ['alert-sources'],
+    queryFn: () => apiClient.get('/sources'),
+  })
+
   const { data: alerts, isLoading, refetch } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
     queryKey: ['alerts', page, pageSize, filters, aggregateMode],
     queryFn: () => apiClient.get('/alerts', {
@@ -29,7 +47,7 @@ export function AlertsPage() {
       page_size: pageSize,
       status: filters.status || undefined,
       severity: filters.severity ? [filters.severity] : undefined,
-      source: filters.source || undefined,
+      source_id: filters.sourceId || undefined,
       keyword: filters.keyword || undefined,
       aggregate: aggregateMode || undefined,
     }),
@@ -99,7 +117,7 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', source: '', keyword: '' })}
+              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '' })}
               className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
@@ -177,23 +195,28 @@ export function AlertsPage() {
 
             <span className="text-sm text-gray-500 py-1.5">来源:</span>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              {[
-                { value: '', label: '全部' },
-                { value: 'prometheus', label: 'Prometheus' },
-                { value: 'alertmanager', label: 'Alertmanager' },
-                { value: 'aliyun', label: '阿里云' },
-                { value: 'custom', label: '自定义' },
-              ].map(opt => (
+              <button
+                key="all"
+                onClick={() => setFilters({ ...filters, sourceId: '' })}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  filters.sourceId === ''
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                全部
+              </button>
+              {sources.map(source => (
                 <button
-                  key={opt.value}
-                  onClick={() => setFilters({ ...filters, source: opt.value })}
+                  key={source.id}
+                  onClick={() => setFilters({ ...filters, sourceId: source.id })}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    filters.source === opt.value
+                    filters.sourceId === source.id
                       ? 'bg-white shadow text-gray-900 font-medium'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {opt.label}
+                  {source.name}
                 </button>
               ))}
             </div>

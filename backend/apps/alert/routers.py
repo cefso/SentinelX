@@ -49,12 +49,20 @@ async def _create_alerts_from_parsed(
     db: AsyncSession,
     redis,
     background_tasks: BackgroundTasks,
+    source_id: int = None,
 ) -> dict:
     """
     根据解析后的告警数据创建 Alert 记录并启动分发
     支持单条和批量创建
     """
     dispatcher = AlertDispatcher(db, redis)
+
+    # 更新 AlertSource 统计
+    if source_id:
+        source = await db.get(AlertSource, source_id)
+        if source and str(source.tenant_id) == tenant_id:
+            source.alert_count = (source.alert_count or 0) + 1
+            source.last_alert_at = datetime.utcnow()
 
     if isinstance(parsed_alert, list):
         results = []
@@ -67,6 +75,7 @@ async def _create_alerts_from_parsed(
                 alert_key=alert_data.alert_key,
                 fingerprint=fingerprint,
                 source=alert_data.source,
+                source_id=source_id,
                 title=alert_data.title,
                 content=alert_data.content,
                 severity=alert_data.severity,
@@ -99,6 +108,7 @@ async def _create_alerts_from_parsed(
             alert_key=parsed_alert.alert_key,
             fingerprint=fingerprint,
             source=parsed_alert.source,
+            source_id=source_id,
             title=parsed_alert.title,
             content=parsed_alert.content,
             severity=parsed_alert.severity,
@@ -123,9 +133,43 @@ async def _create_alerts_from_parsed(
 
 # ============ 告警源管理 ============
 
+@router.get("/sources/stats")
+async def get_sources_stats(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取各告警源的统计"""
+    result = await db.execute(
+        select(
+            Alert.source_id,
+            func.count(Alert.id).label("total"),
+            func.sum(case((Alert.status == "firing", 1), else_=0)).label("firing"),
+        )
+        .where(
+            and_(
+                Alert.tenant_id == str(tenant_id),
+                Alert.source_id.isnot(None),
+            )
+        )
+        .group_by(Alert.source_id)
+    )
+    rows = result.all()
+
+    return {
+        "stats": [
+            {
+                "source_id": row.source_id,
+                "total": row.total,
+                "firing": row.firing or 0,
+            }
+            for row in rows
+        ]
+    }
+
+
 @router.get("/sources", response_model=list[AlertSourceResponse])
 async def list_sources(
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警源列表"""
@@ -140,7 +184,7 @@ async def list_sources(
 @router.post("/sources", response_model=AlertSourceResponse)
 async def create_source(
     request: AlertSourceCreate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """创建告警源"""
@@ -151,8 +195,49 @@ async def create_source(
         source_type=request.source_type,
         config=request.config,
         description=request.description,
+        client_id=request.client_id,
     )
     db.add(source)
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
+@router.delete("/sources/{source_id}")
+async def delete_source(
+    source_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除告警源，保留关联告警"""
+    source = await db.get(AlertSource, source_id)
+    if not source or source.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="AlertSource not found")
+
+    # 将告警的 source_id 设为 NULL
+    await db.execute(
+        Alert.__table__.update()
+        .where(Alert.source_id == source_id)
+        .values(source_id=None)
+    )
+
+    await db.delete(source)
+    await db.commit()
+    return {"message": "AlertSource deleted"}
+
+
+@router.patch("/sources/{source_id}/toggle", response_model=AlertSourceResponse)
+async def toggle_source(
+    source_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """切换告警源启用/禁用状态"""
+    source = await db.get(AlertSource, source_id)
+    if not source or source.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="AlertSource not found")
+
+    source.is_active = "inactive" if source.is_active == "active" else "active"
     await db.commit()
     await db.refresh(source)
     return source
@@ -164,7 +249,7 @@ async def create_source(
 async def create_alert(
     request: AlertCreate,
     background_tasks: BackgroundTasks,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -178,6 +263,7 @@ async def create_alert(
         alert_key=request.alert_key,
         fingerprint=fingerprint,
         source=request.source,
+        source_id=request.source_id,
         title=request.title,
         content=request.content,
         severity=request.severity,
@@ -207,7 +293,7 @@ async def receive_webhook_alert(
     source_type: str,
     raw_data: dict,
     background_tasks: BackgroundTasks,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -230,10 +316,11 @@ async def receive_webhook_alert(
     return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
 
 
-@router.post("/webhooks/{tenant_slug}/{source_type}")
-async def receive_webhook_by_tenant(
+@router.post("/webhooks/{tenant_slug}/{source_type}/{identifier}")
+async def receive_webhook_by_source(
     tenant_slug: str,
     source_type: str,
+    identifier: str,
     request: Request,
     background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
@@ -241,11 +328,11 @@ async def receive_webhook_by_tenant(
     redis=Depends(get_redis),
 ):
     """
-    Webhook方式接收告警 (多租户版本)
+    Webhook方式接收告警 (多租户版本，支持告警源)
 
-    使用租户独立的 webhook URL 和 API Key 进行认证
     - tenant_slug: 租户 slug (如 sentinelx)
     - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/aliyun_cms/aliyun_cms2/tencent/huawei/custom)
+    - identifier: 告警源 client_id (或 id)
     - X-API-Key: 租户的 webhook API Key (可选)
     支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
@@ -262,17 +349,29 @@ async def receive_webhook_by_tenant(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    # 2. 验证 API Key (可选，如果有配置的话)
     tenant_id = str(tenant.id)
+
+    # 2. 按 identifier 查找 AlertSource（支持 id 或 client_id）
+    if identifier.isdigit():
+        alert_source = await db.get(AlertSource, int(identifier))
+    else:
+        result = await db.execute(
+            select(AlertSource).where(AlertSource.client_id == identifier)
+        )
+        alert_source = result.scalar_one_or_none()
+
+    if not alert_source or str(alert_source.tenant_id) != tenant_id:
+        raise HTTPException(status_code=404, detail=f"AlertSource not found: {identifier}")
+
+    # 3. 验证 API Key (可选)
     if x_api_key and tenant.webhook_api_key:
         if not verify_password(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
-    # 3. 根据 Content-Type 解析请求数据
+    # 4. 根据 Content-Type 解析请求数据
     content_type = request.headers.get("content-type", "").lower()
 
     if "application/x-www-form-urlencoded" in content_type:
-        # Form Data 格式
         form_data = await request.form()
         raw_data = {}
         for key, value in form_data.items():
@@ -280,20 +379,21 @@ async def receive_webhook_by_tenant(
                 value = unquote_plus(value.decode('utf-8'))
             raw_data[key] = value
     else:
-        # JSON 格式 (默认)
         raw_data = await request.json()
 
-    # 4. 获取适配器
+    # 5. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
 
-    # 5. 解析告警
+    # 6. 解析告警
     parsed_alert = await adapter.parse(raw_data, tenant_id)
 
     if not parsed_alert:
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    # 6. 处理告警
-    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
+    # 7. 处理告警
+    return await _create_alerts_from_parsed(
+        parsed_alert, tenant_id, db, redis, background_tasks, source_id=alert_source.id
+    )
 
 
 @router.post("/webhooks/{tenant_slug}/aliyun_cms/form")
@@ -354,7 +454,7 @@ async def receive_aliyun_cms_webhook(
 async def create_alerts_batch(
     alerts: List[AlertCreate],
     background_tasks: BackgroundTasks,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -408,6 +508,7 @@ async def list_alerts(
     end_time: Optional[datetime] = None,
     aggregate: bool = Query(False),
     fingerprint: Optional[str] = None,
+    source_id: Optional[int] = None,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -431,6 +532,8 @@ async def list_alerts(
         base_filter.append(Alert.fired_at <= end_time)
     if fingerprint:
         base_filter.append(Alert.fingerprint == fingerprint)
+    if source_id:
+        base_filter.append(Alert.source_id == source_id)
 
     # 聚合模式
     if aggregate:

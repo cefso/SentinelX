@@ -14,7 +14,9 @@
 ## 特性
 
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
-- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控1.0、阿里云云监控2.0、腾讯云、华为云、Zabbix、Grafana 等
+- **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控（1.0/2.0）、腾讯云、Zabbix、自定义 Webhook 等，通过适配器自动解析各类告警格式
+- **告警源管理**: 支持配置多个告警源（AlertSource），每个告警源有独立的 Webhook URL，支持启用/禁用和统计
+- **告警聚合视图**: 告警列表支持按指纹（fingerprint）聚合模式，同一告警的多条记录合并展示并显示触发次数
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
 - **多渠道通知**: 钉钉、飞书、企业微信、邮件等
@@ -147,49 +149,60 @@ docker compose up -d --build
 SentinelX/
 ├── backend/                    # Python后端
 │   ├── apps/
-│   │   ├── core/             # 核心模块
-│   │   │   ├── config.py     # 配置管理
-│   │   │   ├── database.py   # 数据库连接
-│   │   │   ├── redis.py      # Redis连接
-│   │   │   ├── mq.py         # PGMQ消息队列
-│   │   │   ├── security.py   # JWT/AES加密
-│   │   │   ├── logging.py    # 日志配置
-│   │   │   └── middleware.py # 中间件
+│   │   ├── core/             # 核心模块（config/database/redis/mq/security/logging/middleware 等）
 │   │   ├── auth/             # 认证授权
+│   │   │   ├── api_key.py    # API Key认证
+│   │   │   ├── dependencies.py # 依赖注入
 │   │   │   ├── routers.py    # 认证路由
-│   │   │   ├── services/     # 认证服务
-│   │   │   ├── api_key.py   # API Key认证
-│   │   │   └── dependencies.py # 依赖注入
+│   │   │   ├── schemas.py    # Pydantic Schema
+│   │   │   └── services/     # 认证服务
 │   │   ├── tenant/           # 租户管理
 │   │   ├── alert/            # 告警核心
+│   │   │   ├── adapters/     # 告警适配器（prometheus/aliyun/zabbix/tencent 等）
 │   │   │   ├── models.py     # 数据模型
 │   │   │   ├── routers.py    # API路由
 │   │   │   ├── schemas.py    # Pydantic Schema
-│   │   │   └── services/      # 业务逻辑
+│   │   │   └── services/     # 业务逻辑
 │   │   ├── rule/             # 规则引擎
-│   │   └── notify/           # 通知系统
+│   │   │   ├── engine.py     # 规则匹配引擎
+│   │   │   ├── models.py     # 规则数据模型
+│   │   │   ├── routers.py    # 规则路由
+│   │   │   ├── schemas.py    # Pydantic Schema
+│   │   │   └── services/     # 规则服务
+│   │   ├── notify/           # 通知系统
+│   │   │   ├── channels/     # 通知渠道（钉钉/飞书/企微/邮件等）
+│   │   │   ├── models.py     # 通知数据模型
+│   │   │   ├── routers.py    # 通知路由
+│   │   │   ├── schemas.py    # Pydantic Schema
+│   │   │   ├── services/     # 通知服务
+│   │   │   └── worker.py     # 通知队列worker
+│   │   ├── ai/               # AI增强（根因分析/内容润色）
+│   │   ├── escalation/        # 告警升级
+│   │   ├── maintenance/      # 维护期管理
+│   │   ├── callback/         # 回调处理
+│   │   └── common/           # 共享常量/类型
 │   ├── alembic/              # 数据库迁移
 │   ├── tests/                # 单元测试
 │   └── main.py               # 应用入口
 ├── frontend/                  # React前端
 │   ├── src/
-│   │   ├── pages/            # 页面组件
+│   │   ├── pages/            # 页面组件（alerts/admin/channels/diagnose/login/rules/settings 等）
 │   │   ├── components/        # 通用组件
 │   │   ├── services/          # API服务
-│   │   └── stores/            # 状态管理
+│   │   ├── stores/            # 状态管理（Zustand）
+│   │   ├── hooks/            # React Hooks
+│   │   ├── libs/             # 工具库
+│   │   └── types/            # TypeScript 类型定义
 │   └── package.json
-├── common/                    # 共享模块（后端/Agent共用）
-│   ├── constants.py          # 共享常量
-│   ├── types.py              # Pydantic 类型定义
-│   └── utils.py               # 工具函数
 ├── agent/                     # 内网 Agent（Python）
 ├── docker/                    # Docker 配置
 │   ├── docker-compose.yml    # 完整服务
 │   ├── docker-compose.infra.yml # 基础设施
 │   ├── Dockerfile             # 后端镜像
 │   ├── Dockerfile.frontend   # 前端镜像
-│   ├── Dockerfile.pg         # PostgreSQL + TimescaleDB 镜像
-│   ├── init-db.sh            # 数据库初始化脚本
+│   ├── Dockerfile.pg          # PostgreSQL + TimescaleDB 镜像
+│   ├── backend-entrypoint.sh   # 后端启动脚本
+│   ├── init-db.sh             # 数据库初始化脚本
 │   ├── .env.docker            # Docker 环境配置
 │   └── README.md              # Docker 详细说明
 ├── k8s/                       # Kubernetes 部署配置
@@ -199,10 +212,11 @@ SentinelX/
 │   ├── backend-deployment.yaml # 后端
 │   ├── frontend-deployment.yaml # 前端+Ingress
 │   ├── backend-hpa.yaml       # 后端自动扩缩容
-│   └── frontend-hpa.yaml      # 前端自动扩缩容
+│   └── frontend-hpa.yaml     # 前端自动扩缩容
 ├── docs/                      # 详细文档
 │   ├── API.md                 # API 文档
-│   └── DEPLOYMENT.md          # 部署指南
+│   ├── DEPLOYMENT.md          # 部署指南
+│   └── README.md              # 文档目录说明
 ├── .github/workflows/          # CI/CD配置
 │   ├── ci.yml                # 持续集成
 │   └── cd.yml                # 持续部署
@@ -253,12 +267,12 @@ SentinelX/
 
 ```
 告警接入 → 指纹生成 → 去重检查(5分钟窗口) → 抑制检查(维护期) →
-聚合检查 → 规则匹配(AND/OR条件) → 通知队列 → 多渠道发送
+聚合检查(告警列表聚合视图) → 规则匹配(AND/OR条件) → 通知队列 → 多渠道发送
 ```
 
 ## 核心概念
 ```
-接入 → 指纹生成 → 去重检查 → 抑制检查 → 聚合检查 → 规则匹配 → 通知发送
+接入 → 指纹生成 → 去重检查 → 抑制检查 → 聚合检查（可选，API 层面）→ 规则匹配 → 通知发送
 ```
 
 ### 多租户架构
@@ -444,21 +458,38 @@ PUT    /api/v1/tenants/{id}      # 更新租户
 GET    /api/v1/tenants/public    # 获取公开租户列表（注册时使用）
 ```
 
+### 告警源管理
+```
+GET    /api/v1/alerts/sources             # 获取告警源列表
+POST   /api/v1/alerts/sources             # 创建告警源（需传入 client_id）
+GET    /api/v1/alerts/sources/stats        # 获取各告警源的统计数据（总数/触发中数）
+```
+
+**告警源 client_id**: 客户端生成的随机短ID（如 8 位十六进制），用于构造 Webhook URL，比内部 ID 更安全且无需泄露数据库主键。
+
 ### Webhook（多租户）
 ```
-POST   /api/v1/webhooks/{tenant_slug}/{source_type}  # 接收告警（多租户版本）
+POST   /api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}  # 接收告警（多租户版本，支持告警源）
 GET    /api/v1/tenants/{id}/webhook-key              # 获取 Webhook URL 信息
 POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API Key
 ```
 
 **多租户 Webhook URL 结构:**
 ```
-/api/v1/webhooks/{tenant_slug}/prometheus
-/api/v1/webhooks/{tenant_slug}/grafana
-/api/v1/webhooks/{tenant_slug}/aliyun_cms
-/api/v1/webhooks/{tenant_slug}/aliyun
-/api/v1/webhooks/{tenant_slug}/custom
+/api/v1/webhooks/{tenant_slug}/prometheus/{client_id}
+/api/v1/webhooks/{tenant_slug}/alertmanager/{client_id}
+/api/v1/webhooks/{tenant_slug}/grafana/{client_id}
+/api/v1/webhooks/{tenant_slug}/aliyun/{client_id}
+/api/v1/webhooks/{tenant_slug}/aliyun_cms/{client_id}   # 阿里云云监控1.0
+/api/v1/webhooks/{tenant_slug}/aliyun_cms2/{client_id} # 阿里云云监控2.0
+/api/v1/webhooks/{tenant_slug}/tencent/{client_id}
+/api/v1/webhooks/{tenant_slug}/zabbix/{client_id}
+/api/v1/webhooks/{tenant_slug}/custom/{client_id}
 ```
+
+- **tenant_slug**: 租户标识（如 `sentinelx`）
+- **source_type**: 告警源类型（见上）
+- **client_id**: 告警源客户端ID（在告警源管理中创建后获得，支持数字 ID 或 client_id）
 
 **认证方式:** 通过 `X-API-Key` Header 传递 Webhook API Key
 
@@ -484,12 +515,15 @@ POST   /api/v1/admin/users/{user_id}/reject     # 拒绝用户注册
 ### 告警
 ```
 POST   /api/v1/alerts             # 接收告警
-GET    /api/v1/alerts             # 告警列表
+GET    /api/v1/alerts             # 告警列表（支持 aggregate=true 聚合模式）
 GET    /api/v1/alerts/stats        # 告警统计
 GET    /api/v1/alerts/{id}         # 告警详情
 PUT    /api/v1/alerts/{id}        # 更新告警
 GET    /api/v1/alerts/diagnose/{trace_id}  # 诊断
+POST   /api/v1/alerts/batch       # 批量接收告警
 ```
+
+**告警列表聚合模式**: 使用 `GET /api/v1/alerts?aggregate=true` 可按指纹（fingerprint）聚合，同一告警的多条记录合并展示，返回 `count`（触发次数）和 `latest`（最新告警）。
 
 ### 规则
 ```
@@ -519,13 +553,14 @@ GET /health/live    # 存活探针
 
 ### 添加新的告警源适配器
 
-1. 在 `backend/apps/alert/adapters/` 创建适配器类
+1. 在 `backend/apps/alert/adapters/` 创建适配器类（如 `aliyun_cms.py`）
 2. 继承 `AlertAdapter` 基类
 3. 实现 `parse()` 方法
+4. 在 `AdapterFactory._adapters` 注册适配器
 
 ```python
 class PrometheusAdapter(AlertAdapter):
-    async def parse(self, raw_data: dict) -> AlertCreate:
+    async def parse(self, raw_data: dict, tenant_id: str) -> AlertCreate:
         # 实现解析逻辑
         return AlertCreate(...)
 ```

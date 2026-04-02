@@ -1,8 +1,9 @@
 import React, { useState, useMemo, FormEvent } from 'react'
-import { Cloud, Box, Zap, Code, Server, BarChart3, CloudCog, Copy, Check, ToggleLeft, ToggleRight, RefreshCw, Plus, Settings } from 'lucide-react'
+import { Cloud, Box, Zap, Code, Server, BarChart3, CloudCog, Copy, ToggleLeft, ToggleRight, RefreshCw, Plus, Settings } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
+import { toast } from '@/stores/toast-store'
 
 interface AlertSourceConfig {
   id: string
@@ -15,12 +16,13 @@ interface AlertSourceConfig {
 
 interface AlertSource {
   id: number
+  client_id: string
   name: string
   code: string
   source_type: string
   config: Record<string, any>
   description?: string
-  is_active: boolean
+  is_active: string
   alert_count: number
   last_alert_at?: string
   created_at: string
@@ -128,10 +130,10 @@ const alertSourceTypes: AlertSourceConfig[] = [
 
 export function AlertSourcesPage() {
   const { currentTenant } = useAuthStore()
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingSource, setEditingSource] = useState<AlertSource | null>(null)
   const [defaultSourceType, setDefaultSourceType] = useState<string>('prometheus')
+  const [clientId, setClientId] = useState<string>('')
   const queryClient = useQueryClient()
 
   // 获取已配置的告警源列表
@@ -146,37 +148,40 @@ export function AlertSourcesPage() {
     queryFn: () => apiClient.get('/alerts/stats'),
   })
 
-  // 获取告警列表用于统计
-  const { data: alertsData } = useQuery<{ items: any[] }>({
-    queryKey: ['alerts-for-sources'],
-    queryFn: () => apiClient.get('/alerts', { page_size: 1000 }),
+  // 获取告警源统计
+  const { data: sourceStatsData } = useQuery<{ stats: { source_id: number; total: number; firing: number }[] }>({
+    queryKey: ['source-stats'],
+    queryFn: () => apiClient.get('/sources/stats'),
   })
 
-  // 按来源统计告警数量
+  // 转换为 Record<source_id, stat>
   const sourceStats = useMemo(() => {
-    if (!alertsData?.items) return {}
-    const stats: Record<string, { total: number; firing: number }> = {}
-    for (const alert of alertsData.items) {
-      if (!stats[alert.source]) {
-        stats[alert.source] = { total: 0, firing: 0 }
-      }
-      stats[alert.source].total++
-      if (alert.status === 'firing') stats[alert.source].firing++
+    if (!sourceStatsData?.stats) return {}
+    const map: Record<number, { total: number; firing: number }> = {}
+    for (const s of sourceStatsData.stats) {
+      map[s.source_id] = { total: s.total, firing: s.firing }
     }
-    return stats
-  }, [alertsData])
+    return map
+  }, [sourceStatsData])
 
   // 切换告警源启用状态
   const toggleSourceMutation = useMutation({
-    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
-      apiClient.put(`/sources/${id}`, { is_active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-sources'] }),
+    mutationFn: (id: number) => apiClient.patch(`/sources/${id}/toggle`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-sources'] })
+      queryClient.invalidateQueries({ queryKey: ['source-stats'] })
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || '切换状态失败'),
   })
 
   // 删除告警源
   const deleteSourceMutation = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/sources/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-sources'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-sources'] })
+      queryClient.invalidateQueries({ queryKey: ['source-stats'] })
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || '删除失败'),
   })
 
   // 获取当前租户的 webhook URL 前缀
@@ -184,24 +189,18 @@ export function AlertSourcesPage() {
     ? `/api/v1/webhooks/${currentTenant.slug}`
     : '/api/v1/webhooks/{tenant_slug}'
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
   const handleEdit = (source: AlertSource) => {
     setEditingSource(source)
+    setClientId(source.client_id)
     setShowCreateModal(true)
   }
 
   const handleCreate = () => {
     setEditingSource(null)
+    setClientId(Math.random().toString(36).slice(2, 7))
     setShowCreateModal(true)
   }
 
-  // 检查某类型是否已配置
-  const isSourceConfigured = (type: string) => sources.some(s => s.source_type === type)
 
   return (
     <div className="p-6 space-y-6">
@@ -224,69 +223,63 @@ export function AlertSourcesPage() {
         </button>
       </div>
 
-      {/* 已配置的告警源 */}
+      {/* 已配置的告警源 - 4列卡片 */}
       {sources.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">已配置的告警源</h2>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold mb-4">已配置的告警源</h2>
           {sourcesLoading ? (
             <div className="p-8 text-center text-gray-500">加载中...</div>
           ) : (
-            <div className="divide-y">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {sources.map((source) => {
                 const typeInfo = alertSourceTypes.find(t => t.id === source.source_type)
                 const Icon = typeInfo?.icon || Code
-                const stat = sourceStats[source.source_type] || { total: 0, firing: 0 }
+                const stat = sourceStats[source.id] || { total: 0, firing: 0 }
                 return (
-                  <div key={source.id} className="p-4 hover:bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2 rounded-lg ${source.is_active ? 'bg-green-50' : 'bg-gray-50'}`}>
-                          <Icon className={`w-5 h-5 ${source.is_active ? 'text-green-600' : 'text-gray-400'}`} />
-                        </div>
-                        <div>
-                          <div className="font-medium">{source.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {source.code} • {typeInfo?.name || source.source_type}
-                          </div>
-                        </div>
+                  <div key={source.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`p-2 rounded-lg ${source.is_active === 'active' ? 'bg-green-50' : 'bg-gray-50'}`}>
+                        <Icon className={`w-5 h-5 ${source.is_active === 'active' ? 'text-green-600' : 'text-gray-400'}`} />
                       </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-center">
-                          <div className="text-lg font-bold">{stat.total}</div>
-                          <div className="text-xs text-gray-500">总告警</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-red-600">{stat.firing}</div>
-                          <div className="text-xs text-gray-500">触发中</div>
-                        </div>
+                      <div className="flex gap-1">
                         <button
-                          onClick={() => toggleSourceMutation.mutate({ id: source.id, is_active: !source.is_active })}
+                          onClick={() => toggleSourceMutation.mutate(source.id)}
                           disabled={toggleSourceMutation.isPending}
-                          className={`p-2 rounded-lg ${source.is_active ? 'text-green-600' : 'text-gray-400'}`}
-                          title={source.is_active ? '已启用' : '已停用'}
+                          className={`p-1.5 rounded-lg ${source.is_active === 'active' ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                          title={source.is_active === 'active' ? '已启用' : '已停用'}
                         >
-                          {source.is_active ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                          {source.is_active === 'active' ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
                         </button>
                         <button
                           onClick={() => handleEdit(source)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
                         >
-                          <Settings className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm('确定要删除该告警源配置吗？')) {
-                              deleteSourceMutation.mutate(source.id)
-                            }
-                          }}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                        >
-                          <span className="text-sm">删除</span>
+                          <Settings className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
+                    <div className="font-medium text-sm mb-1">{source.name}</div>
+                    <div className="text-xs text-gray-500 mb-3">{typeInfo?.name || source.source_type}</div>
+                    <div className="flex gap-4 mb-3">
+                      <div className="text-center">
+                        <div className="text-lg font-bold">{stat.total}</div>
+                        <div className="text-xs text-gray-500">总告警</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-red-600">{stat.firing}</div>
+                        <div className="text-xs text-gray-500">触发中</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (confirm('确定要删除该告警源配置吗？')) {
+                          deleteSourceMutation.mutate(source.id)
+                        }
+                      }}
+                      className="w-full text-xs text-red-600 hover:bg-red-50 py-1 rounded"
+                    >
+                      删除
+                    </button>
                   </div>
                 )
               })}
@@ -299,16 +292,13 @@ export function AlertSourcesPage() {
       <div>
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">支持的告警源类型</h2>
-          <p className="text-sm text-gray-500">点击 Webhook 地址可直接复制</p>
+          <p className="text-sm text-gray-500">点击添加配置来查看 Webhook 地址</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {alertSourceTypes.map((sourceType) => {
             const Icon = sourceType.icon
-            // 统一使用 /aliyun_cms 端点（支持 JSON 和 Form Data）
-            const webhookUrl = sourceType.id === 'custom'
-              ? `${webhookBaseUrl}/custom`
-              : `${webhookBaseUrl}/${sourceType.id}`
-            const isConfigured = isSourceConfigured(sourceType.id)
+            const configuredSource = sources.find(s => s.source_type === sourceType.id)
+            const isConfigured = !!configuredSource
             return (
               <div
                 key={sourceType.id}
@@ -352,25 +342,6 @@ export function AlertSourcesPage() {
                     )}
                   </div>
 
-                  {/* Webhook URL */}
-                  <div className="mt-auto">
-                    <div className="flex items-center gap-1 mb-1">
-                      <span className="text-xs text-gray-500">Webhook:</span>
-                      <button
-                        onClick={() => handleCopy(webhookUrl, sourceType.id)}
-                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                      >
-                        {copiedId === sourceType.id ? (
-                          <><Check className="w-3 h-3" /> 已复制</>
-                        ) : (
-                          <><Copy className="w-3 h-3" /> 复制</>
-                        )}
-                      </button>
-                    </div>
-                    <code className="block text-xs bg-gray-50 px-2 py-1 rounded font-mono text-gray-700 break-all leading-tight">
-                      {webhookUrl}
-                    </code>
-                  </div>
                 </div>
 
                 {/* 卡片底部操作 */}
@@ -378,6 +349,7 @@ export function AlertSourcesPage() {
                   <button
                     onClick={() => {
                       setEditingSource(null)
+                      setClientId(Math.random().toString(36).slice(2, 7))
                       setDefaultSourceType(sourceType.id)
                       setShowCreateModal(true)
                     }}
@@ -411,7 +383,7 @@ export function AlertSourcesPage() {
             <div className="text-sm text-gray-500">已配置来源</div>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg text-center">
-            <div className="text-2xl font-bold text-green-600">{sources.filter(s => s.is_active).length}</div>
+            <div className="text-2xl font-bold text-green-600">{sources.filter(s => s.is_active === 'active').length}</div>
             <div className="text-sm text-gray-500">活跃连接</div>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg text-center">
@@ -453,10 +425,12 @@ export function AlertSourcesPage() {
           defaultSourceType={editingSource ? undefined : defaultSourceType}
           alertSourceTypes={alertSourceTypes}
           webhookBaseUrl={webhookBaseUrl}
+          clientId={clientId}
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false)
             queryClient.invalidateQueries({ queryKey: ['alert-sources'] })
+            queryClient.invalidateQueries({ queryKey: ['source-stats'] })
           }}
         />
       )}
@@ -470,6 +444,7 @@ function SourceModal({
   defaultSourceType,
   alertSourceTypes,
   webhookBaseUrl,
+  clientId,
   onClose,
   onSuccess,
 }: {
@@ -477,6 +452,7 @@ function SourceModal({
   defaultSourceType?: string
   alertSourceTypes: AlertSourceConfig[]
   webhookBaseUrl: string
+  clientId: string
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -486,7 +462,8 @@ function SourceModal({
     source_type: source?.source_type || defaultSourceType || 'prometheus',
     description: source?.description || '',
     config: source?.config || {},
-    is_active: source?.is_active ?? true,
+    is_active: source ? source.is_active === 'active' : true,
+    client_id: source?.client_id || clientId || '',
   })
   const [error, setError] = useState('')
 
@@ -505,18 +482,33 @@ function SourceModal({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     setError('')
+    const isActive = formData.is_active ? 'active' : 'inactive'
     if (source) {
-      updateMutation.mutate(formData)
+      updateMutation.mutate({
+        name: formData.name,
+        code: formData.code,
+        source_type: formData.source_type,
+        description: formData.description,
+        config: formData.config,
+        is_active: isActive,
+      })
     } else {
-      createMutation.mutate(formData)
+      createMutation.mutate({
+        name: formData.name,
+        code: formData.code,
+        source_type: formData.source_type,
+        description: formData.description,
+        config: formData.config,
+        is_active: isActive,
+        client_id: formData.client_id,
+      })
     }
   }
 
   const currentType = alertSourceTypes.find(t => t.id === formData.source_type)
-  // 统一使用 /{source_type} 端点（支持 JSON 和 Form Data）
   const webhookUrl = formData.source_type === 'custom'
     ? `${webhookBaseUrl}/custom`
-    : `${webhookBaseUrl}/${formData.source_type}`
+    : `${webhookBaseUrl}/${formData.source_type}/${formData.client_id}`
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -572,9 +564,19 @@ function SourceModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
-            <code className="block text-xs bg-gray-50 px-3 py-2 rounded font-mono break-all">
-              {webhookUrl}
-            </code>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-gray-50 px-3 py-2 rounded font-mono break-all">
+                {webhookUrl}
+              </code>
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success('已复制') }}
+                className="shrink-0 p-2 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                title="复制"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
             <p className="text-xs text-gray-500 mt-1">
               在 {currentType?.name} 中配置此 URL 作为 Webhook 回调地址
             </p>

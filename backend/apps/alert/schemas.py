@@ -17,7 +17,7 @@ class AlertSourceBase(BaseModel):
 
 
 class AlertSourceCreate(AlertSourceBase):
-    pass
+    client_id: str = Field(..., min_length=1, max_length=32)
 
 
 class AlertSourceUpdate(BaseModel):
@@ -34,6 +34,7 @@ class AlertSourceResponse(AlertSourceBase):
     alert_count: int
     last_alert_at: Optional[datetime] = None
     created_at: datetime
+    client_id: str
 
     class Config:
         from_attributes = True
@@ -58,6 +59,7 @@ class AlertCreate(AlertBase):
     """创建告警请求"""
     fingerprint: Optional[str] = None  # 可选，不提供则自动生成
     trace_id: Optional[str] = None
+    source_id: Optional[int] = None
 
 
 class AlertUpdate(BaseModel):
