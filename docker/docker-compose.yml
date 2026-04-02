@@ -105,10 +105,7 @@ services:
   # PostgreSQL + TimescaleDB 数据库
   # ============================================================================
   postgres:
-    build:
-      context: ./postgres
-      dockerfile: Dockerfile
-    image: sentinelx/postgres:latest
+    image: ghcr.io/cefso/sentinelx/postgres:latest
     container_name: sentinelx-postgres
     environment:
       POSTGRES_USER: postgres

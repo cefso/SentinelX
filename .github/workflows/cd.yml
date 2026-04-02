@@ -71,3 +71,23 @@ jobs:
           tags: ${{ steps.meta-frontend.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Extract metadata for postgres
+        id: meta-postgres
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/postgres
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push postgres
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/postgres
+          file: ./docker/postgres/Dockerfile
+          push: true
+          tags: ${{ steps.meta-postgres.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
