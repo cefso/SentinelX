@@ -51,8 +51,21 @@ const alertSourceTypes: AlertSourceConfig[] = [
     ],
   },
   {
+    id: 'aliyun_cms',
+    name: '阿里云云监控1.0',
+    description: '接入阿里云云监控1.0告警，支持 URL-encoded form data 格式回调',
+    icon: Cloud,
+    接入方式: 'Webhook',
+    配置说明: [
+      '登录阿里云云监控控制台',
+      '创建报警规则，选择"回调模式"',
+      '填入平台的 Webhook 地址',
+      '告警内容以 form data 格式发送',
+    ],
+  },
+  {
     id: 'aliyun',
-    name: '阿里云云监控',
+    name: '阿里云云监控2.0',
     description: '接入阿里云云监控告警，支持阈值报警和事件报警，通过自定义 Webhook 回调',
     icon: Cloud,
     接入方式: 'Webhook',
@@ -118,6 +131,7 @@ export function AlertSourcesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingSource, setEditingSource] = useState<AlertSource | null>(null)
+  const [defaultSourceType, setDefaultSourceType] = useState<string>('prometheus')
   const queryClient = useQueryClient()
 
   // 获取已配置的告警源列表
@@ -290,8 +304,11 @@ export function AlertSourcesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {alertSourceTypes.map((sourceType) => {
             const Icon = sourceType.icon
+            // 阿里云云监控1.0使用 form-data 专用端点
             const webhookUrl = sourceType.id === 'custom'
               ? `${webhookBaseUrl}/custom`
+              : sourceType.id === 'aliyun_cms'
+              ? `${webhookBaseUrl}/aliyun_cms/form`
               : `${webhookBaseUrl}/${sourceType.id}`
             const isConfigured = isSourceConfigured(sourceType.id)
             return (
@@ -363,6 +380,7 @@ export function AlertSourcesPage() {
                   <button
                     onClick={() => {
                       setEditingSource(null)
+                      setDefaultSourceType(sourceType.id)
                       setShowCreateModal(true)
                     }}
                     className="w-full flex items-center justify-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
@@ -434,6 +452,7 @@ export function AlertSourcesPage() {
       {showCreateModal && (
         <SourceModal
           source={editingSource}
+          defaultSourceType={editingSource ? undefined : defaultSourceType}
           alertSourceTypes={alertSourceTypes}
           webhookBaseUrl={webhookBaseUrl}
           onClose={() => setShowCreateModal(false)}
@@ -450,12 +469,14 @@ export function AlertSourcesPage() {
 // 告警源配置 Modal
 function SourceModal({
   source,
+  defaultSourceType,
   alertSourceTypes,
   webhookBaseUrl,
   onClose,
   onSuccess,
 }: {
   source: AlertSource | null
+  defaultSourceType?: string
   alertSourceTypes: AlertSourceConfig[]
   webhookBaseUrl: string
   onClose: () => void
@@ -464,7 +485,7 @@ function SourceModal({
   const [formData, setFormData] = useState({
     name: source?.name || '',
     code: source?.code || '',
-    source_type: source?.source_type || 'prometheus',
+    source_type: source?.source_type || defaultSourceType || 'prometheus',
     description: source?.description || '',
     config: source?.config || {},
     is_active: source?.is_active ?? true,
@@ -494,8 +515,11 @@ function SourceModal({
   }
 
   const currentType = alertSourceTypes.find(t => t.id === formData.source_type)
+  // 阿里云云监控1.0使用 form-data 专用端点
   const webhookUrl = formData.source_type === 'custom'
     ? `${webhookBaseUrl}/custom`
+    : formData.source_type === 'aliyun_cms'
+    ? `${webhookBaseUrl}/aliyun_cms/form`
     : `${webhookBaseUrl}/${formData.source_type}`
 
   return (
