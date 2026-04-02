@@ -43,7 +43,7 @@ docker-compose logs -f backend | grep "request_id=abc123"
 |------|------|
 | `Dockerfile` | 后端 Python 镜像 |
 | `Dockerfile.frontend` | 前端 Node 镜像 |
-| `postgres/` | PostgreSQL 镜像（含 TimescaleDB 初始化） |
+| `Dockerfile.pg` | PostgreSQL + TimescaleDB 镜像（含初始化脚本） |
 | `init-db.sh` | PostgreSQL + TimescaleDB 初始化脚本 |
 | `.env.docker` | Docker 环境配置模板 |
 
@@ -80,11 +80,11 @@ docker-compose down -v
 
 ```bash
 # 构建 PostgreSQL 镜像（含初始化脚本）
-docker build -t sentinelx/postgres:latest -f postgres/Dockerfile .
+docker build -t ghcr.io/cefso/sentinelx/postgres:latest -f Dockerfile.pg .
 
 # 构建后端镜像
-docker build -f Dockerfile -t sentinelx/backend:latest ../backend
+docker build -t ghcr.io/cefso/sentinelx/backend:latest -f Dockerfile ../backend
 
 # 构建前端镜像
-docker build -f Dockerfile.frontend -t sentinelx/frontend:latest ../frontend
+docker build -t ghcr.io/cefso/sentinelx/frontend:latest -f Dockerfile.frontend ../frontend
 ```
