@@ -324,6 +324,7 @@ class AdapterFactory:
         "alertmanager": PrometheusAdapter,  # alertmanager使用prometheus适配器
         "zabbix": ZabbixAdapter,
         "aliyun": AlibabaCloudAdapter,
+        "aliyun_cms": "AliyunCmsAdapter",  # 延迟导入
         "tencent": TencentCloudAdapter,
         "custom": CustomWebhookAdapter,
     }
@@ -332,6 +333,10 @@ class AdapterFactory:
     def get_adapter(cls, source_type: str) -> AlertAdapter:
         """获取适配器"""
         adapter_class = cls._adapters.get(source_type.lower(), CustomWebhookAdapter)
+        # 延迟导入处理
+        if isinstance(adapter_class, str):
+            from apps.alert.adapters.aliyun_cms import AliyunCmsAdapter
+            adapter_class = AliyunCmsAdapter
         return adapter_class()
 
     @classmethod

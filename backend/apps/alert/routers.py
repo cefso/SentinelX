@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text
 
@@ -221,7 +221,6 @@ async def receive_webhook_by_tenant(
     raw_data: dict,
     background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
-    x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID"),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -232,8 +231,6 @@ async def receive_webhook_by_tenant(
     - tenant_slug: 租户 slug (如 sentinelx)
     - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/tencent/huawei/custom)
     - X-API-Key: 租户的 webhook API Key (可选)
-
-    如果不提供 API Key，则使用 X-Tenant-ID 头
     """
     from apps.alert.adapters.base import AdapterFactory
 
@@ -247,21 +244,11 @@ async def receive_webhook_by_tenant(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    # 2. 验证 API Key
+    # 2. 验证 API Key (可选，如果有配置的话)
     tenant_id = str(tenant.id)
-    if x_api_key:
-        # 使用 webhook API Key 验证
-        if not tenant.webhook_api_key:
-            raise HTTPException(status_code=401, detail="Tenant has no webhook API key configured")
-
+    if x_api_key and tenant.webhook_api_key:
         if not verify_password(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
-    elif x_tenant_id:
-        # 使用 X-Tenant-ID 头 (兼容旧方式)
-        if x_tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Tenant ID mismatch")
-    else:
-        raise HTTPException(status_code=401, detail="Missing authentication header (X-API-Key or X-Tenant-ID)")
 
     # 3. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
@@ -335,6 +322,89 @@ async def receive_webhook_by_tenant(
         await db.commit()
         await db.refresh(alert)
         return {"id": alert.id, "trace_id": alert.trace_id}
+
+
+@router.post("/webhooks/{tenant_slug}/aliyun_cms/form")
+async def receive_aliyun_cms_webhook(
+    tenant_slug: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """
+    阿里云云监控1.0 Webhook (Form Data格式)
+    接收 application/x-www-form-urlencoded 格式的告警
+    """
+    from apps.alert.adapters.base import AdapterFactory
+
+    # 1. 通过 tenant_slug 获取租户
+    result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+    tenant = result.scalar_one_or_none()
+
+    if not tenant:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_slug}")
+
+    if not tenant.is_active:
+        raise HTTPException(status_code=403, detail="Tenant is inactive")
+
+    # 2. 验证 API Key (可选，如果有配置的话)
+    tenant_id = str(tenant.id)
+    if x_api_key and tenant.webhook_api_key:
+        if not verify_password(x_api_key, tenant.webhook_api_key):
+            raise HTTPException(status_code=401, detail="Invalid webhook API key")
+
+    # 3. 解析 form data
+    form_data = await request.form()
+    # 将 form 数据转换为字典
+    raw_data = {}
+    for key, value in form_data.items():
+        # 如果值是 bytes，进行 URL decode
+        if isinstance(value, bytes):
+            from urllib.parse import unquote_plus
+            value = unquote_plus(value.decode('utf-8'))
+        raw_data[key] = value
+
+    # 4. 获取适配器
+    adapter = AdapterFactory.get_adapter("aliyun_cms")
+
+    # 5. 解析告警
+    parsed_alert = await adapter.parse(raw_data, tenant_id)
+
+    if not parsed_alert:
+        raise HTTPException(status_code=400, detail="Unsupported alert format for source: aliyun_cms")
+
+    # 6. 处理告警
+    trace_id = generate_trace_id()
+    fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+
+    alert = Alert(
+        tenant_id=tenant_id,
+        alert_key=parsed_alert.alert_key,
+        fingerprint=fingerprint,
+        source=parsed_alert.source,
+        title=parsed_alert.title,
+        content=parsed_alert.content,
+        severity=parsed_alert.severity,
+        status="firing",
+        labels=parsed_alert.labels,
+        annotations=parsed_alert.annotations,
+        metric_name=parsed_alert.metric_name,
+        metric_value=parsed_alert.metric_value,
+        raw_data=parsed_alert.raw_data,
+        trace_id=trace_id,
+        fired_at=datetime.utcnow(),
+    )
+    db.add(alert)
+    await db.flush()
+
+    dispatcher = AlertDispatcher(db, redis)
+    background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+
+    await db.commit()
+    await db.refresh(alert)
+    return {"id": alert.id, "trace_id": alert.trace_id}
 
 
 @router.post("/alerts/batch")

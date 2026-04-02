@@ -72,6 +72,7 @@ class AlertSourceType:
     PROMETHEUS = "prometheus"
     ALERTMANAGER = "alertmanager"
     ALIYUN = "aliyun"
+    ALIYUN_CMS = "aliyun_cms"   # 阿里云云监控1.0
     TENCENT = "tencent"
     HUAWEI = "huawei"
     ZABBIX = "zabbix"
@@ -83,6 +84,7 @@ class AlertSourceType:
         PROMETHEUS,
         ALERTMANAGER,
         ALIYUN,
+        ALIYUN_CMS,
         TENCENT,
         HUAWEI,
         ZABBIX,
@@ -96,6 +98,7 @@ class AlertSourceType:
         PROMETHEUS: "/api/v1/webhooks/{tenant}/prometheus",
         ALERTMANAGER: "/api/v1/webhooks/{tenant}/alertmanager",
         ALIYUN: "/api/v1/webhooks/{tenant}/aliyun",
+        ALIYUN_CMS: "/api/v1/webhooks/{tenant}/aliyun_cms",
         TENCENT: "/api/v1/webhooks/{tenant}/tencent",
         HUAWEI: "/api/v1/webhooks/{tenant}/huawei",
         ZABBIX: "/api/v1/webhooks/{tenant}/zabbix",

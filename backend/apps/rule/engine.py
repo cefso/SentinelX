@@ -35,7 +35,7 @@ class RuleEngine:
         "is_empty": lambda a, b: (a is None or a == "" or a == {}) if b else False,
     }
 
-    def __init__(self):
+    def __init__(self, db=None):
         pass
 
     async def match(self, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
