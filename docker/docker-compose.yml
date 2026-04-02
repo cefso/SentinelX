@@ -60,6 +60,7 @@ services:
         max-file: "5"
     labels:
       service: "sentinelx-backend"
+    working_dir: /app
     command: >
       sh -c "
         alembic upgrade head &&
