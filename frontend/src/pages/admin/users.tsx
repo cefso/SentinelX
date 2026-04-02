@@ -162,7 +162,8 @@ export function AdminUsersPage() {
                     </button>
                     <button
                       onClick={() => handleReject(u.id)}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                      disabled={rejectMutation.isPending}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
                     >
                       <X className="w-4 h-4" />
                       拒绝

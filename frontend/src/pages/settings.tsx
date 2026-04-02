@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
+import { toast } from '@/stores/toast-store'
 import { User, Lock, Shield, Key, Users, Sparkles, Plus, ShieldCheck, Check, X } from 'lucide-react'
 
 interface Tenant {
@@ -19,6 +20,14 @@ interface Tenant {
 }
 
 type SettingsTab = 'profile' | 'security' | 'tenant' | 'api-keys' | 'users' | 'ai' | 'pending'
+
+interface Role {
+  id: number
+  name: string
+  code: string
+  tenant_id?: number
+  scope?: string
+}
 
 const menuItems = [
   { key: 'profile' as const, label: '个人信息', icon: User },
@@ -122,7 +131,7 @@ function ProfileTab() {
       setTimeout(() => setSaved(false), 2000)
     },
     onError: (err: any) => {
-      alert(err.response?.data?.detail || '更新失败')
+      toast.error(err.response?.data?.detail || '更新失败')
     },
   })
 
@@ -412,12 +421,18 @@ function TenantList() {
 
 // ============ API Keys Tab ============
 function ApiKeysTab() {
+  const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const { data } = useQuery<{ api_keys: any[] }>({
     queryKey: ['apiKeys'],
     queryFn: () => apiClient.get('/auth/api-keys'),
   })
   const apiKeys = data?.api_keys || []
+
+  const deleteMutation = useMutation({
+    mutationFn: (keyId: string) => apiClient.delete(`/auth/api-keys/${keyId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['apiKeys'] }),
+  })
 
   return (
     <div className="space-y-6">
@@ -462,7 +477,17 @@ function ApiKeysTab() {
                     {key.expires_at ? new Date(key.expires_at).toLocaleDateString('zh-CN') : '永久'}
                   </td>
                   <td className="py-3 text-right">
-                    <button className="text-red-600 hover:text-red-800 text-sm">删除</button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`确定要删除 API Key "${key.name}" 吗？`)) {
+                          deleteMutation.mutate(key.key_id)
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
+                    >
+                      删除
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -493,7 +518,7 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
       onClose()
     },
     onError: (err: any) => {
-      alert(err.response?.data?.detail || '创建失败')
+      toast.error(err.response?.data?.detail || '创建失败')
     },
   })
 
@@ -566,12 +591,6 @@ interface UserItem {
   is_approved: boolean
   role_id?: number
   created_at: string
-}
-
-interface Role {
-  id: number
-  name: string
-  code: string
 }
 
 function UsersTab() {
@@ -870,7 +889,7 @@ function EditUserRoleModal({ user, roles, onClose, onSuccess }: { user: UserItem
     ))
   }
 
-  const tenantRoles = roles.filter(r => r.tenant_id !== null)
+  const tenantRoles = roles.filter(r => r.tenant_id != null)
 
   const canSubmit = tenantSelections.length > 0 && tenantSelections.every(tr => tr.roleId !== null)
 
@@ -987,20 +1006,6 @@ interface PendingUser {
   created_at: string
 }
 
-interface Role {
-  id: number
-  name: string
-  code: string
-  tenant_id?: number
-  scope?: string
-}
-
-interface Tenant {
-  id: number
-  name: string
-  slug: string
-}
-
 interface TenantRoleSelection {
   tenantId: number
   roleId: number | null
@@ -1101,7 +1106,7 @@ function PendingUsersTab() {
     ))
   }
 
-  const tenantRoles = roles.filter(r => r.tenant_id !== null)
+  const tenantRoles = roles.filter(r => r.tenant_id != null)
   const systemRoles = roles.filter(r => r.tenant_id === null && r.scope === 'system')
 
   const canApprove = (selectedSystemRole !== null) || (tenantSelections.length > 0 && tenantSelections.every(tr => tr.roleId !== null))
@@ -1160,7 +1165,8 @@ function PendingUsersTab() {
                     </button>
                     <button
                       onClick={() => handleReject(u.id)}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                      disabled={rejectMutation.isPending}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
                     >
                       <X className="w-4 h-4" />
                       拒绝

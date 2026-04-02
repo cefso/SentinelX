@@ -129,7 +129,8 @@ export function ChannelsPage() {
                           deleteMutation.mutate(channel.id)
                         }
                       }}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      disabled={deleteMutation.isPending}
+                      className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
                     >
                       删除
                     </button>
@@ -145,7 +146,8 @@ export function ChannelsPage() {
                     <span className="text-gray-500">状态</span>
                     <button
                       onClick={() => toggleMutation.mutate({ channelId: channel.id, is_active: !channel.is_active })}
-                      className={`px-2 py-0.5 text-xs rounded ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                      disabled={toggleMutation.isPending}
+                      className={`px-2 py-0.5 text-xs rounded disabled:opacity-50 ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                     >
                       {channel.is_active ? '启用' : '停用'}
                     </button>
