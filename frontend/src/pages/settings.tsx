@@ -120,7 +120,6 @@ function ProfileTab() {
   const [formData, setFormData] = useState({
     email: user?.email || '',
   })
-  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const updateMutation = useMutation({
@@ -137,10 +136,7 @@ function ProfileTab() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setSaving(true)
-    updateMutation.mutate(formData, {
-      onSettled: () => setSaving(false),
-    })
+    updateMutation.mutate(formData)
   }
 
   return (
@@ -170,10 +166,10 @@ function ProfileTab() {
         <div className="flex items-center gap-4 pt-4 border-t">
           <button
             type="submit"
-            disabled={saving}
+            disabled={updateMutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? '保存中...' : '保存修改'}
+            {updateMutation.isPending ? '保存中...' : '保存修改'}
           </button>
           {saved && <span className="text-sm text-green-600">保存成功</span>}
         </div>
@@ -188,7 +184,6 @@ function SecurityTab() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
@@ -222,11 +217,7 @@ function SecurityTab() {
       return
     }
 
-    setSaving(true)
-    updateMutation.mutate(
-      { old_password: currentPassword, new_password: newPassword },
-      { onSettled: () => setSaving(false) }
-    )
+    updateMutation.mutate({ old_password: currentPassword, new_password: newPassword })
   }
 
   return (
@@ -278,10 +269,10 @@ function SecurityTab() {
         <div className="pt-4 border-t">
           <button
             type="submit"
-            disabled={saving}
+            disabled={updateMutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? '修改中...' : '修改密码'}
+            {updateMutation.isPending ? '修改中...' : '修改密码'}
           </button>
         </div>
       </form>
