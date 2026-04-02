@@ -18,9 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Column already exists in database from previous migration
-    # This is a stub migration to maintain alembic revision chain
-    pass
+    op.add_column(
+        'alert_sources',
+        op.Column('client_id', sa.String(32), nullable=False, unique=True, index=True)
+    )
 
 
 def downgrade() -> None:
