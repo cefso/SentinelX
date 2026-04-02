@@ -1,5 +1,7 @@
 FROM node:20-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 # 复制依赖文件
