@@ -26,11 +26,12 @@ from apps.alert.services.dispatcher import AlertDispatcher
 router = APIRouter()
 
 
-def generate_fingerprint(alert: AlertCreate, tenant_id: str) -> str:
+def generate_fingerprint(alert: AlertCreate, tenant_id: str, source_id: int = None) -> str:
     """生成告警指纹"""
     fp_data = {
         "tenant_id": tenant_id,
         "source": alert.source,
+        "source_id": str(source_id) if source_id else None,
         "alert_key": alert.alert_key,
         "labels": json.dumps(alert.labels, sort_keys=True, default=str),
     }
@@ -68,7 +69,7 @@ async def _create_alerts_from_parsed(
         results = []
         for alert_data in parsed_alert:
             trace_id = generate_trace_id()
-            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
 
             alert = Alert(
                 tenant_id=tenant_id,
@@ -101,7 +102,7 @@ async def _create_alerts_from_parsed(
         }
     else:
         trace_id = generate_trace_id()
-        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
 
         alert = Alert(
             tenant_id=tenant_id,
@@ -255,7 +256,7 @@ async def create_alert(
 ):
     """接收告警"""
     trace_id = request.trace_id or generate_trace_id()
-    fingerprint = request.fingerprint or generate_fingerprint(request, tenant_id)
+    fingerprint = request.fingerprint or generate_fingerprint(request, tenant_id, request.source_id)
 
     # 创建告警记录
     alert = Alert(
@@ -464,7 +465,7 @@ async def create_alerts_batch(
 
     for alert_data in alerts:
         trace_id = alert_data.trace_id or generate_trace_id()
-        fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+        fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, alert_data.source_id)
 
         alert = Alert(
             tenant_id=tenant_id,
