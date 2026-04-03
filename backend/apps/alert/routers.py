@@ -14,7 +14,7 @@ from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.security import verify_password
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
-from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace
+from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric
 from apps.tenant.models import Tenant
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
@@ -26,11 +26,12 @@ from apps.alert.services.dispatcher import AlertDispatcher
 router = APIRouter()
 
 
-def generate_fingerprint(alert: AlertCreate, tenant_id: str) -> str:
+def generate_fingerprint(alert: AlertCreate, tenant_id: str, source_id: int = None) -> str:
     """生成告警指纹"""
     fp_data = {
         "tenant_id": tenant_id,
         "source": alert.source,
+        "source_id": str(source_id) if source_id else None,
         "alert_key": alert.alert_key,
         "labels": json.dumps(alert.labels, sort_keys=True, default=str),
     }
@@ -68,7 +69,7 @@ async def _create_alerts_from_parsed(
         results = []
         for alert_data in parsed_alert:
             trace_id = generate_trace_id()
-            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
 
             alert = Alert(
                 tenant_id=tenant_id,
@@ -85,6 +86,9 @@ async def _create_alerts_from_parsed(
                 metric_name=alert_data.metric_name,
                 metric_value=alert_data.metric_value,
                 raw_data=alert_data.raw_data,
+                namespace=alert_data.namespace,
+                instance_id=alert_data.instance_id,
+                instance_name=alert_data.instance_name,
                 trace_id=trace_id,
                 fired_at=datetime.utcnow(),
             )
@@ -101,7 +105,7 @@ async def _create_alerts_from_parsed(
         }
     else:
         trace_id = generate_trace_id()
-        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id)
+        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
 
         alert = Alert(
             tenant_id=tenant_id,
@@ -118,6 +122,9 @@ async def _create_alerts_from_parsed(
             metric_name=parsed_alert.metric_name,
             metric_value=parsed_alert.metric_value,
             raw_data=parsed_alert.raw_data,
+            namespace=parsed_alert.namespace,
+            instance_id=parsed_alert.instance_id,
+            instance_name=parsed_alert.instance_name,
             trace_id=trace_id,
             fired_at=datetime.utcnow(),
         )
@@ -255,7 +262,7 @@ async def create_alert(
 ):
     """接收告警"""
     trace_id = request.trace_id or generate_trace_id()
-    fingerprint = request.fingerprint or generate_fingerprint(request, tenant_id)
+    fingerprint = request.fingerprint or generate_fingerprint(request, tenant_id, request.source_id)
 
     # 创建告警记录
     alert = Alert(
@@ -273,6 +280,9 @@ async def create_alert(
         metric_name=request.metric_name,
         metric_value=request.metric_value,
         raw_data=request.raw_data,
+        namespace=request.namespace,
+        instance_id=request.instance_id,
+        instance_name=request.instance_name,
         trace_id=trace_id,
         fired_at=datetime.utcnow(),
     )
@@ -464,7 +474,7 @@ async def create_alerts_batch(
 
     for alert_data in alerts:
         trace_id = alert_data.trace_id or generate_trace_id()
-        fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id)
+        fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, alert_data.source_id)
 
         alert = Alert(
             tenant_id=tenant_id,
@@ -480,6 +490,9 @@ async def create_alerts_batch(
             metric_name=alert_data.metric_name,
             metric_value=alert_data.metric_value,
             raw_data=alert_data.raw_data,
+            namespace=alert_data.namespace,
+            instance_id=alert_data.instance_id,
+            instance_name=alert_data.instance_name,
             trace_id=trace_id,
             fired_at=datetime.utcnow(),
         )
@@ -793,6 +806,58 @@ async def diagnose_alert(
         flow_steps=flow_steps,
         timeline=timeline,
     )
+
+
+# ============ 云产品指标 ============
+
+@router.get("/cloud-metrics")
+async def list_cloud_metrics(
+    product: Optional[str] = None,
+    namespace: Optional[str] = None,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取云产品指标列表"""
+    query = select(CloudProductMetric).where(CloudProductMetric.is_active == 1)
+
+    if product:
+        query = query.where(CloudProductMetric.product == product)
+    if namespace:
+        query = query.where(CloudProductMetric.namespace == namespace)
+
+    result = await db.execute(query.order_by(CloudProductMetric.product, CloudProductMetric.metric_name))
+    metrics = result.scalars().all()
+    return metrics
+
+
+@router.get("/cloud-metrics/map")
+async def get_metrics_by_namespace(
+    namespace: str,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取指定 namespace 下的所有指标"""
+    result = await db.execute(
+        select(CloudProductMetric).where(
+            and_(
+                CloudProductMetric.namespace == namespace,
+                CloudProductMetric.is_active == 1,
+            )
+        ).order_by(CloudProductMetric.metric_name)
+    )
+    metrics = result.scalars().all()
+    return {
+        "namespace": namespace,
+        "metrics": [
+            {
+                "metric_name": m.metric_name,
+                "metric_desc": m.metric_desc,
+                "unit": m.unit,
+                "dimensions": m.dimensions,
+            }
+            for m in metrics
+        ]
+    }
 
 
 def _get_step_title(step_type: str) -> str:

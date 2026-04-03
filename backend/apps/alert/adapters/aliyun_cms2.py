@@ -27,6 +27,24 @@ class AliyunCms2Adapter(AlertAdapter):
         condition = raw_data.get("condition", "")
         state = raw_data.get("state", raw_data.get("status", ""))
 
+        # 提取 instance_id 和 instance_name
+        instance_id = ""
+        instance_name = ""
+        dimensions = raw_data.get("dimensions", {})
+        if isinstance(dimensions, str):
+            for part in dimensions.strip("{}").split(","):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if k == "instanceId":
+                        instance_id = v
+                    elif k == "instanceName":
+                        instance_name = v
+        elif isinstance(dimensions, dict):
+            instance_id = dimensions.get("instanceId", "")
+            instance_name = dimensions.get("instanceName", "")
+
         # 构建标题
         title = f"阿里云云监控2.0: {alert_name or metric_name}"
 
@@ -58,6 +76,8 @@ class AliyunCms2Adapter(AlertAdapter):
                 "metric_name": metric_name,
                 "namespace": namespace,
                 "condition": condition,
+                "instance_id": instance_id,
+                "instance_name": instance_name,
             },
             annotations={
                 "alert_name": alert_name,
@@ -67,6 +87,9 @@ class AliyunCms2Adapter(AlertAdapter):
             metric_name=metric_name,
             metric_value={"condition": condition},
             raw_data=raw_data,
+            namespace=namespace,
+            instance_id=instance_id,
+            instance_name=instance_name,
         )
 
     def _determine_severity(self, raw_data: Dict[str, Any]) -> str:

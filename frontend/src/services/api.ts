@@ -93,6 +93,28 @@ class ApiClient {
     const response = await this.client.delete<T>(url)
     return response.data
   }
+
+  async getCloudMetricsMap(): Promise<Record<string, CloudMetricRecord[]>> {
+    const metrics = await this.get<CloudMetricRecord[]>('/cloud-metrics')
+    // Group by namespace for easy lookup
+    const map: Record<string, CloudMetricRecord[]> = {}
+    for (const m of metrics) {
+      if (!map[m.namespace]) map[m.namespace] = []
+      map[m.namespace].push(m)
+    }
+    return map
+  }
+}
+
+export interface CloudMetricRecord {
+  id: number
+  product: string
+  namespace: string
+  metric_name: string
+  metric_desc?: string
+  unit?: string
+  dimensions?: string[]
+  is_active: number
 }
 
 export const apiClient = new ApiClient()
