@@ -53,6 +53,9 @@ class AlertBase(BaseModel):
     metric_name: Optional[str] = None
     metric_value: Optional[Any] = None
     raw_data: Dict[str, Any] = {}
+    namespace: Optional[str] = None
+    instance_id: Optional[str] = None
+    instance_name: Optional[str] = None
 
 
 class AlertCreate(AlertBase):

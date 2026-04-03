@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
+import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
 
 interface AlertSource {
   id: number
@@ -52,6 +53,14 @@ export function AlertsPage() {
       aggregate: aggregateMode || undefined,
     }),
   })
+
+  const { data: cloudMetricsMap } = useCloudMetricsMap()
+
+  const getProductDisplayName = (namespace: string) => {
+    if (!cloudMetricsMap || !namespace) return namespace || '-'
+    const records = cloudMetricsMap[namespace]
+    return records?.[0]?.product || namespace || '-'
+  }
 
   const totalPages = Math.ceil((alerts?.total || 0) / pageSize)
 
@@ -232,6 +241,8 @@ export function AlertsPage() {
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">告警名称</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">级别</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">来源</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">产品</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">实例</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">时间</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">状态</th>
               </tr>
@@ -239,11 +250,11 @@ export function AlertsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">加载中...</td>
+                  <td colSpan={8} className="px-3 py-8 text-center text-gray-500">加载中...</td>
                 </tr>
               ) : alerts?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
+                  <td colSpan={8} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
                 </tr>
               ) : aggregateMode ? (
                 (alerts?.items as unknown as AlertAggregatedItem[]).map((item, idx) => (
@@ -265,6 +276,8 @@ export function AlertsPage() {
                     </td>
                     <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
                     <td className="px-3 py-2 text-sm text-gray-500">{item.latest.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
                       {item.latest.fired_at ? new Date(item.latest.fired_at).toLocaleString('zh-CN') : '-'}
                     </td>
@@ -289,6 +302,8 @@ export function AlertsPage() {
                     </td>
                     <td className="px-3 py-2"><SeverityBadge severity={alert.severity} /></td>
                     <td className="px-3 py-2 text-sm text-gray-500">{alert.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
                       {alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : '-'}
                     </td>

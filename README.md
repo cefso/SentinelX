@@ -525,6 +525,23 @@ POST   /api/v1/alerts/batch       # 批量接收告警
 
 **告警列表聚合模式**: 使用 `GET /api/v1/alerts?aggregate=true` 可按指纹（fingerprint）聚合，同一告警的多条记录合并展示，返回 `count`（触发次数）和 `latest`（最新告警）。
 
+### 云产品指标映射
+```
+GET    /api/v1/cloud-metrics              # 获取云产品指标列表
+GET    /api/v1/cloud-metrics/map?namespace=acs_ecs  # 获取指定namespace的指标详情
+```
+
+**cloud_product_metrics 表**: 存储云产品 namespace 与中文名称的映射关系，支持通过数据库直接维护。
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| namespace | 产品命名空间 | acs_ecs, acs_rds, acs_slb |
+| product | 产品中文名称 | 阿里云ECS, 阿里云RDS |
+| metric_name | 指标名称 | CPUUtilization |
+| metric_desc | 指标中文描述 | CPU使用率 |
+
+**告警新字段**: alerts 表新增 `namespace`、`instance_id`、`instance_name` 字段，用于存储云产品关键信息，列表页和详情页直接展示。
+
 ### 规则
 ```
 GET    /api/v1/rules              # 规则列表

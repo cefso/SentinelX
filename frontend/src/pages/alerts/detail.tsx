@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
+import { useCloudMetricsMap, useProductName, useMetricDesc } from '@/hooks/useCloudMetrics'
 import { Send, CheckCircle, AlertCircle, XCircle, Clock, Circle } from 'lucide-react'
 
 export function AlertDetailPage() {
@@ -27,6 +28,11 @@ export function AlertDetailPage() {
     }),
     enabled: !!alert?.fingerprint,
   })
+
+  const { data: cloudMetricsMap } = useCloudMetricsMap()
+
+  const productName = useProductName(alert?.namespace || '', cloudMetricsMap)
+  const metricDesc = useMetricDesc(alert?.namespace || '', alert?.metric_name || '', cloudMetricsMap)
 
   const { data: users = [] } = useQuery<{ id: number; username: string }[]>({
     queryKey: ['users-for-assign'],
@@ -239,6 +245,14 @@ export function AlertDetailPage() {
                 <dd className="font-mono text-xs">{alert.alert_key}</dd>
               </div>
               <div className="flex flex-col">
+                <dt className="text-gray-500">产品</dt>
+                <dd className="font-medium truncate">{productName || alert?.namespace || '-'}</dd>
+              </div>
+              <div className="flex flex-col">
+                <dt className="text-gray-500">实例</dt>
+                <dd className="font-medium truncate">{alert?.instance_name || alert?.instance_id || '-'}</dd>
+              </div>
+              <div className="flex flex-col">
                 <dt className="text-gray-500">触发次数</dt>
                 <dd>{alert.fire_count} (重复: {alert.repeat_count})</dd>
               </div>
@@ -266,7 +280,7 @@ export function AlertDetailPage() {
             {alert.metric_name && (
               <div className="mt-3 p-3 bg-gray-50 rounded text-sm">
                 <div className="text-gray-500">指标名称</div>
-                <div className="font-mono">{alert.metric_name}</div>
+                <div className="font-mono">{metricDesc || alert.metric_name}</div>
                 {alert.metric_value && (
                   <>
                     <div className="text-gray-500 mt-1">指标值</div>

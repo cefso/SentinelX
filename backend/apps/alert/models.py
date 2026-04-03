@@ -76,6 +76,11 @@ class Alert(Base):
     raw_data = Column(JSON, default=dict)  # 原始告警数据(完整保留)
     extra_data = Column(JSON, default=dict)  # 扩展数据(供AI分析等)
 
+    # 云产品字段
+    namespace = Column(String(64), nullable=True, index=True)  # 云产品命名空间
+    instance_id = Column(String(128), nullable=True)  # 实例ID
+    instance_name = Column(String(256), nullable=True)  # 实例名称
+
     # 追踪
     trace_id = Column(String(12), nullable=True, index=True)
 
@@ -151,3 +156,20 @@ class AlertTrace(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     expired_at = Column(DateTime)  # 7天后过期
+
+
+class CloudProductMetric(Base):
+    """云产品指标映射"""
+
+    __tablename__ = "cloud_product_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product = Column(String(64), nullable=False, index=True)  # 产品名称，如 "阿里云ECS"
+    namespace = Column(String(128), nullable=False, index=True)  # 命名空间，如 "acs_ecs_dashboard"
+    metric_name = Column(String(128), nullable=False)  # 指标名，如 "CPUUtilization"
+    metric_desc = Column(String(256))  # 指标描述
+    unit = Column(String(32))  # 单位
+    dimensions = Column(JSON, default=list)  # 维度列表
+    is_active = Column(Integer, default=1)  # 启用状态
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

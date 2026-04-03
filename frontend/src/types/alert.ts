@@ -27,6 +27,10 @@ export interface AlertResponse {
   notification_channels: any[]
   created_at: string
   updated_at: string
+  // 云产品字段
+  namespace?: string
+  instance_id?: string
+  instance_name?: string
 }
 
 export interface AlertStats {
