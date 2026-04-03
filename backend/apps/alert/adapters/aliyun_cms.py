@@ -47,8 +47,8 @@ class AliyunCmsAdapter(AlertAdapter):
         # 严重级别判断
         severity = self._determine_severity(raw_data)
 
-        # 生成唯一告警键
-        alert_key = f"aliyun_cms-{alert_name}-{raw_metric_name}-{last_time}"
+        # 生成唯一告警键（不包含lastTime，避免同一告警因持续时间变化导致指纹不同）
+        alert_key = f"aliyun_cms-{alert_name}-{raw_metric_name}"
 
         return AlertCreate(
             alert_key=alert_key,
