@@ -570,7 +570,14 @@ function SourceModal({
               </code>
               <button
                 type="button"
-                onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success('已复制') }}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(webhookUrl)
+                    toast.success('已复制')
+                  } catch (err) {
+                    toast.error('复制失败')
+                  }
+                }}
                 className="shrink-0 p-2 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
                 title="复制"
               >
