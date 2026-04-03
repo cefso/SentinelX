@@ -28,6 +28,7 @@ class AliyunCmsAdapter(AlertAdapter):
         metric_name = raw_data.get("metricName", "")
         alert_name = raw_data.get("alertName", raw_data.get("alert_name", ""))
         alert_state = raw_data.get("alertState", raw_data.get("alert_state", ""))
+        instance_id = raw_data.get("instanceId", "")
 
         # 构建标题
         title = f"阿里云云监控: {alert_name or metric_name or raw_metric_name}"
@@ -48,7 +49,7 @@ class AliyunCmsAdapter(AlertAdapter):
         severity = self._determine_severity(raw_data)
 
         # 生成唯一告警键（不包含lastTime，避免同一告警因持续时间变化导致指纹不同）
-        alert_key = f"aliyun_cms-{alert_name}-{raw_metric_name}"
+        alert_key = f"aliyun_cms-{alert_name}-{raw_metric_name}-{instance_id}"
 
         return AlertCreate(
             alert_key=alert_key,
@@ -61,6 +62,7 @@ class AliyunCmsAdapter(AlertAdapter):
                 "raw_metric_name": raw_metric_name,
                 "expression": expression,
                 "metric_name": metric_name,
+                "instance_id": instance_id,
             },
             annotations={
                 "alert_name": alert_name,
