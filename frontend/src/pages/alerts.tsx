@@ -241,7 +241,7 @@ export function AlertsPage() {
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">告警名称</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">级别</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">来源</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">产品</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">命名空间</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">实例</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">时间</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">状态</th>

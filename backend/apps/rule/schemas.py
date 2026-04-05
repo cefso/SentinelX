@@ -9,9 +9,24 @@ from pydantic import BaseModel, Field
 # ============ 规则条件Schema ============
 
 class Condition(BaseModel):
-    """规则条件"""
+    """规则条件
+
+    支持的字段路径:
+    - 基础字段: alert_key, title, content, severity, status, source
+    - 云产品字段: namespace, instance_id, instance_name
+    - 指标字段: metric_name, metric_value
+    - 标签/注解/原始数据: labels.xxx, annotations.xxx, raw_data.xxx
+    - 统计字段: fire_count, repeat_count, escalation_count
+    - 时间字段: fired_at (ISO格式字符串)
+    - 追踪字段: trace_id
+
+    支持的操作符:
+    - 字符串: eq(等于), ne(不等于), contains(包含), not_contains(不包含), regex(正则), in(在列表中), not_in(不在列表中)
+    - 数值: gt(大于), gte(大于等于), lt(小于), lte(小于等于)
+    - 通用: exists(存在), is_empty(为空)
+    """
     field: str = Field(..., description="字段路径，如 severity/labels.cluster")
-    operator: str = Field(..., description="操作符: eq/ne/gt/gte/lt/lte/contains/regex/in/not_in")
+    operator: str = Field(..., description="操作符: eq/ne/gt/gte/lt/lte/contains/not_contains/regex/in/not_in/exists/is_empty")
     value: Any = Field(..., description="比较值")
 
 
@@ -137,3 +152,20 @@ class TemplateResponse(TemplateBase):
 
     class Config:
         from_attributes = True
+
+
+# ============ 字段值查询Schema ============
+
+class FieldValueItem(BaseModel):
+    """字段值项"""
+    value: str = Field(..., description="字段值")
+    count: int = Field(..., description="出现次数")
+
+
+class FieldValuesResponse(BaseModel):
+    """字段值查询响应"""
+    field: str = Field(..., description="字段路径")
+    values: List[FieldValueItem] = Field(default_factory=list, description="可选值列表")
+    total: int = Field(..., description="总数量")
+    limit: int = Field(..., description="本次返回数量")
+    offset: int = Field(..., description="分页偏移")

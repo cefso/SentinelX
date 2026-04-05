@@ -94,6 +94,10 @@ class ApiClient {
     return response.data
   }
 
+  async getRuleFieldValues(params: { field: string; search?: string; limit?: number; offset?: number }): Promise<{ field: string; values: { value: string; count: number }[]; total: number }> {
+    return this.get('/rules/field-values', params)
+  }
+
   async getCloudMetricsMap(): Promise<Record<string, CloudMetricRecord[]>> {
     const metrics = await this.get<CloudMetricRecord[]>('/cloud-metrics')
     // Group by namespace for easy lookup
