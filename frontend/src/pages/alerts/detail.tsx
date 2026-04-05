@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { RuleModal } from '../rules'
+import type { Condition } from '../rules'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
@@ -12,6 +14,50 @@ export function AlertDetailPage() {
   const queryClient = useQueryClient()
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [showAllAnnotations, setShowAllAnnotations] = useState(false)
+  const [showRuleModal, setShowRuleModal] = useState(false)
+  const [ruleInitialConditions, setRuleInitialConditions] = useState<Condition[]>([])
+
+  function generateInitialConditions(alertData: AlertResponse): Condition[] {
+    const conditions: Condition[] = []
+
+    // 预填充 labels，key 为第一个 label 的 key
+    if (alertData.labels && Object.keys(alertData.labels).length > 0) {
+      const firstKey = Object.keys(alertData.labels)[0]
+      conditions.push({
+        field: 'labels',
+        operator: 'eq',
+        value: alertData.labels[firstKey],
+        key: firstKey,  // 传递 key 给 RuleModal 用于初始化 labelsKey
+      })
+    }
+
+    // 补充其他关键字段
+    if (conditions.length < 5 && alertData.namespace) {
+      conditions.push({ field: 'namespace', operator: 'eq', value: alertData.namespace })
+    }
+
+    if (conditions.length < 5 && alertData.metric_name) {
+      conditions.push({ field: 'metric_name', operator: 'eq', value: alertData.metric_name })
+    }
+
+    if (conditions.length < 5 && alertData.source) {
+      conditions.push({ field: 'source', operator: 'eq', value: alertData.source })
+    }
+
+    if (conditions.length < 5 && alertData.severity) {
+      conditions.push({ field: 'severity', operator: 'eq', value: alertData.severity })
+    }
+
+    return conditions.slice(0, 5)
+  }
+
+  const handleCreateRule = () => {
+    if (alert) {
+      const conditions = generateInitialConditions(alert)
+      setRuleInitialConditions(conditions)
+      setShowRuleModal(true)
+    }
+  }
 
   const { data: alert, isLoading, error } = useQuery<AlertResponse>({
     queryKey: ['alert', id],
@@ -168,6 +214,12 @@ export function AlertDetailPage() {
               诊断
             </button>
           )}
+          <button
+            onClick={handleCreateRule}
+            className="px-4 py-2 border rounded-md hover:bg-gray-50"
+          >
+            创建规则
+          </button>
           <div className="relative group">
             <button
               className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
@@ -478,6 +530,18 @@ export function AlertDetailPage() {
           )}
         </div>
       </div>
+      {showRuleModal && (
+        <RuleModal
+          rule={null}
+          initialConditions={ruleInitialConditions}
+          showModal={showRuleModal}
+          onClose={() => setShowRuleModal(false)}
+          onSuccess={() => {
+            setShowRuleModal(false)
+            queryClient.invalidateQueries({ queryKey: ['rules'] })
+          }}
+        />
+      )}
     </div>
   )
 }
