@@ -6,6 +6,7 @@ export interface Condition {
   field: string
   operator: string
   value: any
+  key?: string  // 用于 labels 字段的 key 传递
 }
 
 interface Rule {
