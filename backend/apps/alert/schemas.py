@@ -43,19 +43,19 @@ class AlertSourceResponse(AlertSourceBase):
 # ============ 告警Schema ============
 
 class AlertBase(BaseModel):
-    alert_key: str = Field(..., min_length=1, max_length=256)
-    source: str = Field(..., min_length=1, max_length=64)
-    title: str = Field(..., min_length=1, max_length=512)
-    content: Optional[str] = None
-    severity: str = Field(..., pattern="^(critical|high|medium|low|info)$")
-    labels: Dict[str, Any] = {}
-    annotations: Dict[str, Any] = {}
-    metric_name: Optional[str] = None
-    metric_value: Optional[Any] = None
-    raw_data: Dict[str, Any] = {}
-    namespace: Optional[str] = None
-    instance_id: Optional[str] = None
-    instance_name: Optional[str] = None
+    alert_key: str = Field(..., min_length=1, max_length=256, description="告警键，告警唯一标识")
+    source: str = Field(..., min_length=1, max_length=64, description="告警来源")
+    title: str = Field(..., min_length=1, max_length=512, description="告警标题")
+    content: Optional[str] = Field(None, description="告警内容")
+    severity: str = Field(..., pattern="^(critical|high|medium|low|info)$", description="严重级别: critical/high/medium/low/info")
+    labels: Dict[str, Any] = Field(default_factory=dict, description="告警标签，K/V键值对")
+    annotations: Dict[str, Any] = Field(default_factory=dict, description="告警注解")
+    metric_name: Optional[str] = Field(None, description="指标名称")
+    metric_value: Optional[Any] = Field(None, description="指标值")
+    raw_data: Dict[str, Any] = Field(default_factory=dict, description="原始告警数据")
+    namespace: Optional[str] = Field(None, description="命名空间 / 云产品")
+    instance_id: Optional[str] = Field(None, description="实例ID")
+    instance_name: Optional[str] = Field(None, description="实例名称")
 
 
 class AlertCreate(AlertBase):
@@ -67,35 +67,35 @@ class AlertCreate(AlertBase):
 
 class AlertUpdate(BaseModel):
     """更新告警状态"""
-    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed)$")
-    severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low|info)$")
-    assignee_id: Optional[int] = None
-    assignee_name: Optional[str] = None
-    silenced_until: Optional[datetime] = None
-    annotations: Optional[Dict[str, Any]] = None
+    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed|acknowledged)$", description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)")
+    severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low|info)$", description="严重级别: critical/high/medium/low/info")
+    assignee_id: Optional[int] = Field(None, description="处理人ID")
+    assignee_name: Optional[str] = Field(None, description="处理人名称")
+    silenced_until: Optional[datetime] = Field(None, description="静默截止时间")
+    annotations: Optional[Dict[str, Any]] = Field(None, description="告警注解")
 
 
 class AlertResponse(AlertBase):
     """告警响应"""
-    id: int
-    tenant_id: str
-    source_id: Optional[int] = None
-    status: str
-    fingerprint: str
-    trace_id: Optional[str] = None
-    fire_count: int
-    repeat_count: int
-    assignee_id: Optional[int] = None
-    assignee_name: Optional[str] = None
-    fired_at: datetime
-    resolved_at: Optional[datetime] = None
-    acknowledged_at: Optional[datetime] = None
-    silenced_until: Optional[datetime] = None
-    escalation_count: int
-    matched_rules: List[Dict[str, Any]] = []
-    notification_channels: List[str] = []
-    created_at: datetime
-    updated_at: datetime
+    id: int = Field(..., description="告警ID")
+    tenant_id: str = Field(..., description="租户ID")
+    source_id: Optional[int] = Field(None, description="告警源ID")
+    status: str = Field(..., description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)")
+    fingerprint: str = Field(..., description="指纹")
+    trace_id: Optional[str] = Field(None, description="追踪ID")
+    fire_count: int = Field(..., description="触发次数")
+    repeat_count: int = Field(..., description="重复次数")
+    assignee_id: Optional[int] = Field(None, description="处理人ID")
+    assignee_name: Optional[str] = Field(None, description="处理人名称")
+    fired_at: datetime = Field(..., description="触发时间")
+    resolved_at: Optional[datetime] = Field(None, description="恢复时间")
+    acknowledged_at: Optional[datetime] = Field(None, description="确认时间")
+    silenced_until: Optional[datetime] = Field(None, description="静默截止时间")
+    escalation_count: int = Field(..., description="升级次数")
+    matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则列表")
+    notification_channels: List[str] = Field(default_factory=list, description="通知渠道列表")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
 
     class Config:
         from_attributes = True
@@ -129,49 +129,50 @@ class AlertAggregatedResponse(BaseModel):
 
 class AlertFilter(BaseModel):
     """告警过滤条件"""
-    status: Optional[str] = None
-    severity: Optional[List[str]] = None
-    source: Optional[str] = None
-    assignee_id: Optional[int] = None
-    labels: Optional[Dict[str, str]] = None  # 标签过滤
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    keyword: Optional[str] = None  # 搜索标题/内容
+    status: Optional[str] = Field(None, description="状态过滤")
+    severity: Optional[List[str]] = Field(None, description="严重级别列表")
+    source: Optional[str] = Field(None, description="告警来源过滤")
+    assignee_id: Optional[int] = Field(None, description="处理人ID过滤")
+    labels: Optional[Dict[str, str]] = Field(None, description="标签过滤")
+    start_time: Optional[datetime] = Field(None, description="开始时间")
+    end_time: Optional[datetime] = Field(None, description="结束时间")
+    keyword: Optional[str] = Field(None, description="搜索关键词(标题/内容)")
 
 
 # ============ 告警统计Schema ============
 
 class AlertStats(BaseModel):
     """告警统计"""
-    total: int
-    firing: int
-    resolved: int
-    suppressed: int
-    critical: int
-    high: int
-    medium: int
-    low: int
-    info: int
-    unassigned: int
-    unique: int
-    today: int
-    firing_critical: int
-    firing_high: int
+    total: int = Field(..., description="总告警数")
+    firing: int = Field(..., description="触发中告警数")
+    resolved: int = Field(..., description="已恢复告警数")
+    suppressed: int = Field(..., description="已抑制告警数")
+    critical: int = Field(..., description="Critical级别数")
+    high: int = Field(..., description="High级别数")
+    medium: int = Field(..., description="Medium级别数")
+    low: int = Field(..., description="Low级别数")
+    info: int = Field(..., description="Info级别数")
+    unassigned: int = Field(..., description="未指派告警数")
+    unique: int = Field(..., description="去重告警数(不同指纹)")
+    today: int = Field(..., description="今日新增告警数")
+    firing_critical: int = Field(..., description="触发中Critical告警数")
+    firing_high: int = Field(..., description="触发中High告警数")
 
 
 # ============ 告警历史Schema ============
 
 class AlertHistoryResponse(BaseModel):
-    id: int
-    tenant_id: str
-    alert_id: int
-    action: str
-    description: Optional[str] = None
-    operator_id: Optional[int] = None
-    operator_name: Optional[str] = None
-    old_value: Optional[Dict] = None
-    new_value: Optional[Dict] = None
-    created_at: datetime
+    """告警历史"""
+    id: int = Field(..., description="历史记录ID")
+    tenant_id: str = Field(..., description="租户ID")
+    alert_id: int = Field(..., description="告警ID")
+    action: str = Field(..., description="操作类型: state_change/assign/escalate/silence/annotate")
+    description: Optional[str] = Field(None, description="操作描述")
+    operator_id: Optional[int] = Field(None, description="操作人ID")
+    operator_name: Optional[str] = Field(None, description="操作人名称")
+    old_value: Optional[Dict] = Field(None, description="变更前的值")
+    new_value: Optional[Dict] = Field(None, description="变更后的值")
+    created_at: datetime = Field(..., description="操作时间")
 
     class Config:
         from_attributes = True
@@ -181,20 +182,20 @@ class AlertHistoryResponse(BaseModel):
 
 class TraceStep(BaseModel):
     """追踪步骤"""
-    step: int
-    type: str  # received/dedup_check/suppress_check/rule_match/notification_sent等
-    title: str
-    description: str
-    status: str  # success/passed/failed/blocked
-    details: Optional[Dict] = None
-    reason: Optional[str] = None
-    time: Optional[str] = None
+    step: int = Field(..., description="步骤序号")
+    type: str = Field(..., description="步骤类型: received/dedup_check/suppress_check/rule_match/notification_sent等")
+    title: str = Field(..., description="步骤标题")
+    description: str = Field(..., description="步骤描述")
+    status: str = Field(..., description="状态: success/passed/failed/blocked")
+    details: Optional[Dict] = Field(None, description="详细信息")
+    reason: Optional[str] = Field(None, description="原因")
+    time: Optional[str] = Field(None, description="执行时间")
 
 
 class DiagnosisResponse(BaseModel):
     """诊断结果"""
-    trace_id: str
-    summary: Dict[str, Any]
-    matched_rules: List[Dict[str, Any]] = []
-    flow_steps: List[TraceStep] = []
-    timeline: List[Dict[str, str]] = []
+    trace_id: str = Field(..., description="追踪ID")
+    summary: Dict[str, Any] = Field(default_factory=dict, description="处理摘要")
+    matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则")
+    flow_steps: List[TraceStep] = Field(default_factory=list, description="处理流程步骤")
+    timeline: List[Dict[str, str]] = Field(default_factory=list, description="时间线")

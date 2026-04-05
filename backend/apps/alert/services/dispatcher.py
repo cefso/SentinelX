@@ -201,14 +201,34 @@ class AlertDispatcher:
         """
         await self._add_trace_step(trace_id, "rule_match", "规则匹配", "processing", {})
 
-        # 准备告警数据
+        # 准备告警数据 - 补充所有可用于规则匹配的字段
         alert_data = {
+            # 基础字段
+            "alert_key": alert.alert_key,
+            "title": alert.title,
+            "content": alert.content,
             "severity": alert.severity,
+            "status": alert.status,
             "source": alert.source,
-            "labels": alert.labels or {},
-            "annotations": alert.annotations or {},
+            # 云产品字段
+            "namespace": alert.namespace,
+            "instance_id": alert.instance_id,
+            "instance_name": alert.instance_name,
+            # 指标字段
             "metric_name": alert.metric_name,
             "metric_value": alert.metric_value,
+            # 标签/注解/原始数据
+            "labels": alert.labels or {},
+            "annotations": alert.annotations or {},
+            "raw_data": alert.raw_data or {},
+            # 统计字段
+            "fire_count": alert.fire_count,
+            "repeat_count": alert.repeat_count,
+            "escalation_count": alert.escalation_count,
+            # 时间字段
+            "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
+            # 追踪字段
+            "trace_id": alert.trace_id,
         }
 
         # 使用规则引擎匹配
