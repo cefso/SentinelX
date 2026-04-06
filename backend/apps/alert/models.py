@@ -158,6 +158,33 @@ class AlertTrace(Base):
     expired_at = Column(DateTime)  # 7天后过期
 
 
+class AlertAggregateGroup(Base):
+    """告警聚合组"""
+
+    __tablename__ = "alert_aggregate_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    group_key = Column(String(256), nullable=False, index=True)
+    rule_id = Column(Integer, ForeignKey("alert_rules.id"), nullable=True)
+    alert_count = Column(Integer, default=1)
+    fired_at = Column(DateTime, nullable=True)
+    last_alert_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AlertAggregateMember(Base):
+    """告警聚合组成员"""
+
+    __tablename__ = "alert_aggregate_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("alert_aggregate_groups.id"), nullable=False)
+    alert_id = Column(Integer, nullable=False, index=True)
+    added_at = Column(DateTime, default=datetime.utcnow)
+
+
 class CloudProductMetric(Base):
     """云产品指标映射"""
 

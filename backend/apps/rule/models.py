@@ -38,6 +38,9 @@ class AlertRule(Base):
     # 聚合配置
     aggregate_config = Column(JSON, nullable=True)  # 聚合配置
 
+    # 去重配置
+    deduplication_config = Column(JSON, nullable=True)  # 去重配置
+
     # 统计
     match_count = Column(Integer, default=0)  # 累计匹配次数
     last_match_at = Column(DateTime, nullable=True)

@@ -116,6 +116,13 @@ export function AlertDetailPage() {
   const [aiAnalysis, setAiAnalysis] = useState<any>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [aggregatedExpanded, setAggregatedExpanded] = useState(false)
+
+  const { data: aggregatedAlerts = [], isLoading: aggregatedLoading } = useQuery<AlertResponse[]>({
+    queryKey: ['alertAggregated', alert?.id],
+    queryFn: () => apiClient.get(`/alerts/${alert!.id}/aggregated-members`),
+    enabled: !!alert?.id,
+  })
 
   const handleAIAction = async (action: string) => {
     if (!alert) return
@@ -525,6 +532,56 @@ export function AlertDetailPage() {
                       </div>
                     ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 聚合告警卡片 */}
+          {!aggregatedLoading && aggregatedAlerts.length > 1 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">聚合告警 ({aggregatedAlerts.length}条)</h2>
+                <button
+                  onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
+                  className="text-xs text-blue-600 hover:text-blue-700"
+                >
+                  {aggregatedExpanded ? '收起' : '全部展开'}
+                </button>
+              </div>
+              <div className="space-y-2">
+                {(aggregatedExpanded ? aggregatedAlerts : aggregatedAlerts.slice(0, 3)).map((item) => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
+                      item.id === alert.id ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                    onClick={() => item.id !== alert.id && navigate(`/alerts/${item.id}`)}
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${
+                      item.severity === 'critical' ? 'bg-red-500' :
+                      item.severity === 'high' ? 'bg-orange-500' :
+                      item.severity === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                    }`} />
+                    <span className="text-xs text-gray-500 shrink-0">
+                      {new Date(item.fired_at).toLocaleString('zh-CN')}
+                    </span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                      item.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                      item.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                      item.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                    }`}>{item.severity?.toUpperCase()}</span>
+                    <span className="flex-1 text-xs truncate">{item.title}</span>
+                    {item.id === alert.id && <span className="text-xs text-yellow-600 shrink-0">当前</span>}
+                  </div>
+                ))}
+                {!aggregatedExpanded && aggregatedAlerts.length > 3 && (
+                  <button
+                    onClick={() => setAggregatedExpanded(true)}
+                    className="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-1"
+                  >
+                    点击展开查看全部 {aggregatedAlerts.length} 条聚合告警
+                  </button>
+                )}
               </div>
             </div>
           )}

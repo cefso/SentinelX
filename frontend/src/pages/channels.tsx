@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { Send, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 
 interface Channel {
   id: number
@@ -17,6 +18,24 @@ interface Channel {
   created_at: string
 }
 
+interface TestResult {
+  success: boolean
+  error?: string
+  response_data?: Record<string, any>
+}
+
+interface NotificationRecord {
+  id: number
+  alert_id: number
+  channel_id: number
+  channel_type: string
+  status: string
+  error_message?: string
+  retry_count: number
+  created_at: string
+  sent_at?: string
+}
+
 const CHANNEL_TYPES = [
   { value: 'dingtalk', label: '钉钉', icon: '🔔' },
   { value: 'feishu', label: '飞书', icon: '✈️' },
@@ -31,10 +50,30 @@ export function ChannelsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [filter, setFilter] = useState<string>('all')
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [testContent, setTestContent] = useState('')
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [activeTab, setActiveTab] = useState<'channels' | 'records'>('channels')
+  const [recordFilter, setRecordFilter] = useState<string>('all')
+  const [recordPage, setRecordPage] = useState(0)
 
   const { data: channels = [], isLoading } = useQuery<Channel[]>({
     queryKey: ['channels'],
     queryFn: () => apiClient.get('/channels'),
+  })
+
+  const { data: notificationRecords, isLoading: recordsLoading } = useQuery<{
+    items: NotificationRecord[]
+    total: number
+    limit: number
+    offset: number
+  }>({
+    queryKey: ['notification-records', recordFilter, recordPage],
+    queryFn: () => apiClient.get('/notifications', {
+      channel_type: recordFilter === 'all' ? undefined : recordFilter,
+      limit: 20,
+      offset: recordPage * 20,
+    }),
   })
 
   const filteredChannels = filter === 'all'
@@ -50,6 +89,13 @@ export function ChannelsPage() {
     mutationFn: ({ channelId, is_active }: { channelId: number; is_active: boolean }) =>
       apiClient.put(`/channels/${channelId}`, { is_active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['channels'] }),
+  })
+
+  const testMutation = useMutation({
+    mutationFn: ({ channelId, content }: { channelId: number; content?: string }) =>
+      apiClient.post<TestResult>(`/channels/${channelId}/test`, content ? { content } : {}),
+    onSuccess: (result) => setTestResult(result),
+    onError: (err: any) => setTestResult({ success: false, error: err.response?.data?.detail || '请求失败' }),
   })
 
   const handleEdit = (channel: Channel) => {
@@ -77,6 +123,23 @@ export function ChannelsPage() {
         </button>
       </div>
 
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => setActiveTab('channels')}
+          className={`px-3 py-1 rounded ${activeTab === 'channels' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
+        >
+          渠道管理 ({channels.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('records')}
+          className={`px-3 py-1 rounded ${activeTab === 'records' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
+        >
+          通知记录 {notificationRecords && `(${notificationRecords.total})`}
+        </button>
+      </div>
+
+      {activeTab === 'channels' && (
+      <>
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => setFilter('all')}
@@ -117,6 +180,17 @@ export function ChannelsPage() {
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setEditingChannel(channel)
+                        setShowTestModal(true)
+                      }}
+                      disabled={!channel.is_active}
+                      className="text-green-600 hover:text-green-800 text-sm disabled:opacity-30"
+                      title={channel.is_active ? '发送测试消息' : '请先启用渠道'}
+                    >
+                      测试
+                    </button>
                     <button
                       onClick={() => handleEdit(channel)}
                       className="text-blue-600 hover:text-blue-800 text-sm"
@@ -194,6 +268,109 @@ export function ChannelsPage() {
           })
         )}
       </div>
+      )</React.Fragment> {/* end channels tab */}
+
+      {activeTab === 'records' && (
+      <>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => { setRecordFilter('all'); setRecordPage(0) }}
+          className={`px-3 py-1 rounded ${recordFilter === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
+        >
+          全部
+        </button>
+        {CHANNEL_TYPES.map((type) => (
+          <button
+            key={type.value}
+            onClick={() => { setRecordFilter(type.value); setRecordPage(0) }}
+            className={`px-3 py-1 rounded ${recordFilter === type.value ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
+          >
+            {type.icon} {type.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-lg shadow">
+        {recordsLoading ? (
+          <div className="p-8 text-center">加载中...</div>
+        ) : !notificationRecords || notificationRecords.items.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">暂无通知记录</div>
+        ) : (
+          <>
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">时间</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">渠道</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">告警ID</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">状态</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">错误信息</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">重试</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {notificationRecords.items.map((record) => {
+                  const typeInfo = CHANNEL_TYPES.find(t => t.value === record.channel_type)
+                  return (
+                    <tr key={record.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {new Date(record.created_at).toLocaleString('zh-CN')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm">
+                          {typeInfo?.icon} {typeInfo?.label || record.channel_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-blue-600">#{record.alert_id}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 text-xs rounded ${
+                          record.status === 'sent' ? 'bg-green-100 text-green-800' :
+                          record.status === 'failed' ? 'bg-red-100 text-red-800' :
+                          record.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {record.status === 'sent' ? '已发送' :
+                           record.status === 'failed' ? '失败' :
+                           record.status === 'pending' ? '待发送' : record.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-red-600 max-w-xs truncate">
+                        {record.error_message || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {record.retry_count} 次
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="p-4 border-t flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                共 {notificationRecords.total} 条记录
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRecordPage(p => Math.max(0, p - 1))}
+                  disabled={recordPage === 0}
+                  className="px-3 py-1 border rounded disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                <span className="px-3 py-1 text-sm">第 {recordPage + 1} 页</span>
+                <button
+                  onClick={() => setRecordPage(p => p + 1)}
+                  disabled={notificationRecords.items.length < 20}
+                  className="px-3 py-1 border rounded disabled:opacity-50"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      )</React.Fragment> {/* end records tab */}
 
       {showModal && (
         <ChannelModal
@@ -204,6 +381,70 @@ export function ChannelsPage() {
             queryClient.invalidateQueries({ queryKey: ['channels'] })
           }}
         />
+      )}
+
+      {showTestModal && editingChannel && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold">测试发送 - {editingChannel.name}</h2>
+              <p className="text-sm text-gray-500 mt-1">渠道类型: {editingChannel.channel_type}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  测试消息内容 (可选)
+                </label>
+                <textarea
+                  value={testContent}
+                  onChange={(e) => setTestContent(e.target.value)}
+                  placeholder="留空将使用默认测试内容"
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                  rows={3}
+                />
+              </div>
+
+              {testResult && (
+                <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                  <div className="flex items-center gap-2">
+                    {testResult.success ? (
+                      <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    )}
+                    <span className={`font-medium ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                      {testResult.success ? '发送成功' : '发送失败'}
+                    </span>
+                  </div>
+                  {testResult.error && (
+                    <p className="text-sm text-red-600 mt-1 ml-7">{testResult.error}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTestModal(false)
+                  setTestContent('')
+                  setTestResult(null)
+                }}
+                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              >
+                关闭
+              </button>
+              <button
+                onClick={() => testMutation.mutate({ channelId: editingChannel.id, content: testContent })}
+                disabled={testMutation.isPending}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {testMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {testMutation.isPending ? '发送中...' : '发送测试消息'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

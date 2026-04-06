@@ -192,6 +192,30 @@ class TraceStep(BaseModel):
     time: Optional[str] = Field(None, description="执行时间")
 
 
+class AlertAggregateMemberItem(BaseModel):
+    """聚合告警组成员项"""
+    alert_id: int = Field(..., description="告警ID")
+    title: str = Field(..., description="告警标题")
+    severity: str = Field(..., description="严重级别")
+    fired_at: datetime = Field(..., description="触发时间")
+    source: str = Field(..., description="告警来源")
+    status: str = Field(..., description="状态")
+    added_at: datetime = Field(..., description="加入时间")
+
+    class Config:
+        from_attributes = True
+
+
+class AlertAggregateMembersResponse(BaseModel):
+    """聚合告警组成员响应"""
+    items: List[AlertAggregateMemberItem] = Field(default_factory=list, description="成员列表")
+    total: int = Field(..., description="总数")
+    group_key: str = Field(..., description="聚合组Key")
+    alert_count: int = Field(..., description="组内告警数")
+    page: int = Field(..., description="当前页")
+    page_size: int = Field(..., description="每页数量")
+
+
 class DiagnosisResponse(BaseModel):
     """诊断结果"""
     trace_id: str = Field(..., description="追踪ID")

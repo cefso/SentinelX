@@ -9,14 +9,12 @@ from sqlalchemy import select, func
 
 from apps.core.database import get_db
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
-from apps.rule.models import AlertRule, NotificationChannel, NotificationTemplate
+from apps.rule.models import AlertRule
 from apps.alert.models import Alert, AlertSource
 from apps.tenant.models import User, UserTenant
 from apps.core.redis import RedisClient
 from apps.rule.schemas import (
     RuleCreate, RuleUpdate, RuleResponse, RuleTestRequest, RuleTestResponse,
-    ChannelCreate, ChannelUpdate, ChannelResponse,
-    TemplateCreate, TemplateUpdate, TemplateResponse,
     FieldValuesResponse, FieldValueItem,
 )
 
@@ -30,12 +28,6 @@ SUPPORTED_SIMPLE_FIELDS = {
     "instance_id",
     "instance_name",
     "status",
-}
-SUPPORTED_LABEL_PATHS = {
-    "labels",
-    "labels.cluster",
-    "labels.env",
-    "labels.service",
 }
 
 
@@ -75,6 +67,7 @@ async def create_rule(
         is_active=request.is_active,
         suppress_config=request.suppress_config,
         aggregate_config=request.aggregate_config,
+        deduplication_config=request.deduplication_config,
     )
     db.add(rule)
     await db.commit()
@@ -551,134 +544,3 @@ async def _get_label_keys(
     ]
     return FieldValuesResponse(field="labels", values=values, total=total, limit=limit, offset=offset)
 
-
-# ============ 通知渠道管理 ============
-
-@router.get("/channels", response_model=list[ChannelResponse])
-async def list_channels(
-    is_active: Optional[bool] = None,
-    channel_type: Optional[str] = None,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取通知渠道列表"""
-    query = select(NotificationChannel).where(NotificationChannel.tenant_id == str(tenant_id))
-    if is_active is not None:
-        query = query.where(NotificationChannel.is_active == is_active)
-    if channel_type:
-        query = query.where(NotificationChannel.channel_type == channel_type)
-    result = await db.execute(query.order_by(NotificationChannel.id))
-    return result.scalars().all()
-
-
-@router.post("/channels", response_model=ChannelResponse)
-async def create_channel(
-    request: ChannelCreate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """创建通知渠道"""
-    channel = NotificationChannel(
-        tenant_id=str(tenant_id),
-        name=request.name,
-        code=request.code,
-        channel_type=request.channel_type,
-        config=request.config,
-        is_active=request.is_active,
-        is_default=request.is_default,
-    )
-    db.add(channel)
-    await db.commit()
-    await db.refresh(channel)
-    return channel
-
-
-@router.put("/channels/{channel_id}", response_model=ChannelResponse)
-async def update_channel(
-    channel_id: int,
-    request: ChannelUpdate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """更新通知渠道"""
-    result = await db.execute(
-        select(NotificationChannel).where(
-            NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == str(tenant_id)
-        )
-    )
-    channel = result.scalar_one_or_none()
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
-
-    for field, value in request.model_dump(exclude_unset=True).items():
-        setattr(channel, field, value)
-
-    await db.commit()
-    await db.refresh(channel)
-    return channel
-
-
-# ============ 通知模板管理 ============
-
-@router.get("/templates", response_model=list[TemplateResponse])
-async def list_templates(
-    channel_type: Optional[str] = None,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取通知模板列表"""
-    query = select(NotificationTemplate).where(NotificationTemplate.tenant_id == str(tenant_id))
-    if channel_type:
-        query = query.where(NotificationTemplate.channel_type == channel_type)
-    result = await db.execute(query.order_by(NotificationTemplate.id))
-    return result.scalars().all()
-
-
-@router.post("/templates", response_model=TemplateResponse)
-async def create_template(
-    request: TemplateCreate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """创建通知模板"""
-    template = NotificationTemplate(
-        tenant_id=str(tenant_id),
-        name=request.name,
-        code=request.code,
-        channel_type=request.channel_type,
-        content=request.content,
-        variables=request.variables,
-        is_active=request.is_active,
-        is_default=request.is_default,
-    )
-    db.add(template)
-    await db.commit()
-    await db.refresh(template)
-    return template
-
-
-@router.put("/templates/{template_id}", response_model=TemplateResponse)
-async def update_template(
-    template_id: int,
-    request: TemplateUpdate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """更新通知模板"""
-    result = await db.execute(
-        select(NotificationTemplate).where(
-            NotificationTemplate.id == template_id,
-            NotificationTemplate.tenant_id == str(tenant_id)
-        )
-    )
-    template = result.scalar_one_or_none()
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    for field, value in request.model_dump(exclude_unset=True).items():
-        setattr(template, field, value)
-
-    await db.commit()
-    await db.refresh(template)
-    return template

@@ -10,8 +10,8 @@ from sqlalchemy import select, or_
 
 from apps.notify.models import NotificationRecord
 from apps.notify.channels import ChannelFactory
-from apps.alert.models import Alert, NotificationChannel as ChannelModel
-from apps.rule.models import NotificationTemplate
+from apps.alert.models import Alert
+from apps.rule.models import NotificationChannel as ChannelModel, NotificationTemplate
 
 logger = structlog.get_logger()
 

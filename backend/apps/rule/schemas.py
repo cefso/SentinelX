@@ -2,7 +2,7 @@
 SentinelX - 规则Schema
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -28,6 +28,7 @@ class Condition(BaseModel):
     field: str = Field(..., description="字段路径，如 severity/labels.cluster")
     operator: str = Field(..., description="操作符: eq/ne/gt/gte/lt/lte/contains/not_contains/regex/in/not_in/exists/is_empty")
     value: Any = Field(..., description="比较值")
+    key: Optional[str] = Field(None, description="标签字段的 key（用于 labels 字段的初始化）")
 
 
 class RuleBase(BaseModel):
@@ -40,6 +41,61 @@ class RuleBase(BaseModel):
     priority: int = Field(0, ge=0, le=1000)
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
+    deduplication_config: Optional[Dict[str, Any]] = None
+
+
+# ============ 去重/抑制/聚合Config Schema ============
+
+
+class DimensionsConfig(BaseModel):
+    """维度配置"""
+    by_severity: bool = False
+    by_source: bool = False
+
+
+class MaintenanceWindowConfig(BaseModel):
+    """维护窗口配置"""
+    cluster_labels: List[str] = []
+    duration_minutes: int = 60
+
+
+class RuleBasedSuppressionCondition(BaseModel):
+    """基于规则的抑制条件"""
+    field: str
+    operator: str
+    value: Any = None
+
+
+class RuleBasedSuppressionConfig(BaseModel):
+    """基于规则的抑制配置"""
+    conditions: List[RuleBasedSuppressionCondition] = []
+    delay_seconds: int = 0
+
+
+class SuppressionConfig(BaseModel):
+    """抑制配置"""
+    enabled: bool = False
+    type: Literal["maintenance_window", "rule_based"] = "maintenance_window"
+    maintenance_window: Optional[MaintenanceWindowConfig] = None
+    rule_based: Optional[RuleBasedSuppressionConfig] = None
+
+
+class DeduplicationConfig(BaseModel):
+    """去重配置"""
+    enabled: bool = False
+    fingerprint_fields: List[str] = []
+    window_seconds: int = 300
+    dimensions: DimensionsConfig = Field(default_factory=DimensionsConfig)
+    strategy: Literal["first", "last"] = "first"
+
+
+class AggregationConfig(BaseModel):
+    """聚合配置"""
+    enabled: bool = False
+    group_by: List[str] = []
+    window_seconds: int = 300
+    max_count: int = 100
+    store_original_alerts: bool = False
 
 
 class RuleCreate(RuleBase):
@@ -56,6 +112,7 @@ class RuleUpdate(BaseModel):
     is_active: Optional[bool] = None
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
+    deduplication_config: Optional[Dict[str, Any]] = None
 
 
 class RuleResponse(RuleBase):
