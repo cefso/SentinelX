@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
 import { useCloudMetricsMap, useProductName, useMetricDesc } from '@/hooks/useCloudMetrics'
-import { Send, CheckCircle, AlertCircle, XCircle, Clock, Circle } from 'lucide-react'
+import { Send, CheckCircle, AlertCircle, XCircle, Clock, Circle, ChevronDown } from 'lucide-react'
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -536,25 +536,36 @@ export function AlertDetailPage() {
             </div>
           )}
 
-          {/* 聚合告警卡片 */}
-          {!aggregatedLoading && aggregatedAlerts.length > 1 && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">聚合告警 ({aggregatedAlerts.length}条)</h2>
-                <button
-                  onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
-                  className="text-xs text-blue-600 hover:text-blue-700"
-                >
-                  {aggregatedExpanded ? '收起' : '全部展开'}
-                </button>
-              </div>
-              <div className="space-y-2">
-                {(aggregatedExpanded ? aggregatedAlerts : aggregatedAlerts.slice(0, 3)).map((item) => (
+        </div>
+      </div>
+      {/* 聚合告警折叠区域 */}
+      {!aggregatedLoading && aggregatedAlerts.length > 1 && (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <button
+            onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-700">聚合告警</span>
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                {aggregatedAlerts.length}条
+              </span>
+            </div>
+            <ChevronDown
+              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+                aggregatedExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+          {aggregatedExpanded && (
+            <div className="border-t">
+              <div className="divide-y">
+                {aggregatedAlerts.map((item) => (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
-                      item.id === alert.id ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 hover:bg-gray-100'
-                    }`}
+                    className={`flex items-center gap-3 px-6 py-3 ${
+                      item.id === alert.id ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                    } cursor-pointer transition-colors`}
                     onClick={() => item.id !== alert.id && navigate(`/alerts/${item.id}`)}
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${
@@ -570,23 +581,18 @@ export function AlertDetailPage() {
                       item.severity === 'high' ? 'bg-orange-100 text-orange-800' :
                       item.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
                     }`}>{item.severity?.toUpperCase()}</span>
-                    <span className="flex-1 text-xs truncate">{item.title}</span>
-                    {item.id === alert.id && <span className="text-xs text-yellow-600 shrink-0">当前</span>}
+                    <span className="flex-1 text-sm text-gray-800 truncate">{item.title}</span>
+                    {item.id === alert.id && (
+                      <span className="text-xs text-yellow-600 shrink-0 font-medium">当前告警</span>
+                    )}
                   </div>
                 ))}
-                {!aggregatedExpanded && aggregatedAlerts.length > 3 && (
-                  <button
-                    onClick={() => setAggregatedExpanded(true)}
-                    className="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-1"
-                  >
-                    点击展开查看全部 {aggregatedAlerts.length} 条聚合告警
-                  </button>
-                )}
               </div>
             </div>
           )}
         </div>
-      </div>
+      )}
+
       {showRuleModal && (
         <RuleModal
           rule={null}

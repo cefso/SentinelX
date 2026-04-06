@@ -258,20 +258,82 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
   // Deduplication config state
   const [deduplicationConfig, setDeduplicationConfig] = useState({
     enabled: rule?.deduplication_config?.enabled ?? false,
+    mode: (rule?.deduplication_config?.mode ?? 'fingerprint') as 'fingerprint' | 'condition',
     fingerprint_fields: rule?.deduplication_config?.fingerprint_fields ?? ['alert_key'],
     window_seconds: rule?.deduplication_config?.window_seconds ?? 300,
     dimensions: rule?.deduplication_config?.dimensions ?? { by_severity: false, by_source: false },
     strategy: (rule?.deduplication_config?.strategy ?? 'first') as 'first' | 'last',
+    condition_mode: rule?.deduplication_config?.condition_mode ?? 'and',
+    conditions: rule?.deduplication_config?.conditions ?? [],
   })
 
   // Aggregation config state
   const [aggregationConfig, setAggregationConfig] = useState({
     enabled: rule?.aggregate_config?.enabled ?? false,
+    mode: (rule?.aggregate_config?.mode ?? 'group_by') as 'group_by' | 'condition',
     window_seconds: rule?.aggregate_config?.window_seconds ?? 300,
     group_by: rule?.aggregate_config?.group_by ?? [],
     max_count: rule?.aggregate_config?.max_count ?? 10,
     store_original_alerts: rule?.aggregate_config?.store_original_alerts ?? false,
+    condition_mode: rule?.aggregate_config?.condition_mode ?? 'and',
+    conditions: rule?.aggregate_config?.conditions ?? [],
   })
+
+  // Preview modal state
+  const [previewModal, setPreviewModal] = useState<{
+    open: boolean
+    type: 'dedup' | 'aggregate'
+    title: string
+  }>({ open: false, type: 'dedup', title: '' })
+  const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewTotal, setPreviewTotal] = useState(0)
+  const [previewPage, setPreviewPage] = useState(1)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewPageSize = 10
+
+  const fetchPreview = async (type: 'dedup' | 'aggregate', page: number) => {
+    setPreviewLoading(true)
+    setPreviewPage(page)
+    try {
+      const payload = type === 'dedup' ? {
+        conditions: formData.conditions,
+        condition_mode: formData.condition_mode,
+        deduplication_config: deduplicationConfig.enabled ? {
+          mode: deduplicationConfig.mode,
+          window_seconds: deduplicationConfig.window_seconds,
+          fingerprint_fields: deduplicationConfig.fingerprint_fields,
+          dimensions: deduplicationConfig.dimensions,
+          strategy: deduplicationConfig.strategy,
+          condition_mode: deduplicationConfig.condition_mode,
+          conditions: deduplicationConfig.conditions,
+        } : null,
+      } : {
+        conditions: formData.conditions,
+        condition_mode: formData.condition_mode,
+        aggregate_config: aggregationConfig.enabled ? {
+          mode: aggregationConfig.mode,
+          window_seconds: aggregationConfig.window_seconds,
+          group_by: aggregationConfig.group_by,
+          max_count: aggregationConfig.max_count,
+          store_original_alerts: aggregationConfig.store_original_alerts,
+          condition_mode: aggregationConfig.condition_mode,
+          conditions: aggregationConfig.conditions,
+        } : null,
+      }
+      const result = await apiClient.post<{ alerts: any[]; total: number }>(
+        type === 'dedup' ? '/rules/preview-dedup' : '/rules/preview-aggregate',
+        { ...payload, page, page_size: previewPageSize }
+      )
+      setPreviewData(result.alerts || [])
+      setPreviewTotal(result.total || 0)
+    } catch (err) {
+      console.error('Preview failed:', err)
+      setPreviewData([])
+      setPreviewTotal(0)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   // Suppression config state
   const [suppressionConfig, setSuppressionConfig] = useState({
@@ -402,8 +464,26 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       condition_mode: formData.condition_mode,
       priority: formData.priority,
       actions,
-      deduplication_config: deduplicationConfig.enabled ? deduplicationConfig : null,
-      aggregate_config: aggregationConfig.enabled ? aggregationConfig : null,
+      deduplication_config: deduplicationConfig.enabled ? {
+        enabled: true,
+        mode: deduplicationConfig.mode,
+        window_seconds: deduplicationConfig.window_seconds,
+        fingerprint_fields: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.fingerprint_fields : undefined,
+        dimensions: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.dimensions : undefined,
+        strategy: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.strategy : undefined,
+        condition_mode: deduplicationConfig.mode === 'condition' ? deduplicationConfig.condition_mode : undefined,
+        conditions: deduplicationConfig.mode === 'condition' ? deduplicationConfig.conditions : undefined,
+      } : null,
+      aggregate_config: aggregationConfig.enabled ? {
+        enabled: true,
+        mode: aggregationConfig.mode,
+        window_seconds: aggregationConfig.window_seconds,
+        group_by: aggregationConfig.mode === 'group_by' ? aggregationConfig.group_by : undefined,
+        max_count: aggregationConfig.max_count,
+        store_original_alerts: aggregationConfig.store_original_alerts,
+        condition_mode: aggregationConfig.mode === 'condition' ? aggregationConfig.condition_mode : undefined,
+        conditions: aggregationConfig.mode === 'condition' ? aggregationConfig.conditions : undefined,
+      } : null,
       suppress_config: suppressionConfig.enabled ? {
         enabled: true,
         type: suppressionConfig.type,
@@ -1024,70 +1104,195 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                     />
                     <span className="text-sm text-gray-500">秒</span>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm text-gray-600 w-20">指纹字段:</span>
-                    {['alert_key', 'source', 'namespace', 'severity', 'instance_id', 'metric_name'].map((field) => (
-                      <label key={field} className="flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={deduplicationConfig.fingerprint_fields.includes(field)}
-                          onChange={(e) => {
-                            const fields = deduplicationConfig.fingerprint_fields
-                            if (e.target.checked) {
-                              setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: [...fields, field] })
-                            } else {
-                              setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: fields.filter(f => f !== field) })
-                            }
-                          }}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{field}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm text-gray-600 w-20">维度细分:</span>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={deduplicationConfig.dimensions.by_severity}
-                        onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_severity: e.target.checked } })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">按 severity</span>
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={deduplicationConfig.dimensions.by_source}
-                        onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_source: e.target.checked } })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">按 source</span>
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600 w-20">策略:</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
                     <label className="flex items-center gap-1">
                       <input
                         type="radio"
-                        name="dedup-strategy"
-                        checked={deduplicationConfig.strategy === 'first'}
-                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'first' })}
+                        name="dedup-mode"
+                        checked={deduplicationConfig.mode === 'fingerprint'}
+                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'fingerprint' })}
                         className="rounded"
                       />
-                      <span className="text-sm">首次</span>
+                      <span className="text-sm">指纹模式</span>
                     </label>
                     <label className="flex items-center gap-1">
                       <input
                         type="radio"
-                        name="dedup-strategy"
-                        checked={deduplicationConfig.strategy === 'last'}
-                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'last' })}
+                        name="dedup-mode"
+                        checked={deduplicationConfig.mode === 'condition'}
+                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'condition' })}
                         className="rounded"
                       />
-                      <span className="text-sm">最后</span>
+                      <span className="text-sm">条件模式</span>
                     </label>
+                  </div>
+
+                  {deduplicationConfig.mode === 'fingerprint' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">指纹字段:</span>
+                        {['alert_key', 'source', 'namespace', 'severity', 'instance_id', 'metric_name'].map((field) => (
+                          <label key={field} className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={deduplicationConfig.fingerprint_fields.includes(field)}
+                              onChange={(e) => {
+                                const fields = deduplicationConfig.fingerprint_fields
+                                if (e.target.checked) {
+                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: [...fields, field] })
+                                } else {
+                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: fields.filter((f: string) => f !== field) })
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">{field}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">维度细分:</span>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={deduplicationConfig.dimensions.by_severity}
+                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_severity: e.target.checked } })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">按 severity</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={deduplicationConfig.dimensions.by_source}
+                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_source: e.target.checked } })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">按 source</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">策略:</span>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="dedup-strategy"
+                            checked={deduplicationConfig.strategy === 'first'}
+                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'first' })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">首次</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="dedup-strategy"
+                            checked={deduplicationConfig.strategy === 'last'}
+                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'last' })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">最后</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {deduplicationConfig.mode === 'condition' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
+                        <select
+                          value={deduplicationConfig.condition_mode}
+                          onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, condition_mode: e.target.value })}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="and">AND (全部满足)</option>
+                          <option value="or">OR (任一满足)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        {deduplicationConfig.conditions.map((cond: any, idx: number) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <select
+                              value={cond.field}
+                              onChange={(e) => {
+                                const conditions = [...deduplicationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], field: e.target.value }
+                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="alert_key">告警Key</option>
+                              <option value="source">告警来源</option>
+                              <option value="severity">严重级别</option>
+                              <option value="namespace">命名空间</option>
+                              <option value="instance_id">实例ID</option>
+                              <option value="metric_name">指标</option>
+                              <option value="title">标题</option>
+                              <option value="content">内容</option>
+                            </select>
+                            <select
+                              value={cond.operator}
+                              onChange={(e) => {
+                                const conditions = [...deduplicationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], operator: e.target.value }
+                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm"
+                            >
+                              {OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={cond.value}
+                              onChange={(e) => {
+                                const conditions = [...deduplicationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm flex-1"
+                              placeholder="输入值"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const conditions = deduplicationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setDeduplicationConfig({
+                            ...deduplicationConfig,
+                            conditions: [...deduplicationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
+                          })}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          + 添加条件
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewModal({ open: true, type: 'dedup', title: '去重预览' })
+                        fetchPreview('dedup', 1)
+                      }}
+                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
+                    >
+                      预览匹配告警
+                    </button>
                   </div>
                 </>
               )}
@@ -1118,27 +1323,140 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                     />
                     <span className="text-sm text-gray-500">秒</span>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm text-gray-600 w-20">分组字段:</span>
-                    {['source', 'alert_key', 'severity', 'labels'].map((field) => (
-                      <label key={field} className="flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={aggregationConfig.group_by.includes(field)}
-                          onChange={(e) => {
-                            const group_by = aggregationConfig.group_by
-                            if (e.target.checked) {
-                              setAggregationConfig({ ...aggregationConfig, group_by: [...group_by, field] })
-                            } else {
-                              setAggregationConfig({ ...aggregationConfig, group_by: group_by.filter(f => f !== field) })
-                            }
-                          }}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{field}</span>
-                      </label>
-                    ))}
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="agg-mode"
+                        checked={aggregationConfig.mode === 'group_by'}
+                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'group_by' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">分组模式</span>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="agg-mode"
+                        checked={aggregationConfig.mode === 'condition'}
+                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'condition' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">条件模式</span>
+                    </label>
                   </div>
+
+                  {aggregationConfig.mode === 'group_by' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">分组字段:</span>
+                        {['source', 'alert_key', 'severity', 'namespace', 'instance_id', 'metric_name'].map((field) => (
+                          <label key={field} className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={aggregationConfig.group_by.includes(field)}
+                              onChange={(e) => {
+                                const group_by = aggregationConfig.group_by
+                                if (e.target.checked) {
+                                  setAggregationConfig({ ...aggregationConfig, group_by: [...group_by, field] })
+                                } else {
+                                  setAggregationConfig({ ...aggregationConfig, group_by: group_by.filter((f: string) => f !== field) })
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">{field}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {aggregationConfig.mode === 'condition' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
+                        <select
+                          value={aggregationConfig.condition_mode}
+                          onChange={(e) => setAggregationConfig({ ...aggregationConfig, condition_mode: e.target.value })}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="and">AND (全部满足)</option>
+                          <option value="or">OR (任一满足)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        {aggregationConfig.conditions.map((cond: any, idx: number) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <select
+                              value={cond.field}
+                              onChange={(e) => {
+                                const conditions = [...aggregationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], field: e.target.value }
+                                setAggregationConfig({ ...aggregationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="alert_key">告警Key</option>
+                              <option value="source">告警来源</option>
+                              <option value="severity">严重级别</option>
+                              <option value="namespace">命名空间</option>
+                              <option value="instance_id">实例ID</option>
+                              <option value="metric_name">指标</option>
+                              <option value="title">标题</option>
+                              <option value="content">内容</option>
+                            </select>
+                            <select
+                              value={cond.operator}
+                              onChange={(e) => {
+                                const conditions = [...aggregationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], operator: e.target.value }
+                                setAggregationConfig({ ...aggregationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm"
+                            >
+                              {OPERATORS.map((op) => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={cond.value}
+                              onChange={(e) => {
+                                const conditions = [...aggregationConfig.conditions]
+                                conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                setAggregationConfig({ ...aggregationConfig, conditions })
+                              }}
+                              className="px-2 py-1 border rounded text-sm flex-1"
+                              placeholder="输入值"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const conditions = aggregationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                                setAggregationConfig({ ...aggregationConfig, conditions })
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setAggregationConfig({
+                            ...aggregationConfig,
+                            conditions: [...aggregationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
+                          })}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          + 添加条件
+                        </button>
+                      </div>
+                    </>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600 w-20">最大数量:</span>
                     <input
@@ -1157,6 +1475,19 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                     />
                     <span className="text-sm">保留原始告警</span>
                   </label>
+
+                  <div className="pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewModal({ open: true, type: 'aggregate', title: '聚合预览' })
+                        fetchPreview('aggregate', 1)
+                      }}
+                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
+                    >
+                      预览匹配告警
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -1331,6 +1662,85 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
             </button>
           </div>
         </form>
+
+        {/* Preview Modal */}
+        {previewModal.open && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="p-4 border-b flex items-center justify-between">
+                <h3 className="text-lg font-bold">{previewModal.title}</h3>
+                <button
+                  onClick={() => setPreviewModal({ ...previewModal, open: false })}
+                  className="text-gray-500 hover:text-gray-700 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-4 overflow-auto flex-1">
+                {previewLoading ? (
+                  <div className="text-center py-8 text-gray-500">加载中...</div>
+                ) : previewData.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">暂无匹配的告警</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-sm text-gray-500 mb-2">共 {previewTotal} 条匹配告警</div>
+                    {previewData.map((alert: any) => (
+                      <div key={alert.id} className="border rounded p-3 hover:bg-gray-50">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${
+                              alert.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                              alert.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                              alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              alert.severity === 'low' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {alert.severity?.toUpperCase()}
+                            </span>
+                            <span className="font-medium text-sm">{alert.title || alert.alert_key}</span>
+                          </div>
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${
+                            alert.status === 'firing' ? 'bg-red-50 text-red-600' :
+                            alert.status === 'resolved' ? 'bg-green-50 text-green-600' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {alert.status === 'firing' ? '触发中' : alert.status === 'resolved' ? '已恢复' : alert.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 space-x-4">
+                          <span>来源: {alert.source || '-'}</span>
+                          <span>告警Key: {alert.alert_key || '-'}</span>
+                          <span>触发: {new Date(alert.fired_at).toLocaleString('zh-CN')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {!previewLoading && previewTotal > previewPageSize && (
+                <div className="p-4 border-t flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => fetchPreview(previewModal.type, previewPage - 1)}
+                    disabled={previewPage <= 1}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    上一页
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    第 {previewPage} / {Math.ceil(previewTotal / previewPageSize)} 页
+                  </span>
+                  <button
+                    onClick={() => fetchPreview(previewModal.type, previewPage + 1)}
+                    disabled={previewPage >= Math.ceil(previewTotal / previewPageSize)}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

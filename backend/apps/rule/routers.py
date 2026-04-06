@@ -5,7 +5,7 @@ import json
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 
 from apps.core.database import get_db
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
@@ -16,6 +16,8 @@ from apps.core.redis import RedisClient
 from apps.rule.schemas import (
     RuleCreate, RuleUpdate, RuleResponse, RuleTestRequest, RuleTestResponse,
     FieldValuesResponse, FieldValueItem,
+    PreviewDedupRequest, PreviewAggregateRequest,
+    PreviewDedupResponse, PreviewAggregateResponse, AlertGroupItem,
 )
 
 router = APIRouter()
@@ -215,6 +217,285 @@ async def test_rule(
         reason=reason,
         evaluated_conditions=evaluated,
     )
+
+
+@router.post("/rules/preview-dedup", response_model=PreviewDedupResponse)
+async def preview_dedup(
+    request: PreviewDedupRequest,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    预览去重效果 - 根据去重配置返回符合条件的告警列表
+    """
+    from apps.alert.schemas import AlertResponse
+
+    dedup_cfg = request.deduplication_config
+    filters = [Alert.tenant_id == str(tenant_id)]
+
+    # 基础过滤
+    if request.status:
+        filters.append(Alert.status == request.status)
+    if request.severity:
+        filters.append(Alert.severity == request.severity)
+    if request.source:
+        filters.append(Alert.source == request.source)
+
+    # 时间窗口过滤
+    window_seconds = getattr(dedup_cfg, "window_seconds", 300)
+    from datetime import timedelta, datetime as dt
+    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
+    filters.append(Alert.fired_at >= window_start)
+
+    # 按去重类型构建查询
+    if dedup_cfg.dedup_type == "fingerprint":
+        # 指纹模式: 按 fingerprint_fields 构建组合 key 进行分组
+        fp_fields = getattr(dedup_cfg, "fingerprint_fields", ["alert_key"])
+        dimensions = getattr(dedup_cfg, "dimensions", None)
+
+        # 构建 group_by 列表
+        group_by_cols = []
+        for field in fp_fields:
+            col = _get_alert_column(field)
+            if col is not None:
+                group_by_cols.append(col)
+
+        # 添加维度字段
+        if dimensions:
+            if getattr(dimensions, "by_severity", False):
+                group_by_cols.append(Alert.severity)
+            if getattr(dimensions, "by_source", False):
+                group_by_cols.append(Alert.source)
+
+        if not group_by_cols:
+            group_by_cols = [Alert.fingerprint]
+
+        # 构建分组查询: 每组的最新告警
+        subq = (
+            select(
+                *group_by_cols,
+                func.max(Alert.id).label("max_id"),
+                func.count(Alert.id).label("count"),
+            )
+            .where(and_(*filters))
+            .group_by(*group_by_cols)
+            .subquery()
+        )
+
+        # 总分组数
+        total_result = await db.execute(select(func.count()).select_from(subq))
+        total = total_result.scalar() or 0
+
+        # 分页子查询
+        paginated_subq = (
+            select(subq.c.max_id, subq.c.count)
+            .order_by(subq.c.max_id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .subquery()
+        )
+
+        result = await db.execute(
+            select(Alert, paginated_subq.c.count)
+            .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+            .order_by(Alert.fired_at.desc())
+        )
+        rows = result.all()
+
+        items = [AlertResponse.model_validate(row.Alert) for row in rows]
+        return PreviewDedupResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    else:
+        # 条件模式: 用条件过滤
+        conditions = getattr(dedup_cfg, "conditions", [])
+        condition_mode = getattr(dedup_cfg, "condition_mode", "and")
+
+        if conditions:
+            from apps.rule.engine import RuleEngine
+            engine = RuleEngine()
+
+            # 先查询所有满足基础过滤的告警
+            base_query = select(Alert).where(and_(*filters))
+            result = await db.execute(base_query.order_by(Alert.fired_at.desc()))
+            all_alerts = result.scalars().all()
+
+            # 用规则引擎评估条件
+            filtered = []
+            for alert in all_alerts:
+                alert_data = _alert_to_dict(alert)
+                matched, _, _ = engine.evaluate_conditions(conditions, condition_mode, alert_data)
+                if matched:
+                    filtered.append(alert)
+
+            total = len(filtered)
+            paginated = filtered[(page - 1) * page_size:page * page_size]
+            items = [AlertResponse.model_validate(a) for a in paginated]
+        else:
+            total = 0
+            items = []
+
+        return PreviewDedupResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+
+@router.post("/rules/preview-aggregate", response_model=PreviewAggregateResponse)
+async def preview_aggregate(
+    request: PreviewAggregateRequest,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    预览聚合效果 - 根据聚合配置返回告警分组列表
+    """
+    from apps.alert.schemas import AlertResponse
+
+    agg_cfg = request.aggregate_config
+    filters = [Alert.tenant_id == str(tenant_id)]
+
+    # 基础过滤
+    if request.status:
+        filters.append(Alert.status == request.status)
+    if request.severity:
+        filters.append(Alert.severity == request.severity)
+    if request.source:
+        filters.append(Alert.source == request.source)
+
+    # 时间窗口过滤
+    window_seconds = getattr(agg_cfg, "window_seconds", 300)
+    from datetime import timedelta, datetime as dt
+    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
+    filters.append(Alert.fired_at >= window_start)
+
+    # 构建 group_by 列
+    group_by_fields = getattr(agg_cfg, "group_by", [])
+    group_by_cols = []
+    for field in group_by_fields:
+        col = _get_alert_column(field)
+        if col is not None:
+            group_by_cols.append(col)
+
+    if not group_by_cols:
+        group_by_cols = [Alert.fingerprint]
+
+    # 分组查询: 每组最新告警和数量
+    subq = (
+        select(
+            *group_by_cols,
+            func.max(Alert.id).label("max_id"),
+            func.count(Alert.id).label("count"),
+        )
+        .where(and_(*filters))
+        .group_by(*group_by_cols)
+        .subquery()
+    )
+
+    # 总分组数
+    total_result = await db.execute(select(func.count()).select_from(subq))
+    total = total_result.scalar() or 0
+
+    # 分页子查询
+    paginated_subq = (
+        select(subq.c.max_id, subq.c.count)
+        .order_by(subq.c.max_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(Alert, paginated_subq.c.count)
+        .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+        .order_by(Alert.fired_at.desc())
+    )
+    rows = result.all()
+
+    items = []
+    for row in rows:
+        group_key_parts = []
+        for col in group_by_cols:
+            val = getattr(row.Alert, col.key if hasattr(col, 'key') else col.name, None)
+            if val is not None:
+                group_key_parts.append(str(val))
+        group_key = "/".join(group_key_parts) if group_key_parts else row.Alert.fingerprint
+
+        items.append(AlertGroupItem(
+            group_key=group_key,
+            group_count=row.count,
+            latest=AlertResponse.model_validate(row.Alert),
+        ))
+
+    return PreviewAggregateResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def _get_alert_column(field: str):
+    """将字段路径映射为 Alert 模型列"""
+    SIMPLE_FIELDS = {
+        "alert_key": Alert.alert_key,
+        "fingerprint": Alert.fingerprint,
+        "source": Alert.source,
+        "severity": Alert.severity,
+        "status": Alert.status,
+        "namespace": Alert.namespace,
+        "instance_id": Alert.instance_id,
+        "instance_name": Alert.instance_name,
+        "metric_name": Alert.metric_name,
+        "title": Alert.title,
+    }
+
+    if field in SIMPLE_FIELDS:
+        return SIMPLE_FIELDS[field]
+
+    # labels.xxx -> 需要用 JSONB 表达式
+    if field.startswith("labels."):
+        label_key = field.split(".", 1)[1]
+        return func.jsonb_extract_path_text(Alert.labels, label_key).label(field)
+
+    return None
+
+
+def _alert_to_dict(alert: Alert) -> dict:
+    """将 Alert 模型转换为字典，用于规则引擎评估"""
+    return {
+        "id": alert.id,
+        "tenant_id": alert.tenant_id,
+        "alert_key": alert.alert_key,
+        "fingerprint": alert.fingerprint,
+        "source": alert.source,
+        "title": alert.title,
+        "content": alert.content,
+        "severity": alert.severity,
+        "status": alert.status,
+        "labels": alert.labels or {},
+        "annotations": alert.annotations or {},
+        "metric_name": alert.metric_name,
+        "metric_value": alert.metric_value,
+        "namespace": alert.namespace,
+        "instance_id": alert.instance_id,
+        "instance_name": alert.instance_name,
+        "trace_id": alert.trace_id,
+        "fire_count": alert.fire_count,
+        "repeat_count": alert.repeat_count,
+        "escalation_count": alert.escalation_count,
+        "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
+    }
 
 
 # ============ 字段值查询 ============

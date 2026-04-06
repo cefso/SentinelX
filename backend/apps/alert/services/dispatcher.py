@@ -120,36 +120,81 @@ class AlertDispatcher:
         )
         return result.scalar_one_or_none()
 
-    async def _check_dedup(self, alert: Alert, trace_id: str, rule: Optional[AlertRule] = None) -> tuple[bool, Optional[str]]:
-        """去重检查 - 使用Redis实现"""
+    async def _check_dedup(self, alert: Alert, trace_id: str, rule: Optional[AlertRule] = None) -> tuple[bool, Optional[str], Optional[str]]:
+        """去重检查 - 支持指纹模式和条件模式"""
         dedup_config = getattr(rule, "deduplication_config", None) if rule else None
 
-        # 构建指纹
-        if dedup_config and not dedup_config.get("disabled"):
-            dims = dedup_config.get("dimensions", {})
-            fingerprint_fields = dedup_config.get("fingerprint_fields", ["fingerprint"])
+        computed_fingerprint = None
+        window_seconds = 300
+        dedup_mode = "fallback"
 
-            parts = []
-            for field in fingerprint_fields:
-                if field == "alert_key":
-                    parts.append(str(alert.alert_key or ""))
-                elif field == "source":
-                    parts.append(str(alert.source or ""))
-                elif field == "severity" and dims.get("by_severity"):
-                    parts.append(str(alert.severity or ""))
-                elif field not in ("alert_key", "source", "severity"):
-                    # Fallback to direct field access
-                    val = getattr(alert, field, None)
-                    parts.append(str(val) if val is not None else "")
+        # 检查是否启用（兼容 disabled 和 enabled 字段）
+        is_enabled = False
+        if dedup_config:
+            is_enabled = not dedup_config.get("disabled", dedup_config.get("enabled", False))
 
-            computed_fingerprint = "|".join(parts) if parts else alert.fingerprint
-            window_seconds = dedup_config.get("window_seconds", 300)
+        if dedup_config and is_enabled:
+            dedup_type = dedup_config.get("dedup_type", "fingerprint")
+
+            if dedup_type == "condition":
+                # 条件模式：使用规则引擎评估条件
+                dedup_mode = "condition"
+                conditions = dedup_config.get("conditions", [])
+                condition_mode = dedup_config.get("condition_mode", "and")
+                window_seconds = dedup_config.get("window_seconds", 300)
+
+                alert_data = self._build_alert_data(alert)
+                is_match, reason, evaluated = self.rule_engine.evaluate_conditions(
+                    conditions, condition_mode, alert_data
+                )
+
+                # 使用条件的哈希作为指纹
+                if is_match and conditions:
+                    cond_sig = "|".join(
+                        f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
+                        for c in conditions
+                    )
+                    computed_fingerprint = f"cond:{hash(cond_sig)}"
+                elif is_match:
+                    computed_fingerprint = "cond:match"
+                else:
+                    # 条件不匹配，不去重，让告警继续
+                    await self._add_trace_step(trace_id, "dedup_check", "去重检查", "processing", {
+                        "mode": "condition",
+                        "conditions_matched": is_match,
+                        "reason": reason,
+                    })
+                    return False, None, None
+
+            else:
+                # 指纹模式（默认）
+                dedup_mode = "fingerprint"
+                dims = dedup_config.get("dimensions", {})
+                fingerprint_fields = dedup_config.get("fingerprint_fields", ["alert_key"])
+
+                parts = []
+                for field in fingerprint_fields:
+                    if field == "alert_key":
+                        parts.append(str(alert.alert_key or ""))
+                    elif field == "source":
+                        parts.append(str(alert.source or ""))
+                    elif field == "severity" and dims.get("by_severity"):
+                        parts.append(str(alert.severity or ""))
+                    elif field not in ("alert_key", "source", "severity"):
+                        val = getattr(alert, field, None)
+                        if val is None and "." in field:
+                            parts.append(str((alert.labels or {}).get(field.split(".", 1)[1], "")))
+                        else:
+                            parts.append(str(val) if val is not None else "")
+
+                computed_fingerprint = "|".join(parts) if parts else alert.fingerprint
+                window_seconds = dedup_config.get("window_seconds", 300)
         else:
             # 兼容：无配置时使用原有逻辑
             computed_fingerprint = alert.fingerprint
-            window_seconds = 300
 
         await self._add_trace_step(trace_id, "dedup_check", "去重检查", "processing", {
+            "mode": dedup_mode,
             "fingerprint": computed_fingerprint,
             "window_seconds": window_seconds,
         })
@@ -203,8 +248,8 @@ class AlertDispatcher:
             "config": suppress_config,
         })
 
-        # 基于规则的抑制检查
-        if suppress_config and not suppress_config.get("disabled"):
+        # 基于规则的抑制检查（兼容 disabled 和 enabled 字段）
+        if suppress_config and not suppress_config.get("disabled", not suppress_config.get("enabled", False)):
             suppress_type = suppress_config.get("type", "maintenance_window")
 
             if suppress_type == "maintenance_window":
@@ -272,32 +317,64 @@ class AlertDispatcher:
             "config": agg_config,
         })
 
-        if agg_config and not agg_config.get("disabled"):
-            # 构建动态 group_key
-            group_by_fields = agg_config.get("group_by", ["source", "fingerprint"])
-            group_parts = []
-            for field in group_by_fields:
-                if field == "source":
-                    group_parts.append(str(alert.source or ""))
-                elif field == "fingerprint":
-                    group_parts.append(str(alert.fingerprint or ""))
-                elif field == "alert_key":
-                    group_parts.append(str(alert.alert_key or ""))
-                elif field == "severity":
-                    group_parts.append(str(alert.severity or ""))
-                elif field == "namespace":
-                    group_parts.append(str(alert.namespace or ""))
-                elif field.startswith("labels."):
-                    label_key = field.split(".", 1)[1]
-                    group_parts.append(str((alert.labels or {}).get(label_key, "")))
-                else:
-                    val = getattr(alert, field, None)
-                    group_parts.append(str(val) if val is not None else "")
-
-            group_key = "|".join(group_parts)
+        if agg_config and not agg_config.get("disabled", not agg_config.get("enabled", False)):
+            agg_mode = agg_config.get("mode", "group_by")
             window_seconds = agg_config.get("window_seconds", 300)
             max_count = agg_config.get("max_count", 100)
             store_original = agg_config.get("store_original_alerts", True)
+
+            if agg_mode == "condition":
+                # 条件模式：评估条件决定聚合组
+                conditions = agg_config.get("conditions", [])
+                condition_mode = agg_config.get("condition_mode", "and")
+
+                alert_data = self._build_alert_data(alert)
+                is_match, reason, evaluated = self.rule_engine.evaluate_conditions(
+                    conditions, condition_mode, alert_data
+                )
+
+                if is_match and conditions:
+                    cond_sig = "|".join(
+                        f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
+                        for c in conditions
+                    )
+                    group_key = f"cond:{hash(cond_sig)}"
+                elif is_match:
+                    group_key = "cond:match"
+                else:
+                    # 条件不匹配，跳过聚合
+                    await self._add_trace_step(trace_id, "aggregate_check", "聚合检查", "processing", {
+                        "mode": "condition",
+                        "conditions_matched": is_match,
+                        "reason": reason,
+                    })
+                    return None
+            else:
+                # group_by 模式（默认）：按字段值聚合
+                group_by_fields = agg_config.get("group_by", ["source", "fingerprint"])
+                group_parts = []
+                for field in group_by_fields:
+                    if field == "source":
+                        group_parts.append(str(alert.source or ""))
+                    elif field == "fingerprint":
+                        group_parts.append(str(alert.fingerprint or ""))
+                    elif field == "alert_key":
+                        group_parts.append(str(alert.alert_key or ""))
+                    elif field == "severity":
+                        group_parts.append(str(alert.severity or ""))
+                    elif field == "namespace":
+                        group_parts.append(str(alert.namespace or ""))
+                    elif field.startswith("labels."):
+                        label_key = field.split(".", 1)[1]
+                        group_parts.append(str((alert.labels or {}).get(label_key, "")))
+                    else:
+                        val = getattr(alert, field, None)
+                        if val is None and "." in field:
+                            group_parts.append(str((alert.labels or {}).get(field.split(".", 1)[1], "")))
+                        else:
+                            group_parts.append(str(val) if val is not None else "")
+
+                group_key = "|".join(group_parts)
 
             aggregate_key = f"aggregate:{alert.tenant_id}:{group_key}"
             existing_id = await self.redis.get(aggregate_key)
