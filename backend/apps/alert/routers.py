@@ -14,12 +14,13 @@ from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.security import verify_password
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
-from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric
+from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember
 from apps.tenant.models import Tenant
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
     AlertSourceCreate, AlertSourceUpdate, AlertSourceResponse,
     AlertHistoryResponse, DiagnosisResponse, TraceStep,
+    AlertAggregateMemberItem, AlertAggregateMembersResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 
@@ -712,6 +713,91 @@ async def get_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return alert
+
+
+@router.get("/alerts/{alert_id}/aggregated-members", response_model=AlertAggregateMembersResponse)
+async def get_aggregated_members(
+    alert_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取聚合告警组成员"""
+    # 查找告警是否存在
+    result = await db.execute(
+        select(Alert).where(
+            Alert.id == alert_id,
+            Alert.tenant_id == str(tenant_id)
+        )
+    )
+    alert = result.scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    # 查找该告警所属的聚合组
+    member_result = await db.execute(
+        select(AlertAggregateMember).where(AlertAggregateMember.alert_id == alert_id)
+    )
+    member = member_result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=404, detail="Alert is not part of any aggregate group")
+
+    group_id = member.group_id
+
+    # 获取聚合组信息
+    group = await db.get(AlertAggregateGroup, group_id)
+    if not group or group.tenant_id != str(tenant_id):
+        raise HTTPException(status_code=404, detail="Aggregate group not found")
+
+    # 统计总数
+    count_result = await db.execute(
+        select(func.count()).select_from(AlertAggregateMember).where(AlertAggregateMember.group_id == group_id)
+    )
+    total = count_result.scalar() or 0
+
+    # 分页查询组成员
+    members_result = await db.execute(
+        select(AlertAggregateMember)
+        .where(AlertAggregateMember.group_id == group_id)
+        .order_by(AlertAggregateMember.added_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    members = members_result.scalars().all()
+
+    # 获取每个成员的告警详情
+    member_alert_ids = [m.alert_id for m in members]
+    if member_alert_ids:
+        alerts_result = await db.execute(
+            select(Alert).where(Alert.id.in_(member_alert_ids))
+        )
+        alert_map = {a.id: a for a in alerts_result.scalars().all()}
+    else:
+        alert_map = {}
+
+    items = []
+    for m in members:
+        a = alert_map.get(m.alert_id)
+        if a:
+            items.append(AlertAggregateMemberItem(
+                alert_id=m.alert_id,
+                title=a.title,
+                severity=a.severity,
+                fired_at=a.fired_at,
+                source=a.source,
+                status=a.status,
+                added_at=m.added_at,
+            ))
+
+    return AlertAggregateMembersResponse(
+        items=items,
+        total=total,
+        group_key=group.group_key,
+        alert_count=group.alert_count,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.put("/alerts/{alert_id}", response_model=AlertResponse)

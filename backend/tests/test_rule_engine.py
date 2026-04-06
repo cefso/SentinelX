@@ -187,7 +187,7 @@ def test_field_values_schema_empty():
 
 def test_supported_fields():
     """测试支持的字段路径常量"""
-    from apps.rule.routers import SUPPORTED_SIMPLE_FIELDS, SUPPORTED_LABEL_PATHS
+    from apps.rule.routers import SUPPORTED_SIMPLE_FIELDS
 
     # 简单字段
     assert "namespace" in SUPPORTED_SIMPLE_FIELDS
@@ -196,12 +196,6 @@ def test_supported_fields():
     assert "instance_id" in SUPPORTED_SIMPLE_FIELDS
     assert "instance_name" in SUPPORTED_SIMPLE_FIELDS
     assert "status" in SUPPORTED_SIMPLE_FIELDS
-
-    # JSON标签字段
-    assert "labels" in SUPPORTED_LABEL_PATHS
-    assert "labels.cluster" in SUPPORTED_LABEL_PATHS
-    assert "labels.env" in SUPPORTED_LABEL_PATHS
-    assert "labels.service" in SUPPORTED_LABEL_PATHS
 
     # 不支持的字段
     assert "title" not in SUPPORTED_SIMPLE_FIELDS

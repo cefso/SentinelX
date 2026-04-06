@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { ConditionRow } from '@/components/condition/ConditionRow'
+import { OPERATORS, SEVERITY_OPTIONS } from '@/components/condition/constants'
 
 export interface Condition {
   field: string
@@ -21,29 +23,43 @@ interface Rule {
   is_active: boolean
   suppress_config?: any
   aggregate_config?: any
+  deduplication_config?: any
   match_count: number
   last_match_at?: string
   created_at: string
   updated_at: string
 }
 
-const OPERATORS = [
-  { value: 'eq', label: '等于' },
-  { value: 'ne', label: '不等于' },
-  { value: 'in', label: '在列表中' },
-  { value: 'not_in', label: '不在列表中' },
-  { value: 'contains', label: '包含' },
-  { value: 'not_contains', label: '不包含' },
-  { value: 'regex', label: '正则匹配' },
-  { value: 'gt', label: '大于' },
-  { value: 'gte', label: '大于等于' },
-  { value: 'lt', label: '小于' },
-  { value: 'lte', label: '小于等于' },
-  { value: 'exists', label: '存在' },
-  { value: 'is_empty', label: '为空' },
-]
+// CollapsibleSection component
+function CollapsibleSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  return (
+    <div className="border rounded-md">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+      >
+        <span className="font-medium text-gray-700">{title}</span>
+        <span className="text-gray-500">{isOpen ? '▼' : '▶'}</span>
+      </button>
+      {isOpen && <div className="p-4">{children}</div>}
+    </div>
+  )
+}
 
-const SEVERITY_OPTIONS = ['critical', 'high', 'medium', 'low', 'info']
+// 去重/聚合可用字段
+const DEDUP_AGG_FIELDS = [
+  { value: 'alert_key', label: '告警Key' },
+  { value: 'source', label: '告警来源' },
+  { value: 'severity', label: '严重级别' },
+  { value: 'namespace', label: '命名空间' },
+  { value: 'instance_id', label: '实例ID' },
+  { value: 'metric_name', label: '指标' },
+  { value: 'title', label: '标题' },
+  { value: 'content', label: '内容' },
+  { value: 'labels', label: '标签' },
+]
 
 export function RulesPage() {
   const queryClient = useQueryClient()
@@ -236,6 +252,194 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     selected_channels: (rule?.actions || []).filter((a: any) => typeof a === 'number').map((a: any) => Number(a)) || [],
   })
 
+  // Deduplication config state
+  const [deduplicationConfig, setDeduplicationConfig] = useState({
+    enabled: rule?.deduplication_config?.enabled ?? false,
+    mode: (rule?.deduplication_config?.mode ?? 'fingerprint') as 'fingerprint' | 'condition',
+    fingerprint_fields: rule?.deduplication_config?.fingerprint_fields ?? ['alert_key'],
+    window_seconds: rule?.deduplication_config?.window_seconds ?? 300,
+    dimensions: rule?.deduplication_config?.dimensions ?? { by_severity: false, by_source: false },
+    strategy: (rule?.deduplication_config?.strategy ?? 'first') as 'first' | 'last',
+    condition_mode: rule?.deduplication_config?.condition_mode ?? 'and',
+    conditions: rule?.deduplication_config?.conditions ?? [],
+  })
+
+  // Aggregation config state
+  const [aggregationConfig, setAggregationConfig] = useState({
+    enabled: rule?.aggregate_config?.enabled ?? false,
+    mode: (rule?.aggregate_config?.mode ?? 'group_by') as 'group_by' | 'condition',
+    window_seconds: rule?.aggregate_config?.window_seconds ?? 300,
+    group_by: rule?.aggregate_config?.group_by ?? [],
+    max_count: rule?.aggregate_config?.max_count ?? 10,
+    store_original_alerts: rule?.aggregate_config?.store_original_alerts ?? false,
+    condition_mode: rule?.aggregate_config?.condition_mode ?? 'and',
+    conditions: rule?.aggregate_config?.conditions ?? [],
+  })
+
+  // dedup labels key 派生（与主规则条件相同的模式）
+  const dedupLabelsKey = useMemo(() => {
+    const result: Record<number, string> = {}
+    deduplicationConfig.conditions.forEach((cond: any, idx: number) => {
+      if (cond.field === 'labels' && cond.key) {
+        result[idx] = cond.key
+      }
+    })
+    return result
+  }, [deduplicationConfig.conditions])
+
+  // agg labels key 派生
+  const aggLabelsKey = useMemo(() => {
+    const result: Record<number, string> = {}
+    aggregationConfig.conditions.forEach((cond: any, idx: number) => {
+      if (cond.field === 'labels' && cond.key) {
+        result[idx] = cond.key
+      }
+    })
+    return result
+  }, [aggregationConfig.conditions])
+
+  // 匹配告警的 labels（用于去重/聚合的 labels 下拉智能过滤）
+  const [matchingAlertsLabels, setMatchingAlertsLabels] = useState<{
+    keys: string[]
+    valuesByKey: Record<string, string[]>
+  }>({ keys: [], valuesByKey: {} })
+
+  // 主规则已选的普通字段（排除 labels，labels 单独处理）
+  const selectedFieldsInMain = useMemo(() => {
+    return new Set(
+      formData.conditions
+        .map(c => c.field.split('.')[0])
+        .filter(f => f !== 'labels')
+    )
+  }, [formData.conditions])
+
+  // 去重条件可用字段（排除主规则已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
+  const dedupAvailableFields = useMemo(() => {
+    // 排除主规则已选的非 labels 字段
+    const excluded = new Set([...selectedFieldsInMain])
+    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
+    return DEDUP_AGG_FIELDS.filter(f => !excluded.has(f.value))
+  }, [selectedFieldsInMain])
+
+  // 聚合条件可用字段（排除主规则已选 + 去重已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
+  const aggAvailableFields = useMemo(() => {
+    const dedupSelectedFields = new Set(
+      deduplicationConfig.conditions
+        .map((c: any) => c.field.split('.')[0])
+        .filter((f: string) => f !== 'labels')
+    )
+    const excluded = new Set([...selectedFieldsInMain, ...dedupSelectedFields])
+    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
+    return DEDUP_AGG_FIELDS.filter(
+      f => !excluded.has(f.value)
+    )
+  }, [selectedFieldsInMain, deduplicationConfig.conditions])
+
+  // 获取匹配主规则条件的告警 labels
+  const fetchMatchingAlertsLabels = useCallback(async () => {
+    try {
+      const result = await apiClient.post<{ alerts: any[]; total: number }>(
+        '/rules/preview-dedup',
+        {
+          conditions: formData.conditions,
+          condition_mode: formData.condition_mode,
+          page: 1,
+          page_size: 100,
+        }
+      )
+
+      const allLabels: Record<string, Set<string>> = {}
+      result.alerts?.forEach((alert: any) => {
+        if (alert.labels) {
+          Object.entries(alert.labels).forEach(([key, value]) => {
+            if (!allLabels[key]) allLabels[key] = new Set()
+            allLabels[key].add(value as string)
+          })
+        }
+      })
+
+      // 过滤掉主规则已选的 labels key
+      const mainLabelsKeys = new Set(
+        formData.conditions
+          .filter(c => c.field.startsWith('labels.'))
+          .map(c => c.field.split('.')[1])
+      )
+
+      setMatchingAlertsLabels({
+        keys: Object.keys(allLabels).filter(k => !mainLabelsKeys.has(k)),
+        valuesByKey: Object.fromEntries(
+          Object.entries(allLabels).map(([k, v]) => [k, Array.from(v)])
+        )
+      })
+    } catch (err) {
+      console.error('Failed to fetch matching alerts labels:', err)
+    }
+  }, [formData.conditions, formData.condition_mode])
+
+  // 预览弹窗状态
+  const [previewModal, setPreviewModal] = useState<{
+    open: boolean
+    type: 'dedup' | 'aggregate'
+    title: string
+  }>({ open: false, type: 'dedup', title: '' })
+  const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewTotal, setPreviewTotal] = useState(0)
+  const [previewPage, setPreviewPage] = useState(1)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewPageSize = 10
+
+  const fetchPreview = async (type: 'dedup' | 'aggregate', page: number) => {
+    setPreviewLoading(true)
+    setPreviewPage(page)
+    try {
+      const payload = type === 'dedup' ? {
+        conditions: formData.conditions,
+        condition_mode: formData.condition_mode,
+        deduplication_config: deduplicationConfig.enabled ? {
+          dedup_type: deduplicationConfig.mode,
+          window_seconds: deduplicationConfig.window_seconds,
+          fingerprint_fields: deduplicationConfig.fingerprint_fields,
+          dimensions: deduplicationConfig.dimensions,
+          strategy: deduplicationConfig.strategy,
+          condition_mode: deduplicationConfig.condition_mode,
+          conditions: deduplicationConfig.conditions,
+        } : null,
+      } : {
+        conditions: formData.conditions,
+        condition_mode: formData.condition_mode,
+        aggregate_config: aggregationConfig.enabled ? {
+          mode: aggregationConfig.mode,
+          window_seconds: aggregationConfig.window_seconds,
+          group_by: aggregationConfig.group_by,
+          max_count: aggregationConfig.max_count,
+          store_original_alerts: aggregationConfig.store_original_alerts,
+          condition_mode: aggregationConfig.condition_mode,
+          conditions: aggregationConfig.conditions,
+        } : null,
+      }
+      const result = await apiClient.post<{ items: any[]; total: number }>(
+        type === 'dedup' ? '/rules/preview-dedup' : '/rules/preview-aggregate',
+        { ...payload, page, page_size: previewPageSize }
+      )
+      setPreviewData(result.items || [])
+      setPreviewTotal(result.total || 0)
+    } catch (err) {
+      console.error('Preview failed:', err)
+      setPreviewData([])
+      setPreviewTotal(0)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  // Suppression config state
+  const [suppressionConfig, setSuppressionConfig] = useState({
+    enabled: rule?.suppress_config?.enabled ?? false,
+    type: (rule?.suppress_config?.type ?? 'maintenance_window') as 'maintenance_window' | 'rule_based',
+    duration_minutes: rule?.suppress_config?.maintenance_window?.duration_minutes ?? 60,
+    rule_conditions: (rule?.suppress_config?.rule_based?.conditions ?? []) as Condition[],
+  })
+
   // labels 字段当前选中的 key（用于 Key+Value 下拉框）
   // 使用 useMemo 从 formData.conditions 派生，确保始终同步
   const labelsKey = useMemo(() => {
@@ -251,7 +455,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
   // 预加载字段值（modal 打开时自动加载）
   useEffect(() => {
     if (showModal) {
-      ;['namespace', 'instance_id', 'instance_name', 'metric_name', 'labels'].forEach(field => {
+      ;['namespace', 'instance_id', 'instance_name', 'metric_name', 'alert_key', 'labels'].forEach(field => {
         fetchFieldValues(field)
       })
       // 为 initialConditions 中已有的 labels.{key} 预加载值
@@ -264,6 +468,13 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       }
     }
   }, [showModal, initialConditions])
+
+  // 预加载匹配告警的 labels（用于去重/聚合的 labels 下拉）
+  useEffect(() => {
+    if (showModal && formData.conditions.length > 0) {
+      fetchMatchingAlertsLabels()
+    }
+  }, [showModal, formData.conditions, fetchMatchingAlertsLabels])
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -357,6 +568,42 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       condition_mode: formData.condition_mode,
       priority: formData.priority,
       actions,
+      deduplication_config: deduplicationConfig.enabled ? {
+        enabled: true,
+        dedup_type: deduplicationConfig.mode,
+        window_seconds: deduplicationConfig.window_seconds,
+        fingerprint_fields: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.fingerprint_fields : undefined,
+        dimensions: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.dimensions : undefined,
+        strategy: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.strategy : undefined,
+        condition_mode: deduplicationConfig.mode === 'condition' ? deduplicationConfig.condition_mode : undefined,
+        conditions: deduplicationConfig.mode === 'condition' ? deduplicationConfig.conditions : undefined,
+      } : null,
+      aggregate_config: aggregationConfig.enabled ? {
+        enabled: true,
+        mode: aggregationConfig.mode,
+        window_seconds: aggregationConfig.window_seconds,
+        group_by: aggregationConfig.mode === 'group_by' ? aggregationConfig.group_by : undefined,
+        max_count: aggregationConfig.max_count,
+        store_original_alerts: aggregationConfig.store_original_alerts,
+        condition_mode: aggregationConfig.mode === 'condition' ? aggregationConfig.condition_mode : undefined,
+        conditions: aggregationConfig.mode === 'condition' ? aggregationConfig.conditions : undefined,
+      } : null,
+      suppress_config: suppressionConfig.enabled ? {
+        enabled: true,
+        type: suppressionConfig.type,
+        maintenance_window: suppressionConfig.type === 'maintenance_window' ? {
+          duration_minutes: suppressionConfig.duration_minutes,
+          cluster_labels: [],
+        } : undefined,
+        rule_based: suppressionConfig.type === 'rule_based' ? {
+          conditions: suppressionConfig.rule_conditions.map(c => ({
+            field: c.field,
+            operator: c.operator,
+            value: c.value,
+          })),
+          delay_seconds: 0,
+        } : undefined,
+      } : null,
     }
     if (rule) {
       updateMutation.mutate(payload)
@@ -827,54 +1074,6 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                         className="px-2 py-1 border rounded text-sm flex-1"
                       />
                     )
-                  ) : condition.field === 'labels' && !['exists', 'is_empty'].includes(condition.operator) ? (
-                    <div className="relative flex-1 flex gap-1 items-center">
-                      {/* Key 下拉框 */}
-                      <select
-                        value={labelsKey[index] || ''}
-                        onChange={(e) => {
-                          const key = e.target.value
-                          // 设置 condition.key 以同步 labelsKey (useMemo)
-                          updateCondition(index, 'key', key)
-                          updateCondition(index, 'field', key ? `labels.${key}` : 'labels')
-                          updateCondition(index, 'value', '')
-                          if (key) {
-                            fetchFieldValues(`labels.${key}`)
-                          }
-                        }}
-                        className="px-2 py-1 border rounded text-sm w-28"
-                      >
-                        <option value="">选择标签键</option>
-                        {(() => {
-                          const cached = fieldValuesCache.current['labels']
-                          if (!cached?.data?.length) {
-                            return <option disabled>加载中...</option>
-                          }
-                          return cached.data.map((item: any) => (
-                            <option key={item.value} value={item.value}>{item.value}</option>
-                          ))
-                        })()}
-                      </select>
-
-                      {/* Value 下拉框（根据 selected key 动态加载） */}
-                      <select
-                        value={condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        disabled={!labelsKey[index]}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">选择标签值</option>
-                        {labelsKey[index] && (() => {
-                          const cached = fieldValuesCache.current[`labels.${labelsKey[index]}`]
-                          if (!cached?.data?.length) {
-                            return <option disabled>加载中...</option>
-                          }
-                          return cached.data.map((item: any) => (
-                            <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                          ))
-                        })()}
-                      </select>
-                    </div>
                   ) : ['namespace', 'instance_id', 'instance_name', 'metric_name'].includes(condition.field) ? (
                     <div className="relative flex-1 flex gap-1" ref={dropdownRef}>
                       <input
@@ -937,6 +1136,485 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
             </div>
           </div>
 
+          {/* Deduplication Config */}
+          <CollapsibleSection title="去重配置" defaultOpen={false}>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={deduplicationConfig.enabled}
+                  onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <span>启用去重</span>
+              </label>
+              {deduplicationConfig.enabled && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 w-20">窗口时间:</span>
+                    <input
+                      type="number"
+                      value={deduplicationConfig.window_seconds}
+                      onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, window_seconds: parseInt(e.target.value) || 0 })}
+                      className="px-2 py-1 border rounded text-sm w-24"
+                    />
+                    <span className="text-sm text-gray-500">秒</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="dedup-mode"
+                        checked={deduplicationConfig.mode === 'fingerprint'}
+                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'fingerprint' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">指纹模式</span>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="dedup-mode"
+                        checked={deduplicationConfig.mode === 'condition'}
+                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'condition' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">条件模式</span>
+                    </label>
+                  </div>
+
+                  {deduplicationConfig.mode === 'fingerprint' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">指纹字段:</span>
+                        {['alert_key', 'source', 'namespace', 'severity', 'instance_id', 'metric_name'].map((field) => (
+                          <label key={field} className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={deduplicationConfig.fingerprint_fields.includes(field)}
+                              onChange={(e) => {
+                                const fields = deduplicationConfig.fingerprint_fields
+                                if (e.target.checked) {
+                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: [...fields, field] })
+                                } else {
+                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: fields.filter((f: string) => f !== field) })
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">{field}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">维度细分:</span>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={deduplicationConfig.dimensions.by_severity}
+                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_severity: e.target.checked } })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">按 severity</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={deduplicationConfig.dimensions.by_source}
+                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_source: e.target.checked } })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">按 source</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">策略:</span>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="dedup-strategy"
+                            checked={deduplicationConfig.strategy === 'first'}
+                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'first' })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">首次</span>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="dedup-strategy"
+                            checked={deduplicationConfig.strategy === 'last'}
+                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'last' })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">最后</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {deduplicationConfig.mode === 'condition' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
+                        <select
+                          value={deduplicationConfig.condition_mode}
+                          onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, condition_mode: e.target.value })}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="and">AND (全部满足)</option>
+                          <option value="or">OR (任一满足)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        {deduplicationConfig.conditions.map((cond: any, idx: number) => (
+                          <ConditionRow
+                            key={idx}
+                            condition={cond}
+                            availableFields={dedupAvailableFields}
+                            showLabelsDropdown={true}
+                            labelsKey={dedupLabelsKey[idx]}
+                            labelsKeyOptions={matchingAlertsLabels.keys}
+                            labelsValueOptions={matchingAlertsLabels.valuesByKey[dedupLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
+                            sources={sources}
+                            fieldValuesCache={fieldValuesCache.current}
+                            onFetchFieldValues={fetchFieldValues}
+                            onLabelsKeyChange={(key) => {
+                              const conditions = [...deduplicationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                            onChange={(field, value) => {
+                              const conditions = [...deduplicationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], [field]: value }
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                            onRemove={() => {
+                              const conditions = deduplicationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                          />
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setDeduplicationConfig({
+                            ...deduplicationConfig,
+                            conditions: [...deduplicationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
+                          })}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          + 添加条件
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewModal({ open: true, type: 'dedup', title: '去重预览' })
+                        fetchPreview('dedup', 1)
+                      }}
+                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
+                    >
+                      预览匹配告警
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Aggregation Config */}
+          <CollapsibleSection title="聚合配置" defaultOpen={false}>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={aggregationConfig.enabled}
+                  onChange={(e) => setAggregationConfig({ ...aggregationConfig, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <span>启用聚合</span>
+              </label>
+              {aggregationConfig.enabled && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 w-20">窗口时间:</span>
+                    <input
+                      type="number"
+                      value={aggregationConfig.window_seconds}
+                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, window_seconds: parseInt(e.target.value) || 0 })}
+                      className="px-2 py-1 border rounded text-sm w-24"
+                    />
+                    <span className="text-sm text-gray-500">秒</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="agg-mode"
+                        checked={aggregationConfig.mode === 'group_by'}
+                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'group_by' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">分组模式</span>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="agg-mode"
+                        checked={aggregationConfig.mode === 'condition'}
+                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'condition' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">条件模式</span>
+                    </label>
+                  </div>
+
+                  {aggregationConfig.mode === 'group_by' && (
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-600 w-20">分组字段:</span>
+                        {['source', 'alert_key', 'severity', 'namespace', 'instance_id', 'metric_name'].map((field) => (
+                          <label key={field} className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={aggregationConfig.group_by.includes(field)}
+                              onChange={(e) => {
+                                const group_by = aggregationConfig.group_by
+                                if (e.target.checked) {
+                                  setAggregationConfig({ ...aggregationConfig, group_by: [...group_by, field] })
+                                } else {
+                                  setAggregationConfig({ ...aggregationConfig, group_by: group_by.filter((f: string) => f !== field) })
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">{field}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {aggregationConfig.mode === 'condition' && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
+                        <select
+                          value={aggregationConfig.condition_mode}
+                          onChange={(e) => setAggregationConfig({ ...aggregationConfig, condition_mode: e.target.value })}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="and">AND (全部满足)</option>
+                          <option value="or">OR (任一满足)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        {aggregationConfig.conditions.map((cond: any, idx: number) => (
+                          <ConditionRow
+                            key={idx}
+                            condition={cond}
+                            availableFields={aggAvailableFields}
+                            showLabelsDropdown={true}
+                            labelsKey={aggLabelsKey[idx]}
+                            labelsKeyOptions={matchingAlertsLabels.keys}
+                            labelsValueOptions={matchingAlertsLabels.valuesByKey[aggLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
+                            sources={sources}
+                            fieldValuesCache={fieldValuesCache.current}
+                            onFetchFieldValues={fetchFieldValues}
+                            onLabelsKeyChange={(key) => {
+                              const conditions = [...aggregationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                            onChange={(field, value) => {
+                              const conditions = [...aggregationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], [field]: value }
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                            onRemove={() => {
+                              const conditions = aggregationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                          />
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setAggregationConfig({
+                            ...aggregationConfig,
+                            conditions: [...aggregationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
+                          })}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          + 添加条件
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 w-20">最大数量:</span>
+                    <input
+                      type="number"
+                      value={aggregationConfig.max_count}
+                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, max_count: parseInt(e.target.value) || 0 })}
+                      className="px-2 py-1 border rounded text-sm w-24"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={aggregationConfig.store_original_alerts}
+                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, store_original_alerts: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">保留原始告警</span>
+                  </label>
+
+                  <div className="pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewModal({ open: true, type: 'aggregate', title: '聚合预览' })
+                        fetchPreview('aggregate', 1)
+                      }}
+                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
+                    >
+                      预览匹配告警
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Suppression Config */}
+          <CollapsibleSection title="抑制配置" defaultOpen={false}>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={suppressionConfig.enabled}
+                  onChange={(e) => setSuppressionConfig({ ...suppressionConfig, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <span>启用抑制</span>
+              </label>
+              {suppressionConfig.enabled && (
+                <>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600">类型:</span>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="suppress-type"
+                        checked={suppressionConfig.type === 'maintenance_window'}
+                        onChange={() => setSuppressionConfig({ ...suppressionConfig, type: 'maintenance_window' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">维护窗口</span>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        name="suppress-type"
+                        checked={suppressionConfig.type === 'rule_based'}
+                        onChange={() => setSuppressionConfig({ ...suppressionConfig, type: 'rule_based' })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">规则匹配</span>
+                    </label>
+                  </div>
+                  {suppressionConfig.type === 'maintenance_window' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">持续时间:</span>
+                      <input
+                        type="number"
+                        value={suppressionConfig.duration_minutes}
+                        onChange={(e) => setSuppressionConfig({ ...suppressionConfig, duration_minutes: parseInt(e.target.value) || 0 })}
+                        className="px-2 py-1 border rounded text-sm w-24"
+                      />
+                      <span className="text-sm text-gray-500">分钟</span>
+                    </div>
+                  )}
+                  {suppressionConfig.type === 'rule_based' && (
+                    <div className="space-y-2">
+                      <div className="text-sm text-gray-600">抑制条件</div>
+                      {suppressionConfig.rule_conditions.map((cond, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <select
+                            value={cond.field}
+                            onChange={(e) => {
+                              const rule_conditions = [...suppressionConfig.rule_conditions]
+                              rule_conditions[idx] = { ...rule_conditions[idx], field: e.target.value }
+                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
+                            }}
+                            className="px-2 py-1 border rounded text-sm"
+                          >
+                            <option value="source">告警来源</option>
+                            <option value="severity">严重级别</option>
+                            <option value="namespace">命名空间</option>
+                            <option value="instance_id">实例ID</option>
+                            <option value="labels">标签</option>
+                          </select>
+                          <select
+                            value={cond.operator}
+                            onChange={(e) => {
+                              const rule_conditions = [...suppressionConfig.rule_conditions]
+                              rule_conditions[idx] = { ...rule_conditions[idx], operator: e.target.value }
+                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
+                            }}
+                            className="px-2 py-1 border rounded text-sm"
+                          >
+                            {OPERATORS.filter(op => !['exists', 'is_empty'].includes(op.value)).map((op) => (
+                              <option key={op.value} value={op.value}>{op.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={cond.value}
+                            onChange={(e) => {
+                              const rule_conditions = [...suppressionConfig.rule_conditions]
+                              rule_conditions[idx] = { ...rule_conditions[idx], value: e.target.value }
+                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
+                            }}
+                            className="px-2 py-1 border rounded text-sm flex-1"
+                            placeholder="输入值"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rule_conditions = suppressionConfig.rule_conditions.filter((_, i) => i !== idx)
+                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSuppressionConfig({
+                          ...suppressionConfig,
+                          rule_conditions: [...suppressionConfig.rule_conditions, { field: 'source', operator: 'eq', value: '' }]
+                        })}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        + 添加条件
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </CollapsibleSection>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">通知渠道</label>
             <div className="space-y-2">
@@ -984,6 +1662,85 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
             </button>
           </div>
         </form>
+
+        {/* Preview Modal */}
+        {previewModal.open && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="p-4 border-b flex items-center justify-between">
+                <h3 className="text-lg font-bold">{previewModal.title}</h3>
+                <button
+                  onClick={() => setPreviewModal({ ...previewModal, open: false })}
+                  className="text-gray-500 hover:text-gray-700 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-4 overflow-auto flex-1">
+                {previewLoading ? (
+                  <div className="text-center py-8 text-gray-500">加载中...</div>
+                ) : previewData.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">暂无匹配的告警</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-sm text-gray-500 mb-2">共 {previewTotal} 条匹配告警</div>
+                    {previewData.map((alert: any) => (
+                      <div key={alert.id} className="border rounded p-3 hover:bg-gray-50">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${
+                              alert.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                              alert.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                              alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              alert.severity === 'low' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {alert.severity?.toUpperCase()}
+                            </span>
+                            <span className="font-medium text-sm">{alert.title || alert.alert_key}</span>
+                          </div>
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${
+                            alert.status === 'firing' ? 'bg-red-50 text-red-600' :
+                            alert.status === 'resolved' ? 'bg-green-50 text-green-600' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {alert.status === 'firing' ? '触发中' : alert.status === 'resolved' ? '已恢复' : alert.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 space-x-4">
+                          <span>来源: {alert.source || '-'}</span>
+                          <span>告警Key: {alert.alert_key || '-'}</span>
+                          <span>触发: {new Date(alert.fired_at).toLocaleString('zh-CN')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {!previewLoading && previewTotal > previewPageSize && (
+                <div className="p-4 border-t flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => fetchPreview(previewModal.type, previewPage - 1)}
+                    disabled={previewPage <= 1}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    上一页
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    第 {previewPage} / {Math.ceil(previewTotal / previewPageSize)} 页
+                  </span>
+                  <button
+                    onClick={() => fetchPreview(previewModal.type, previewPage + 1)}
+                    disabled={previewPage >= Math.ceil(previewTotal / previewPageSize)}
+                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

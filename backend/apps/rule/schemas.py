@@ -2,8 +2,10 @@
 SentinelX - 规则Schema
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
+
+from apps.alert.schemas import AlertResponse
 
 
 # ============ 规则条件Schema ============
@@ -28,6 +30,7 @@ class Condition(BaseModel):
     field: str = Field(..., description="字段路径，如 severity/labels.cluster")
     operator: str = Field(..., description="操作符: eq/ne/gt/gte/lt/lte/contains/not_contains/regex/in/not_in/exists/is_empty")
     value: Any = Field(..., description="比较值")
+    key: Optional[str] = Field(None, description="标签字段的 key（用于 labels 字段的初始化）")
 
 
 class RuleBase(BaseModel):
@@ -40,6 +43,83 @@ class RuleBase(BaseModel):
     priority: int = Field(0, ge=0, le=1000)
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
+    deduplication_config: Optional["DeduplicationConfig"] = None
+
+
+# ============ 去重/抑制/聚合Config Schema ============
+
+
+class DimensionsConfig(BaseModel):
+    """维度配置"""
+    by_severity: bool = False
+    by_source: bool = False
+
+
+class MaintenanceWindowConfig(BaseModel):
+    """维护窗口配置"""
+    cluster_labels: List[str] = []
+    duration_minutes: int = 60
+
+
+class RuleBasedSuppressionCondition(BaseModel):
+    """基于规则的抑制条件"""
+    field: str
+    operator: str
+    value: Any = None
+
+
+class RuleBasedSuppressionConfig(BaseModel):
+    """基于规则的抑制配置"""
+    conditions: List[RuleBasedSuppressionCondition] = []
+    delay_seconds: int = 0
+
+
+class SuppressionConfig(BaseModel):
+    """抑制配置"""
+    enabled: bool = False
+    type: Literal["maintenance_window", "rule_based"] = "maintenance_window"
+    maintenance_window: Optional[MaintenanceWindowConfig] = None
+    rule_based: Optional[RuleBasedSuppressionConfig] = None
+
+
+class ConditionItem(BaseModel):
+    """去重条件项"""
+    field: str = Field(..., description="字段路径，如 labels.severity/severity/source")
+    operator: str = Field(..., description="操作符: eq/ne/contains/in")
+    value: Any = Field(..., description="比较值")
+    key: Optional[str] = Field(None, description="标签字段的 key（用于 labels 字段的初始化）")
+
+
+class FingerprintDeduplicationConfig(BaseModel):
+    """指纹模式去重配置"""
+    enabled: bool = False
+    dedup_type: Literal["fingerprint"] = "fingerprint"
+    fingerprint_fields: List[str] = Field(default_factory=lambda: ["alert_key"], description="指纹字段列表")
+    window_seconds: int = Field(default=300, ge=0, description="去重窗口秒数")
+    dimensions: DimensionsConfig = Field(default_factory=DimensionsConfig)
+    strategy: Literal["first", "last"] = "first"
+
+
+class ConditionDeduplicationConfig(BaseModel):
+    """条件模式去重配置"""
+    enabled: bool = False
+    dedup_type: Literal["condition"] = "condition"
+    conditions: List[ConditionItem] = Field(default_factory=list, description="去重条件列表")
+    condition_mode: Literal["and", "or"] = "and"
+    window_seconds: int = Field(default=300, ge=0, description="去重窗口秒数")
+    strategy: Literal["first", "last"] = "first"
+
+
+DeduplicationConfig = FingerprintDeduplicationConfig | ConditionDeduplicationConfig
+
+
+class AggregationConfig(BaseModel):
+    """聚合配置"""
+    enabled: bool = False
+    group_by: List[str] = []
+    window_seconds: int = 300
+    max_count: int = 100
+    store_original_alerts: bool = False
 
 
 class RuleCreate(RuleBase):
@@ -56,6 +136,7 @@ class RuleUpdate(BaseModel):
     is_active: Optional[bool] = None
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
+    deduplication_config: Optional["DeduplicationConfig"] = None
 
 
 class RuleResponse(RuleBase):
@@ -169,3 +250,47 @@ class FieldValuesResponse(BaseModel):
     total: int = Field(..., description="总数量")
     limit: int = Field(..., description="本次返回数量")
     offset: int = Field(..., description="分页偏移")
+
+
+# ============ 预览API Schema ============
+
+class PreviewDedupRequest(BaseModel):
+    """去重预览请求"""
+    deduplication_config: DeduplicationConfig
+    status: Optional[str] = Field(None, description="状态过滤: firing/resolved/suppressed")
+    severity: Optional[str] = Field(None, description="严重级别过滤")
+    source: Optional[str] = Field(None, description="告警来源过滤")
+
+
+class PreviewAggregateRequest(BaseModel):
+    """聚合预览请求"""
+    aggregate_config: AggregationConfig
+    status: Optional[str] = Field(None, description="状态过滤: firing/resolved/suppressed")
+    severity: Optional[str] = Field(None, description="严重级别过滤")
+    source: Optional[str] = Field(None, description="告警来源过滤")
+
+
+class AlertGroupItem(BaseModel):
+    """聚合组预览项"""
+    group_key: str = Field(..., description="聚合组Key")
+    group_count: int = Field(..., description="组内告警数量")
+    latest: AlertResponse = Field(..., description="组内最新告警")
+
+    class Config:
+        from_attributes = True
+
+
+class PreviewDedupResponse(BaseModel):
+    """去重预览响应"""
+    items: List[AlertResponse] = Field(default_factory=list, description="匹配的告警列表")
+    total: int = Field(..., description="总数量")
+    page: int = Field(..., description="当前页")
+    page_size: int = Field(..., description="每页数量")
+
+
+class PreviewAggregateResponse(BaseModel):
+    """聚合预览响应"""
+    items: List[AlertGroupItem] = Field(default_factory=list, description="聚合组列表")
+    total: int = Field(..., description="总组数")
+    page: int = Field(..., description="当前页")
+    page_size: int = Field(..., description="每页数量")

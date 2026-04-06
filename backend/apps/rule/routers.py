@@ -5,19 +5,20 @@ import json
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 
 from apps.core.database import get_db
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
-from apps.rule.models import AlertRule, NotificationChannel, NotificationTemplate
+from apps.rule.models import AlertRule
 from apps.alert.models import Alert, AlertSource
+from apps.alert.services.alert_utils import alert_to_dict
 from apps.tenant.models import User, UserTenant
 from apps.core.redis import RedisClient
 from apps.rule.schemas import (
     RuleCreate, RuleUpdate, RuleResponse, RuleTestRequest, RuleTestResponse,
-    ChannelCreate, ChannelUpdate, ChannelResponse,
-    TemplateCreate, TemplateUpdate, TemplateResponse,
     FieldValuesResponse, FieldValueItem,
+    PreviewDedupRequest, PreviewAggregateRequest,
+    PreviewDedupResponse, PreviewAggregateResponse, AlertGroupItem,
 )
 
 router = APIRouter()
@@ -30,12 +31,6 @@ SUPPORTED_SIMPLE_FIELDS = {
     "instance_id",
     "instance_name",
     "status",
-}
-SUPPORTED_LABEL_PATHS = {
-    "labels",
-    "labels.cluster",
-    "labels.env",
-    "labels.service",
 }
 
 
@@ -75,6 +70,7 @@ async def create_rule(
         is_active=request.is_active,
         suppress_config=request.suppress_config,
         aggregate_config=request.aggregate_config,
+        deduplication_config=request.deduplication_config,
     )
     db.add(rule)
     await db.commit()
@@ -222,6 +218,259 @@ async def test_rule(
         reason=reason,
         evaluated_conditions=evaluated,
     )
+
+
+def _build_preview_filters(
+    tenant_id: int,
+    status: Optional[str],
+    severity: Optional[str],
+    source: Optional[str],
+    window_seconds: int = 300,
+) -> list:
+    """构建预览查询的通用过滤器列表"""
+    from datetime import timedelta, datetime as dt
+
+    filters = [Alert.tenant_id == str(tenant_id)]
+    if status:
+        filters.append(Alert.status == status)
+    if severity:
+        filters.append(Alert.severity == severity)
+    if source:
+        filters.append(Alert.source == source)
+
+    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
+    filters.append(Alert.fired_at >= window_start)
+    return filters
+
+
+@router.post("/rules/preview-dedup", response_model=PreviewDedupResponse)
+async def preview_dedup(
+    request: PreviewDedupRequest,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    预览去重效果 - 根据去重配置返回符合条件的告警列表
+    """
+    from apps.alert.schemas import AlertResponse
+
+    dedup_cfg = request.deduplication_config
+    window_seconds = getattr(dedup_cfg, "window_seconds", 300)
+    filters = _build_preview_filters(
+        tenant_id, request.status, request.severity, request.source, window_seconds
+    )
+
+    # 按去重类型构建查询
+    if dedup_cfg.dedup_type == "fingerprint":
+        # 指纹模式: 按 fingerprint_fields 构建组合 key 进行分组
+        fp_fields = getattr(dedup_cfg, "fingerprint_fields", ["alert_key"])
+        dimensions = getattr(dedup_cfg, "dimensions", None)
+
+        # 构建 group_by 列表
+        group_by_cols = []
+        for field in fp_fields:
+            col = _get_alert_column(field)
+            if col is not None:
+                group_by_cols.append(col)
+
+        # 添加维度字段
+        if dimensions:
+            if getattr(dimensions, "by_severity", False):
+                group_by_cols.append(Alert.severity)
+            if getattr(dimensions, "by_source", False):
+                group_by_cols.append(Alert.source)
+
+        if not group_by_cols:
+            group_by_cols = [Alert.fingerprint]
+
+        rows, total = await _build_grouped_alerts_query(db, filters, group_by_cols, page, page_size)
+        items = [AlertResponse.model_validate(row.Alert) for row in rows]
+        return PreviewDedupResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    else:
+        # 条件模式: 用条件过滤（分批从数据库读取，避免内存溢出）
+        conditions = getattr(dedup_cfg, "conditions", [])
+        condition_mode = getattr(dedup_cfg, "condition_mode", "and")
+
+        if not conditions:
+            return PreviewDedupResponse(items=[], total=0, page=page, page_size=page_size)
+
+        from apps.rule.engine import RuleEngine
+        engine = RuleEngine()
+
+        # 分批读取 + 规则引擎评估，收集够 page_size 条后停止
+        BATCH_SIZE = 500
+        collected = []
+        offset = 0
+
+        while len(collected) < (page - 1) * page_size + page_size:
+            batch_query = (
+                select(Alert)
+                .where(and_(*filters))
+                .order_by(Alert.fired_at.desc())
+                .offset(offset)
+                .limit(BATCH_SIZE)
+            )
+            result = await db.execute(batch_query)
+            batch = result.scalars().all()
+
+            if not batch:
+                break
+
+            for alert in batch:
+                alert_data = alert_to_dict(alert)
+                matched, _, _ = engine.evaluate_conditions(conditions, condition_mode, alert_data)
+                if matched:
+                    collected.append(alert)
+
+            offset += BATCH_SIZE
+
+        total = len(collected)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated = collected[start_idx:end_idx]
+        items = [AlertResponse.model_validate(a) for a in paginated]
+
+        return PreviewDedupResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+
+@router.post("/rules/preview-aggregate", response_model=PreviewAggregateResponse)
+async def preview_aggregate(
+    request: PreviewAggregateRequest,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    预览聚合效果 - 根据聚合配置返回告警分组列表
+    """
+    from apps.alert.schemas import AlertResponse
+
+    agg_cfg = request.aggregate_config
+    window_seconds = getattr(agg_cfg, "window_seconds", 300)
+    filters = _build_preview_filters(
+        tenant_id, request.status, request.severity, request.source, window_seconds
+    )
+
+    # 构建 group_by 列
+    group_by_fields = getattr(agg_cfg, "group_by", [])
+    group_by_cols = []
+    for field in group_by_fields:
+        col = _get_alert_column(field)
+        if col is not None:
+            group_by_cols.append(col)
+
+    if not group_by_cols:
+        group_by_cols = [Alert.fingerprint]
+
+    rows, total = await _build_grouped_alerts_query(db, filters, group_by_cols, page, page_size)
+
+    items = []
+    for row in rows:
+        group_key_parts = []
+        for col in group_by_cols:
+            val = getattr(row.Alert, col.key if hasattr(col, 'key') else col.name, None)
+            if val is not None:
+                group_key_parts.append(str(val))
+        group_key = "/".join(group_key_parts) if group_key_parts else row.Alert.fingerprint
+
+        items.append(AlertGroupItem(
+            group_key=group_key,
+            group_count=row.count,
+            latest=AlertResponse.model_validate(row.Alert),
+        ))
+
+    return PreviewAggregateResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def _get_alert_column(field: str):
+    """将字段路径映射为 Alert 模型列"""
+    SIMPLE_FIELDS = {
+        "alert_key": Alert.alert_key,
+        "fingerprint": Alert.fingerprint,
+        "source": Alert.source,
+        "severity": Alert.severity,
+        "status": Alert.status,
+        "namespace": Alert.namespace,
+        "instance_id": Alert.instance_id,
+        "instance_name": Alert.instance_name,
+        "metric_name": Alert.metric_name,
+        "title": Alert.title,
+    }
+
+    if field in SIMPLE_FIELDS:
+        return SIMPLE_FIELDS[field]
+
+    # labels.xxx -> 需要用 JSONB 表达式
+    if field.startswith("labels."):
+        label_key = field.split(".", 1)[1]
+        return func.jsonb_extract_path_text(Alert.labels, label_key).label(field)
+
+    return None
+
+
+async def _build_grouped_alerts_query(
+    db: AsyncSession,
+    filters: list,
+    group_by_cols: list,
+    page: int,
+    page_size: int,
+) -> tuple[list, int]:
+    """
+    构建分组告警查询（预览去重/聚合共用）
+
+    返回: (rows, total) — rows 为 (Alert, count) 元组列表, total 为总分组数
+    """
+    # 分组查询: 每组最新告警和数量
+    subq = (
+        select(
+            *group_by_cols,
+            func.max(Alert.id).label("max_id"),
+            func.count(Alert.id).label("count"),
+        )
+        .where(and_(*filters))
+        .group_by(*group_by_cols)
+        .subquery()
+    )
+
+    # 总分组数
+    total_result = await db.execute(select(func.count()).select_from(subq))
+    total = total_result.scalar() or 0
+
+    # 分页子查询
+    paginated_subq = (
+        select(subq.c.max_id, subq.c.count)
+        .order_by(subq.c.max_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(Alert, paginated_subq.c.count)
+        .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+        .order_by(Alert.fired_at.desc())
+    )
+    rows = result.all()
+    return rows, total
 
 
 # ============ 字段值查询 ============
@@ -551,134 +800,3 @@ async def _get_label_keys(
     ]
     return FieldValuesResponse(field="labels", values=values, total=total, limit=limit, offset=offset)
 
-
-# ============ 通知渠道管理 ============
-
-@router.get("/channels", response_model=list[ChannelResponse])
-async def list_channels(
-    is_active: Optional[bool] = None,
-    channel_type: Optional[str] = None,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取通知渠道列表"""
-    query = select(NotificationChannel).where(NotificationChannel.tenant_id == str(tenant_id))
-    if is_active is not None:
-        query = query.where(NotificationChannel.is_active == is_active)
-    if channel_type:
-        query = query.where(NotificationChannel.channel_type == channel_type)
-    result = await db.execute(query.order_by(NotificationChannel.id))
-    return result.scalars().all()
-
-
-@router.post("/channels", response_model=ChannelResponse)
-async def create_channel(
-    request: ChannelCreate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """创建通知渠道"""
-    channel = NotificationChannel(
-        tenant_id=str(tenant_id),
-        name=request.name,
-        code=request.code,
-        channel_type=request.channel_type,
-        config=request.config,
-        is_active=request.is_active,
-        is_default=request.is_default,
-    )
-    db.add(channel)
-    await db.commit()
-    await db.refresh(channel)
-    return channel
-
-
-@router.put("/channels/{channel_id}", response_model=ChannelResponse)
-async def update_channel(
-    channel_id: int,
-    request: ChannelUpdate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """更新通知渠道"""
-    result = await db.execute(
-        select(NotificationChannel).where(
-            NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == str(tenant_id)
-        )
-    )
-    channel = result.scalar_one_or_none()
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
-
-    for field, value in request.model_dump(exclude_unset=True).items():
-        setattr(channel, field, value)
-
-    await db.commit()
-    await db.refresh(channel)
-    return channel
-
-
-# ============ 通知模板管理 ============
-
-@router.get("/templates", response_model=list[TemplateResponse])
-async def list_templates(
-    channel_type: Optional[str] = None,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取通知模板列表"""
-    query = select(NotificationTemplate).where(NotificationTemplate.tenant_id == str(tenant_id))
-    if channel_type:
-        query = query.where(NotificationTemplate.channel_type == channel_type)
-    result = await db.execute(query.order_by(NotificationTemplate.id))
-    return result.scalars().all()
-
-
-@router.post("/templates", response_model=TemplateResponse)
-async def create_template(
-    request: TemplateCreate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """创建通知模板"""
-    template = NotificationTemplate(
-        tenant_id=str(tenant_id),
-        name=request.name,
-        code=request.code,
-        channel_type=request.channel_type,
-        content=request.content,
-        variables=request.variables,
-        is_active=request.is_active,
-        is_default=request.is_default,
-    )
-    db.add(template)
-    await db.commit()
-    await db.refresh(template)
-    return template
-
-
-@router.put("/templates/{template_id}", response_model=TemplateResponse)
-async def update_template(
-    template_id: int,
-    request: TemplateUpdate,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """更新通知模板"""
-    result = await db.execute(
-        select(NotificationTemplate).where(
-            NotificationTemplate.id == template_id,
-            NotificationTemplate.tenant_id == str(tenant_id)
-        )
-    )
-    template = result.scalar_one_or_none()
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    for field, value in request.model_dump(exclude_unset=True).items():
-        setattr(template, field, value)
-
-    await db.commit()
-    await db.refresh(template)
-    return template
