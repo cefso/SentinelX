@@ -14,6 +14,7 @@ from redis.asyncio import Redis
 from apps.alert.models import Alert, AlertTrace, AlertHistory, AlertAggregateGroup, AlertAggregateMember
 from apps.rule.models import AlertRule
 from apps.rule.engine import RuleEngine
+from apps.alert.services.alert_utils import alert_to_dict
 
 logger = structlog.get_logger()
 
@@ -143,7 +144,7 @@ class AlertDispatcher:
                 condition_mode = dedup_config.get("condition_mode", "and")
                 window_seconds = dedup_config.get("window_seconds", 300)
 
-                alert_data = self._build_alert_data(alert)
+                alert_data = alert_to_dict(alert)
                 is_match, reason, evaluated = self.rule_engine.evaluate_conditions(
                     conditions, condition_mode, alert_data
                 )
@@ -271,7 +272,7 @@ class AlertDispatcher:
                 conditions = suppress_config.get("conditions", [])
                 condition_mode = suppress_config.get("condition_mode", "and")
 
-                alert_data = self._build_alert_data(alert)
+                alert_data = alert_to_dict(alert)
                 is_suppressed, reason, _ = self.rule_engine.evaluate_conditions(
                     conditions, condition_mode, alert_data
                 )
@@ -328,7 +329,7 @@ class AlertDispatcher:
                 conditions = agg_config.get("conditions", [])
                 condition_mode = agg_config.get("condition_mode", "and")
 
-                alert_data = self._build_alert_data(alert)
+                alert_data = alert_to_dict(alert)
                 is_match, reason, evaluated = self.rule_engine.evaluate_conditions(
                     conditions, condition_mode, alert_data
                 )
@@ -483,44 +484,13 @@ class AlertDispatcher:
             })
             return None
 
-    def _build_alert_data(self, alert: Alert) -> Dict[str, Any]:
-        """构建告警数据字典，用于规则条件评估"""
-        return {
-            # 基础字段
-            "alert_key": alert.alert_key,
-            "title": alert.title,
-            "content": alert.content,
-            "severity": alert.severity,
-            "status": alert.status,
-            "source": alert.source,
-            # 云产品字段
-            "namespace": alert.namespace,
-            "instance_id": alert.instance_id,
-            "instance_name": alert.instance_name,
-            # 指标字段
-            "metric_name": alert.metric_name,
-            "metric_value": alert.metric_value,
-            # 标签/注解/原始数据
-            "labels": alert.labels or {},
-            "annotations": alert.annotations or {},
-            "raw_data": alert.raw_data or {},
-            # 统计字段
-            "fire_count": alert.fire_count,
-            "repeat_count": alert.repeat_count,
-            "escalation_count": alert.escalation_count,
-            # 时间字段
-            "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
-            # 追踪字段
-            "trace_id": alert.trace_id,
-        }
-
     async def _match_rules(self, alert: Alert, trace_id: str) -> tuple[List[AlertRule], List[int]]:
         """规则匹配
         返回: (匹配的规则列表, 通知渠道ID列表)
         """
         await self._add_trace_step(trace_id, "rule_match", "规则匹配", "processing", {})
 
-        alert_data = self._build_alert_data(alert)
+        alert_data = alert_to_dict(alert)
 
         # 使用规则引擎匹配
         matched_rules = await self.rule_engine.match_rules(self.db, alert.tenant_id, alert_data)

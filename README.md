@@ -186,8 +186,9 @@ SentinelX/
 │   └── main.py               # 应用入口
 ├── frontend/                  # React前端
 │   ├── src/
-│   │   ├── pages/            # 页面组件（alerts/admin/channels/diagnose/login/rules/settings 等）
+│   │   ├── pages/            # 页面组件（alerts/rules/channels/settings/admin/diagnose/login 等）
 │   │   ├── components/        # 通用组件
+│   │   │   └── condition/     # 条件选择组件（ConditionRow、constants 等）
 │   │   ├── services/          # API服务
 │   │   ├── stores/            # 状态管理（Zustand）
 │   │   ├── hooks/            # React Hooks
@@ -453,9 +454,14 @@ DELETE /api/v1/auth/api-keys/{key_id}  # 撤销API Key
 ```
 GET    /api/v1/tenants           # 获取租户列表
 POST   /api/v1/tenants           # 创建租户
+GET    /api/v1/tenants/current   # 获取当前租户
 GET    /api/v1/tenants/{id}      # 获取租户详情
 PUT    /api/v1/tenants/{id}      # 更新租户
 GET    /api/v1/tenants/public    # 获取公开租户列表（注册时使用）
+GET    /api/v1/tenants/{id}/webhook-key     # 获取Webhook Key
+POST   /api/v1/tenants/{id}/webhook-key     # 生成/重置Webhook Key
+GET    /api/v1/roles             # 获取角色列表
+POST   /api/v1/roles             # 创建角色
 ```
 
 ### 告警源管理
@@ -515,12 +521,14 @@ POST   /api/v1/admin/users/{user_id}/reject     # 拒绝用户注册
 ### 告警
 ```
 POST   /api/v1/alerts             # 接收告警
+POST   /api/v1/alerts/batch       # 批量接收告警
+POST   /api/v1/alerts/webhook/{source_type}  # Webhook接收告警
 GET    /api/v1/alerts             # 告警列表（支持 aggregate=true 聚合模式）
 GET    /api/v1/alerts/stats        # 告警统计
 GET    /api/v1/alerts/{id}         # 告警详情
 PUT    /api/v1/alerts/{id}        # 更新告警
+GET    /api/v1/alerts/{id}/aggregated-members  # 获取聚合组的告警列表
 GET    /api/v1/alerts/diagnose/{trace_id}  # 诊断
-POST   /api/v1/alerts/batch       # 批量接收告警
 ```
 
 **告警列表聚合模式**: 使用 `GET /api/v1/alerts?aggregate=true` 可按指纹（fingerprint）聚合，同一告警的多条记录合并展示，返回 `count`（触发次数）和 `latest`（最新告警）。
@@ -550,13 +558,92 @@ GET    /api/v1/rules/{id}         # 规则详情
 PUT    /api/v1/rules/{id}        # 更新规则
 DELETE /api/v1/rules/{id}        # 删除规则
 POST   /api/v1/rules/test        # 测试规则
+POST   /api/v1/rules/preview-dedup      # 预览去重匹配告警
+POST   /api/v1/rules/preview-aggregate   # 预览聚合匹配告警
+GET    /api/v1/rules/field-values       # 获取规则字段的可选值（用于下拉提示）
+```
+
+**规则预览 API**:
+
+`POST /api/v1/rules/preview-dedup` - 预览去重配置匹配的告警
+```json
+{
+  "deduplication_config": {
+    "dedup_type": "condition",
+    "window_seconds": 300,
+    "conditions": [{"field": "source", "operator": "eq", "value": "prometheus"}],
+    "condition_mode": "and"
+  },
+  "status": "firing",
+  "severity": "critical",
+  "source": "prometheus"
+}
+```
+
+`POST /api/v1/rules/preview-aggregate` - 预览聚合配置匹配的告警
+```json
+{
+  "aggregate_config": {
+    "mode": "condition",
+    "window_seconds": 300,
+    "conditions": [{"field": "namespace", "operator": "eq", "value": "prod"}],
+    "condition_mode": "and"
+  },
+  "status": "firing",
+  "severity": "critical",
+  "source": "prometheus"
+}
+```
+
+响应格式：
+```json
+{
+  "items": [...],  // 告警列表（去重）或聚合组列表（聚合）
+  "total": 100,
+  "page": 1,
+  "page_size": 10
+}
+```
+
+**字段值获取 API**:
+
+`GET /api/v1/rules/field-values?field=severity&search=&limit=50` - 获取规则条件字段的可选值
+
+| 参数 | 说明 |
+|------|------|
+| field | 字段名（severity/source/status/assignee/namespace/instance_id/alert_key/metric_name/labels.{key}） |
+| search | 搜索关键字（可选） |
+| limit | 返回数量限制（默认50） |
+
+响应格式：
+```json
+{
+  "values": [
+    {"value": "critical", "count": 10},
+    {"value": "high", "count": 5}
+  ]
+}
 ```
 
 ### 通知渠道
 ```
+GET    /api/v1/channel-types      # 获取支持的渠道类型列表
 GET    /api/v1/channels           # 渠道列表
 POST   /api/v1/channels           # 创建渠道
+GET    /api/v1/channels/{id}      # 渠道详情
 PUT    /api/v1/channels/{id}      # 更新渠道
+DELETE /api/v1/channels/{id}      # 删除渠道
+POST   /api/v1/channels/{id}/test # 测试渠道配置
+GET    /api/v1/notifications       # 通知发送历史
+```
+
+### 通知模板
+```
+GET    /api/v1/templates           # 模板列表
+POST   /api/v1/templates           # 创建模板
+GET    /api/v1/templates/{id}      # 模板详情
+PUT    /api/v1/templates/{id}      # 更新模板
+DELETE /api/v1/templates/{id}      # 删除模板
 ```
 
 ### 健康检查
@@ -564,6 +651,23 @@ PUT    /api/v1/channels/{id}      # 更新渠道
 GET /health          # 健康检查
 GET /health/ready   # 就绪探针 (检查数据库/Redis)
 GET /health/live    # 存活探针
+```
+
+### 告警升级
+```
+GET    /api/v1/alerts/escalation/candidates  # 获取可升级的告警列表
+POST   /api/v1/alerts/{id}/escalate         # 手动升级告警
+POST   /api/v1/alerts/escalation/check      # 检查告警是否需要升级
+```
+
+### 维护窗口
+```
+GET    /api/v1/maintenance/windows           # 获取维护窗口列表
+POST   /api/v1/maintenance/windows           # 创建维护窗口
+GET    /api/v1/maintenance/windows/{id}     # 获取维护窗口详情
+PUT    /api/v1/maintenance/windows/{id}     # 更新维护窗口
+DELETE /api/v1/maintenance/windows/{id}     # 删除维护窗口
+GET    /api/v1/maintenance/windows/{id}/check # 检查告警是否在维护窗口内
 ```
 
 ## 开发指南

@@ -260,8 +260,6 @@ class PreviewDedupRequest(BaseModel):
     status: Optional[str] = Field(None, description="状态过滤: firing/resolved/suppressed")
     severity: Optional[str] = Field(None, description="严重级别过滤")
     source: Optional[str] = Field(None, description="告警来源过滤")
-    start_time: Optional[datetime] = Field(None, description="开始时间")
-    end_time: Optional[datetime] = Field(None, description="结束时间")
 
 
 class PreviewAggregateRequest(BaseModel):
@@ -270,8 +268,6 @@ class PreviewAggregateRequest(BaseModel):
     status: Optional[str] = Field(None, description="状态过滤: firing/resolved/suppressed")
     severity: Optional[str] = Field(None, description="严重级别过滤")
     source: Optional[str] = Field(None, description="告警来源过滤")
-    start_time: Optional[datetime] = Field(None, description="开始时间")
-    end_time: Optional[datetime] = Field(None, description="结束时间")
 
 
 class AlertGroupItem(BaseModel):

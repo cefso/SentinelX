@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { ConditionRow } from '@/components/condition/ConditionRow'
+import { OPERATORS, SEVERITY_OPTIONS } from '@/components/condition/constants'
 
 export interface Condition {
   field: string
@@ -46,23 +48,18 @@ function CollapsibleSection({ title, defaultOpen = true, children }: { title: st
   )
 }
 
-const OPERATORS = [
-  { value: 'eq', label: '等于' },
-  { value: 'ne', label: '不等于' },
-  { value: 'in', label: '在列表中' },
-  { value: 'not_in', label: '不在列表中' },
-  { value: 'contains', label: '包含' },
-  { value: 'not_contains', label: '不包含' },
-  { value: 'regex', label: '正则匹配' },
-  { value: 'gt', label: '大于' },
-  { value: 'gte', label: '大于等于' },
-  { value: 'lt', label: '小于' },
-  { value: 'lte', label: '小于等于' },
-  { value: 'exists', label: '存在' },
-  { value: 'is_empty', label: '为空' },
+// 去重/聚合可用字段
+const DEDUP_AGG_FIELDS = [
+  { value: 'alert_key', label: '告警Key' },
+  { value: 'source', label: '告警来源' },
+  { value: 'severity', label: '严重级别' },
+  { value: 'namespace', label: '命名空间' },
+  { value: 'instance_id', label: '实例ID' },
+  { value: 'metric_name', label: '指标' },
+  { value: 'title', label: '标题' },
+  { value: 'content', label: '内容' },
+  { value: 'labels', label: '标签' },
 ]
-
-const SEVERITY_OPTIONS = ['critical', 'high', 'medium', 'low', 'info']
 
 export function RulesPage() {
   const queryClient = useQueryClient()
@@ -301,6 +298,84 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     return result
   }, [aggregationConfig.conditions])
 
+  // 匹配告警的 labels（用于去重/聚合的 labels 下拉智能过滤）
+  const [matchingAlertsLabels, setMatchingAlertsLabels] = useState<{
+    keys: string[]
+    valuesByKey: Record<string, string[]>
+  }>({ keys: [], valuesByKey: {} })
+
+  // 主规则已选的普通字段（排除 labels，labels 单独处理）
+  const selectedFieldsInMain = useMemo(() => {
+    return new Set(
+      formData.conditions
+        .map(c => c.field.split('.')[0])
+        .filter(f => f !== 'labels')
+    )
+  }, [formData.conditions])
+
+  // 去重条件可用字段（排除主规则已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
+  const dedupAvailableFields = useMemo(() => {
+    // 排除主规则已选的非 labels 字段
+    const excluded = new Set([...selectedFieldsInMain])
+    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
+    return DEDUP_AGG_FIELDS.filter(f => !excluded.has(f.value))
+  }, [selectedFieldsInMain])
+
+  // 聚合条件可用字段（排除主规则已选 + 去重已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
+  const aggAvailableFields = useMemo(() => {
+    const dedupSelectedFields = new Set(
+      deduplicationConfig.conditions
+        .map((c: any) => c.field.split('.')[0])
+        .filter((f: string) => f !== 'labels')
+    )
+    const excluded = new Set([...selectedFieldsInMain, ...dedupSelectedFields])
+    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
+    return DEDUP_AGG_FIELDS.filter(
+      f => !excluded.has(f.value)
+    )
+  }, [selectedFieldsInMain, deduplicationConfig.conditions])
+
+  // 获取匹配主规则条件的告警 labels
+  const fetchMatchingAlertsLabels = useCallback(async () => {
+    try {
+      const result = await apiClient.post<{ alerts: any[]; total: number }>(
+        '/rules/preview-dedup',
+        {
+          conditions: formData.conditions,
+          condition_mode: formData.condition_mode,
+          page: 1,
+          page_size: 100,
+        }
+      )
+
+      const allLabels: Record<string, Set<string>> = {}
+      result.alerts?.forEach((alert: any) => {
+        if (alert.labels) {
+          Object.entries(alert.labels).forEach(([key, value]) => {
+            if (!allLabels[key]) allLabels[key] = new Set()
+            allLabels[key].add(value as string)
+          })
+        }
+      })
+
+      // 过滤掉主规则已选的 labels key
+      const mainLabelsKeys = new Set(
+        formData.conditions
+          .filter(c => c.field.startsWith('labels.'))
+          .map(c => c.field.split('.')[1])
+      )
+
+      setMatchingAlertsLabels({
+        keys: Object.keys(allLabels).filter(k => !mainLabelsKeys.has(k)),
+        valuesByKey: Object.fromEntries(
+          Object.entries(allLabels).map(([k, v]) => [k, Array.from(v)])
+        )
+      })
+    } catch (err) {
+      console.error('Failed to fetch matching alerts labels:', err)
+    }
+  }, [formData.conditions, formData.condition_mode])
+
   // 预览弹窗状态
   const [previewModal, setPreviewModal] = useState<{
     open: boolean
@@ -321,7 +396,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
         conditions: formData.conditions,
         condition_mode: formData.condition_mode,
         deduplication_config: deduplicationConfig.enabled ? {
-          mode: deduplicationConfig.mode,
+          dedup_type: deduplicationConfig.mode,
           window_seconds: deduplicationConfig.window_seconds,
           fingerprint_fields: deduplicationConfig.fingerprint_fields,
           dimensions: deduplicationConfig.dimensions,
@@ -342,11 +417,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
           conditions: aggregationConfig.conditions,
         } : null,
       }
-      const result = await apiClient.post<{ alerts: any[]; total: number }>(
+      const result = await apiClient.post<{ items: any[]; total: number }>(
         type === 'dedup' ? '/rules/preview-dedup' : '/rules/preview-aggregate',
         { ...payload, page, page_size: previewPageSize }
       )
-      setPreviewData(result.alerts || [])
+      setPreviewData(result.items || [])
       setPreviewTotal(result.total || 0)
     } catch (err) {
       console.error('Preview failed:', err)
@@ -380,7 +455,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
   // 预加载字段值（modal 打开时自动加载）
   useEffect(() => {
     if (showModal) {
-      ;['namespace', 'instance_id', 'instance_name', 'metric_name', 'labels'].forEach(field => {
+      ;['namespace', 'instance_id', 'instance_name', 'metric_name', 'alert_key', 'labels'].forEach(field => {
         fetchFieldValues(field)
       })
       // 为 initialConditions 中已有的 labels.{key} 预加载值
@@ -393,6 +468,13 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       }
     }
   }, [showModal, initialConditions])
+
+  // 预加载匹配告警的 labels（用于去重/聚合的 labels 下拉）
+  useEffect(() => {
+    if (showModal && formData.conditions.length > 0) {
+      fetchMatchingAlertsLabels()
+    }
+  }, [showModal, formData.conditions, fetchMatchingAlertsLabels])
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -488,7 +570,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       actions,
       deduplication_config: deduplicationConfig.enabled ? {
         enabled: true,
-        mode: deduplicationConfig.mode,
+        dedup_type: deduplicationConfig.mode,
         window_seconds: deduplicationConfig.window_seconds,
         fingerprint_fields: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.fingerprint_fields : undefined,
         dimensions: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.dimensions : undefined,
@@ -992,54 +1074,6 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                         className="px-2 py-1 border rounded text-sm flex-1"
                       />
                     )
-                  ) : condition.field === 'labels' && !['exists', 'is_empty'].includes(condition.operator) ? (
-                    <div className="relative flex-1 flex gap-1 items-center">
-                      {/* Key 下拉框 */}
-                      <select
-                        value={labelsKey[index] || ''}
-                        onChange={(e) => {
-                          const key = e.target.value
-                          // 设置 condition.key 以同步 labelsKey (useMemo)
-                          updateCondition(index, 'key', key)
-                          updateCondition(index, 'field', key ? `labels.${key}` : 'labels')
-                          updateCondition(index, 'value', '')
-                          if (key) {
-                            fetchFieldValues(`labels.${key}`)
-                          }
-                        }}
-                        className="px-2 py-1 border rounded text-sm w-28"
-                      >
-                        <option value="">选择标签键</option>
-                        {(() => {
-                          const cached = fieldValuesCache.current['labels']
-                          if (!cached?.data?.length) {
-                            return <option disabled>加载中...</option>
-                          }
-                          return cached.data.map((item: any) => (
-                            <option key={item.value} value={item.value}>{item.value}</option>
-                          ))
-                        })()}
-                      </select>
-
-                      {/* Value 下拉框（根据 selected key 动态加载） */}
-                      <select
-                        value={condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        disabled={!labelsKey[index]}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">选择标签值</option>
-                        {labelsKey[index] && (() => {
-                          const cached = fieldValuesCache.current[`labels.${labelsKey[index]}`]
-                          if (!cached?.data?.length) {
-                            return <option disabled>加载中...</option>
-                          }
-                          return cached.data.map((item: any) => (
-                            <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                          ))
-                        })()}
-                      </select>
-                    </div>
                   ) : ['namespace', 'instance_id', 'instance_name', 'metric_name'].includes(condition.field) ? (
                     <div className="relative flex-1 flex gap-1" ref={dropdownRef}>
                       <input
@@ -1235,113 +1269,32 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                       </div>
                       <div className="space-y-2">
                         {deduplicationConfig.conditions.map((cond: any, idx: number) => (
-                          <div key={idx} className="flex gap-2 items-center">
-                            <select
-                              value={cond.field.startsWith('labels.') ? 'labels' : cond.field}
-                              onChange={(e) => {
-                                const conditions = [...deduplicationConfig.conditions]
-                                const newField = e.target.value
-                                if (newField === 'labels') {
-                                  conditions[idx] = { ...conditions[idx], field: 'labels', key: '', value: '' }
-                                } else {
-                                  conditions[idx] = { ...conditions[idx], field: newField, key: undefined, value: '' }
-                                }
-                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm"
-                            >
-                              <option value="alert_key">告警Key</option>
-                              <option value="source">告警来源</option>
-                              <option value="severity">严重级别</option>
-                              <option value="namespace">命名空间</option>
-                              <option value="instance_id">实例ID</option>
-                              <option value="metric_name">指标</option>
-                              <option value="title">标题</option>
-                              <option value="content">内容</option>
-                              <option value="labels">标签</option>
-                            </select>
-                            {cond.field === 'labels' || cond.field.startsWith('labels.') ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={dedupLabelsKey[idx] || ''}
-                                  onChange={(e) => {
-                                    const key = e.target.value
-                                    const conditions = [...deduplicationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
-                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                                    if (key) {
-                                      fetchFieldValues(`labels.${key}`)
-                                    }
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm w-28"
-                                  placeholder="标签key"
-                                  list={`dedup-label-keys-${idx}`}
-                                />
-                                <datalist id={`dedup-label-keys-${idx}`}>
-                                  {(fieldValuesCache.current['labels']?.data || []).map((item: any) => (
-                                    <option key={item.value} value={item.value}>{item.value}</option>
-                                  ))}
-                                </datalist>
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  onChange={(e) => {
-                                    const conditions = [...deduplicationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm flex-1"
-                                  placeholder="标签值"
-                                  list={dedupLabelsKey[idx] ? `dedup-label-values-${idx}-${dedupLabelsKey[idx]}` : undefined}
-                                />
-                                {dedupLabelsKey[idx] && (
-                                  <datalist id={`dedup-label-values-${idx}-${dedupLabelsKey[idx]}`}>
-                                    {(fieldValuesCache.current[`labels.${dedupLabelsKey[idx]}`]?.data || []).map((item: any) => (
-                                      <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                                    ))}
-                                  </datalist>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <select
-                                  value={cond.operator}
-                                  onChange={(e) => {
-                                    const conditions = [...deduplicationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], operator: e.target.value }
-                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm"
-                                >
-                                  {OPERATORS.map((op) => (
-                                    <option key={op.value} value={op.value}>{op.label}</option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  onChange={(e) => {
-                                    const conditions = [...deduplicationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm flex-1"
-                                  placeholder="输入值"
-                                />
-                              </>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const conditions = deduplicationConfig.conditions.filter((_: any, i: number) => i !== idx)
-                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              ×
-                            </button>
-                          </div>
+                          <ConditionRow
+                            key={idx}
+                            condition={cond}
+                            availableFields={dedupAvailableFields}
+                            showLabelsDropdown={true}
+                            labelsKey={dedupLabelsKey[idx]}
+                            labelsKeyOptions={matchingAlertsLabels.keys}
+                            labelsValueOptions={matchingAlertsLabels.valuesByKey[dedupLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
+                            sources={sources}
+                            fieldValuesCache={fieldValuesCache.current}
+                            onFetchFieldValues={fetchFieldValues}
+                            onLabelsKeyChange={(key) => {
+                              const conditions = [...deduplicationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                            onChange={(field, value) => {
+                              const conditions = [...deduplicationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], [field]: value }
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                            onRemove={() => {
+                              const conditions = deduplicationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                            }}
+                          />
                         ))}
                         <button
                           type="button"
@@ -1463,113 +1416,32 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                       </div>
                       <div className="space-y-2">
                         {aggregationConfig.conditions.map((cond: any, idx: number) => (
-                          <div key={idx} className="flex gap-2 items-center">
-                            <select
-                              value={cond.field.startsWith('labels.') ? 'labels' : cond.field}
-                              onChange={(e) => {
-                                const conditions = [...aggregationConfig.conditions]
-                                const newField = e.target.value
-                                if (newField === 'labels') {
-                                  conditions[idx] = { ...conditions[idx], field: 'labels', key: '', value: '' }
-                                } else {
-                                  conditions[idx] = { ...conditions[idx], field: newField, key: undefined, value: '' }
-                                }
-                                setAggregationConfig({ ...aggregationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm"
-                            >
-                              <option value="alert_key">告警Key</option>
-                              <option value="source">告警来源</option>
-                              <option value="severity">严重级别</option>
-                              <option value="namespace">命名空间</option>
-                              <option value="instance_id">实例ID</option>
-                              <option value="metric_name">指标</option>
-                              <option value="title">标题</option>
-                              <option value="content">内容</option>
-                              <option value="labels">标签</option>
-                            </select>
-                            {cond.field === 'labels' || cond.field.startsWith('labels.') ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={aggLabelsKey[idx] || ''}
-                                  onChange={(e) => {
-                                    const key = e.target.value
-                                    const conditions = [...aggregationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
-                                    setAggregationConfig({ ...aggregationConfig, conditions })
-                                    if (key) {
-                                      fetchFieldValues(`labels.${key}`)
-                                    }
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm w-28"
-                                  placeholder="标签key"
-                                  list={`agg-label-keys-${idx}`}
-                                />
-                                <datalist id={`agg-label-keys-${idx}`}>
-                                  {(fieldValuesCache.current['labels']?.data || []).map((item: any) => (
-                                    <option key={item.value} value={item.value}>{item.value}</option>
-                                  ))}
-                                </datalist>
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  onChange={(e) => {
-                                    const conditions = [...aggregationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                    setAggregationConfig({ ...aggregationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm flex-1"
-                                  placeholder="标签值"
-                                  list={aggLabelsKey[idx] ? `agg-label-values-${idx}-${aggLabelsKey[idx]}` : undefined}
-                                />
-                                {aggLabelsKey[idx] && (
-                                  <datalist id={`agg-label-values-${idx}-${aggLabelsKey[idx]}`}>
-                                    {(fieldValuesCache.current[`labels.${aggLabelsKey[idx]}`]?.data || []).map((item: any) => (
-                                      <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                                    ))}
-                                  </datalist>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <select
-                                  value={cond.operator}
-                                  onChange={(e) => {
-                                    const conditions = [...aggregationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], operator: e.target.value }
-                                    setAggregationConfig({ ...aggregationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm"
-                                >
-                                  {OPERATORS.map((op) => (
-                                    <option key={op.value} value={op.value}>{op.label}</option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  onChange={(e) => {
-                                    const conditions = [...aggregationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                    setAggregationConfig({ ...aggregationConfig, conditions })
-                                  }}
-                                  className="px-2 py-1 border rounded text-sm flex-1"
-                                  placeholder="输入值"
-                                />
-                              </>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const conditions = aggregationConfig.conditions.filter((_: any, i: number) => i !== idx)
-                                setAggregationConfig({ ...aggregationConfig, conditions })
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              ×
-                            </button>
-                          </div>
+                          <ConditionRow
+                            key={idx}
+                            condition={cond}
+                            availableFields={aggAvailableFields}
+                            showLabelsDropdown={true}
+                            labelsKey={aggLabelsKey[idx]}
+                            labelsKeyOptions={matchingAlertsLabels.keys}
+                            labelsValueOptions={matchingAlertsLabels.valuesByKey[aggLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
+                            sources={sources}
+                            fieldValuesCache={fieldValuesCache.current}
+                            onFetchFieldValues={fetchFieldValues}
+                            onLabelsKeyChange={(key) => {
+                              const conditions = [...aggregationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                            onChange={(field, value) => {
+                              const conditions = [...aggregationConfig.conditions]
+                              conditions[idx] = { ...conditions[idx], [field]: value }
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                            onRemove={() => {
+                              const conditions = aggregationConfig.conditions.filter((_: any, i: number) => i !== idx)
+                              setAggregationConfig({ ...aggregationConfig, conditions })
+                            }}
+                          />
                         ))}
                         <button
                           type="button"

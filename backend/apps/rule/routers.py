@@ -11,6 +11,7 @@ from apps.core.database import get_db
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.rule.models import AlertRule
 from apps.alert.models import Alert, AlertSource
+from apps.alert.services.alert_utils import alert_to_dict
 from apps.tenant.models import User, UserTenant
 from apps.core.redis import RedisClient
 from apps.rule.schemas import (
@@ -219,6 +220,29 @@ async def test_rule(
     )
 
 
+def _build_preview_filters(
+    tenant_id: int,
+    status: Optional[str],
+    severity: Optional[str],
+    source: Optional[str],
+    window_seconds: int = 300,
+) -> list:
+    """构建预览查询的通用过滤器列表"""
+    from datetime import timedelta, datetime as dt
+
+    filters = [Alert.tenant_id == str(tenant_id)]
+    if status:
+        filters.append(Alert.status == status)
+    if severity:
+        filters.append(Alert.severity == severity)
+    if source:
+        filters.append(Alert.source == source)
+
+    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
+    filters.append(Alert.fired_at >= window_start)
+    return filters
+
+
 @router.post("/rules/preview-dedup", response_model=PreviewDedupResponse)
 async def preview_dedup(
     request: PreviewDedupRequest,
@@ -233,21 +257,10 @@ async def preview_dedup(
     from apps.alert.schemas import AlertResponse
 
     dedup_cfg = request.deduplication_config
-    filters = [Alert.tenant_id == str(tenant_id)]
-
-    # 基础过滤
-    if request.status:
-        filters.append(Alert.status == request.status)
-    if request.severity:
-        filters.append(Alert.severity == request.severity)
-    if request.source:
-        filters.append(Alert.source == request.source)
-
-    # 时间窗口过滤
     window_seconds = getattr(dedup_cfg, "window_seconds", 300)
-    from datetime import timedelta, datetime as dt
-    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
-    filters.append(Alert.fired_at >= window_start)
+    filters = _build_preview_filters(
+        tenant_id, request.status, request.severity, request.source, window_seconds
+    )
 
     # 按去重类型构建查询
     if dedup_cfg.dedup_type == "fingerprint":
@@ -272,38 +285,7 @@ async def preview_dedup(
         if not group_by_cols:
             group_by_cols = [Alert.fingerprint]
 
-        # 构建分组查询: 每组的最新告警
-        subq = (
-            select(
-                *group_by_cols,
-                func.max(Alert.id).label("max_id"),
-                func.count(Alert.id).label("count"),
-            )
-            .where(and_(*filters))
-            .group_by(*group_by_cols)
-            .subquery()
-        )
-
-        # 总分组数
-        total_result = await db.execute(select(func.count()).select_from(subq))
-        total = total_result.scalar() or 0
-
-        # 分页子查询
-        paginated_subq = (
-            select(subq.c.max_id, subq.c.count)
-            .order_by(subq.c.max_id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .subquery()
-        )
-
-        result = await db.execute(
-            select(Alert, paginated_subq.c.count)
-            .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
-            .order_by(Alert.fired_at.desc())
-        )
-        rows = result.all()
-
+        rows, total = await _build_grouped_alerts_query(db, filters, group_by_cols, page, page_size)
         items = [AlertResponse.model_validate(row.Alert) for row in rows]
         return PreviewDedupResponse(
             items=items,
@@ -313,33 +295,48 @@ async def preview_dedup(
         )
 
     else:
-        # 条件模式: 用条件过滤
+        # 条件模式: 用条件过滤（分批从数据库读取，避免内存溢出）
         conditions = getattr(dedup_cfg, "conditions", [])
         condition_mode = getattr(dedup_cfg, "condition_mode", "and")
 
-        if conditions:
-            from apps.rule.engine import RuleEngine
-            engine = RuleEngine()
+        if not conditions:
+            return PreviewDedupResponse(items=[], total=0, page=page, page_size=page_size)
 
-            # 先查询所有满足基础过滤的告警
-            base_query = select(Alert).where(and_(*filters))
-            result = await db.execute(base_query.order_by(Alert.fired_at.desc()))
-            all_alerts = result.scalars().all()
+        from apps.rule.engine import RuleEngine
+        engine = RuleEngine()
 
-            # 用规则引擎评估条件
-            filtered = []
-            for alert in all_alerts:
-                alert_data = _alert_to_dict(alert)
+        # 分批读取 + 规则引擎评估，收集够 page_size 条后停止
+        BATCH_SIZE = 500
+        collected = []
+        offset = 0
+
+        while len(collected) < (page - 1) * page_size + page_size:
+            batch_query = (
+                select(Alert)
+                .where(and_(*filters))
+                .order_by(Alert.fired_at.desc())
+                .offset(offset)
+                .limit(BATCH_SIZE)
+            )
+            result = await db.execute(batch_query)
+            batch = result.scalars().all()
+
+            if not batch:
+                break
+
+            for alert in batch:
+                alert_data = alert_to_dict(alert)
                 matched, _, _ = engine.evaluate_conditions(conditions, condition_mode, alert_data)
                 if matched:
-                    filtered.append(alert)
+                    collected.append(alert)
 
-            total = len(filtered)
-            paginated = filtered[(page - 1) * page_size:page * page_size]
-            items = [AlertResponse.model_validate(a) for a in paginated]
-        else:
-            total = 0
-            items = []
+            offset += BATCH_SIZE
+
+        total = len(collected)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated = collected[start_idx:end_idx]
+        items = [AlertResponse.model_validate(a) for a in paginated]
 
         return PreviewDedupResponse(
             items=items,
@@ -363,21 +360,10 @@ async def preview_aggregate(
     from apps.alert.schemas import AlertResponse
 
     agg_cfg = request.aggregate_config
-    filters = [Alert.tenant_id == str(tenant_id)]
-
-    # 基础过滤
-    if request.status:
-        filters.append(Alert.status == request.status)
-    if request.severity:
-        filters.append(Alert.severity == request.severity)
-    if request.source:
-        filters.append(Alert.source == request.source)
-
-    # 时间窗口过滤
     window_seconds = getattr(agg_cfg, "window_seconds", 300)
-    from datetime import timedelta, datetime as dt
-    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
-    filters.append(Alert.fired_at >= window_start)
+    filters = _build_preview_filters(
+        tenant_id, request.status, request.severity, request.source, window_seconds
+    )
 
     # 构建 group_by 列
     group_by_fields = getattr(agg_cfg, "group_by", [])
@@ -390,37 +376,7 @@ async def preview_aggregate(
     if not group_by_cols:
         group_by_cols = [Alert.fingerprint]
 
-    # 分组查询: 每组最新告警和数量
-    subq = (
-        select(
-            *group_by_cols,
-            func.max(Alert.id).label("max_id"),
-            func.count(Alert.id).label("count"),
-        )
-        .where(and_(*filters))
-        .group_by(*group_by_cols)
-        .subquery()
-    )
-
-    # 总分组数
-    total_result = await db.execute(select(func.count()).select_from(subq))
-    total = total_result.scalar() or 0
-
-    # 分页子查询
-    paginated_subq = (
-        select(subq.c.max_id, subq.c.count)
-        .order_by(subq.c.max_id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .subquery()
-    )
-
-    result = await db.execute(
-        select(Alert, paginated_subq.c.count)
-        .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
-        .order_by(Alert.fired_at.desc())
-    )
-    rows = result.all()
+    rows, total = await _build_grouped_alerts_query(db, filters, group_by_cols, page, page_size)
 
     items = []
     for row in rows:
@@ -471,31 +427,50 @@ def _get_alert_column(field: str):
     return None
 
 
-def _alert_to_dict(alert: Alert) -> dict:
-    """将 Alert 模型转换为字典，用于规则引擎评估"""
-    return {
-        "id": alert.id,
-        "tenant_id": alert.tenant_id,
-        "alert_key": alert.alert_key,
-        "fingerprint": alert.fingerprint,
-        "source": alert.source,
-        "title": alert.title,
-        "content": alert.content,
-        "severity": alert.severity,
-        "status": alert.status,
-        "labels": alert.labels or {},
-        "annotations": alert.annotations or {},
-        "metric_name": alert.metric_name,
-        "metric_value": alert.metric_value,
-        "namespace": alert.namespace,
-        "instance_id": alert.instance_id,
-        "instance_name": alert.instance_name,
-        "trace_id": alert.trace_id,
-        "fire_count": alert.fire_count,
-        "repeat_count": alert.repeat_count,
-        "escalation_count": alert.escalation_count,
-        "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
-    }
+async def _build_grouped_alerts_query(
+    db: AsyncSession,
+    filters: list,
+    group_by_cols: list,
+    page: int,
+    page_size: int,
+) -> tuple[list, int]:
+    """
+    构建分组告警查询（预览去重/聚合共用）
+
+    返回: (rows, total) — rows 为 (Alert, count) 元组列表, total 为总分组数
+    """
+    # 分组查询: 每组最新告警和数量
+    subq = (
+        select(
+            *group_by_cols,
+            func.max(Alert.id).label("max_id"),
+            func.count(Alert.id).label("count"),
+        )
+        .where(and_(*filters))
+        .group_by(*group_by_cols)
+        .subquery()
+    )
+
+    # 总分组数
+    total_result = await db.execute(select(func.count()).select_from(subq))
+    total = total_result.scalar() or 0
+
+    # 分页子查询
+    paginated_subq = (
+        select(subq.c.max_id, subq.c.count)
+        .order_by(subq.c.max_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(Alert, paginated_subq.c.count)
+        .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+        .order_by(Alert.fired_at.desc())
+    )
+    rows = result.all()
+    return rows, total
 
 
 # ============ 字段值查询 ============
