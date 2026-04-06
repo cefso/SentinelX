@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
+from apps.alert.schemas import AlertResponse
+
 
 # ============ 规则条件Schema ============
 
@@ -275,7 +277,7 @@ class AlertGroupItem(BaseModel):
     """聚合组预览项"""
     group_key: str = Field(..., description="聚合组Key")
     group_count: int = Field(..., description="组内告警数量")
-    latest: "AlertResponse" = Field(..., description="组内最新告警")
+    latest: AlertResponse = Field(..., description="组内最新告警")
 
     class Config:
         from_attributes = True
@@ -283,7 +285,7 @@ class AlertGroupItem(BaseModel):
 
 class PreviewDedupResponse(BaseModel):
     """去重预览响应"""
-    items: List["AlertResponse"] = Field(default_factory=list, description="匹配的告警列表")
+    items: List[AlertResponse] = Field(default_factory=list, description="匹配的告警列表")
     total: int = Field(..., description="总数量")
     page: int = Field(..., description="当前页")
     page_size: int = Field(..., description="每页数量")
