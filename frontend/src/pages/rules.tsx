@@ -1215,10 +1215,15 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                         {deduplicationConfig.conditions.map((cond: any, idx: number) => (
                           <div key={idx} className="flex gap-2 items-center">
                             <select
-                              value={cond.field}
+                              value={cond.field.startsWith('labels.') ? 'labels' : cond.field}
                               onChange={(e) => {
                                 const conditions = [...deduplicationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], field: e.target.value }
+                                const newField = e.target.value
+                                if (newField === 'labels') {
+                                  conditions[idx] = { ...conditions[idx], field: 'labels', key: '', value: '' }
+                                } else {
+                                  conditions[idx] = { ...conditions[idx], field: newField, key: undefined, value: '' }
+                                }
                                 setDeduplicationConfig({ ...deduplicationConfig, conditions })
                               }}
                               className="px-2 py-1 border rounded text-sm"
@@ -1233,11 +1238,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <option value="content">内容</option>
                               <option value="labels">标签</option>
                             </select>
-                            {cond.field === 'labels' ? (
+                            {cond.field === 'labels' || cond.field.startsWith('labels.') ? (
                               <>
                                 <input
                                   type="text"
-                                  value={cond.key || ''}
+                                  value={cond.key || cond.field.replace('labels.', '') || ''}
                                   onChange={(e) => {
                                     const conditions = [...deduplicationConfig.conditions]
                                     conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
@@ -1420,10 +1425,15 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                         {aggregationConfig.conditions.map((cond: any, idx: number) => (
                           <div key={idx} className="flex gap-2 items-center">
                             <select
-                              value={cond.field}
+                              value={cond.field.startsWith('labels.') ? 'labels' : cond.field}
                               onChange={(e) => {
                                 const conditions = [...aggregationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], field: e.target.value }
+                                const newField = e.target.value
+                                if (newField === 'labels') {
+                                  conditions[idx] = { ...conditions[idx], field: 'labels', key: '', value: '' }
+                                } else {
+                                  conditions[idx] = { ...conditions[idx], field: newField, key: undefined, value: '' }
+                                }
                                 setAggregationConfig({ ...aggregationConfig, conditions })
                               }}
                               className="px-2 py-1 border rounded text-sm"
@@ -1438,11 +1448,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <option value="content">内容</option>
                               <option value="labels">标签</option>
                             </select>
-                            {cond.field === 'labels' ? (
+                            {cond.field === 'labels' || cond.field.startsWith('labels.') ? (
                               <>
                                 <input
                                   type="text"
-                                  value={cond.key || ''}
+                                  value={cond.key || cond.field.replace('labels.', '') || ''}
                                   onChange={(e) => {
                                     const conditions = [...aggregationConfig.conditions]
                                     conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
