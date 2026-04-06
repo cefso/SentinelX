@@ -279,7 +279,29 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     conditions: rule?.aggregate_config?.conditions ?? [],
   })
 
-  // Preview modal state
+  // dedup labels key 派生（与主规则条件相同的模式）
+  const dedupLabelsKey = useMemo(() => {
+    const result: Record<number, string> = {}
+    deduplicationConfig.conditions.forEach((cond: any, idx: number) => {
+      if (cond.field === 'labels' && cond.key) {
+        result[idx] = cond.key
+      }
+    })
+    return result
+  }, [deduplicationConfig.conditions])
+
+  // agg labels key 派生
+  const aggLabelsKey = useMemo(() => {
+    const result: Record<number, string> = {}
+    aggregationConfig.conditions.forEach((cond: any, idx: number) => {
+      if (cond.field === 'labels' && cond.key) {
+        result[idx] = cond.key
+      }
+    })
+    return result
+  }, [aggregationConfig.conditions])
+
+  // 预览弹窗状态
   const [previewModal, setPreviewModal] = useState<{
     open: boolean
     type: 'dedup' | 'aggregate'
@@ -1242,15 +1264,25 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <>
                                 <input
                                   type="text"
-                                  value={cond.key || cond.field.replace('labels.', '') || ''}
+                                  value={dedupLabelsKey[idx] || ''}
                                   onChange={(e) => {
+                                    const key = e.target.value
                                     const conditions = [...deduplicationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
+                                    conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
                                     setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                                    if (key) {
+                                      fetchFieldValues(`labels.${key}`)
+                                    }
                                   }}
                                   className="px-2 py-1 border rounded text-sm w-28"
                                   placeholder="标签key"
+                                  list={`dedup-label-keys-${idx}`}
                                 />
+                                <datalist id={`dedup-label-keys-${idx}`}>
+                                  {(fieldValuesCache.current['labels']?.data || []).map((item: any) => (
+                                    <option key={item.value} value={item.value}>{item.value}</option>
+                                  ))}
+                                </datalist>
                                 <input
                                   type="text"
                                   value={cond.value}
@@ -1261,7 +1293,15 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                                   }}
                                   className="px-2 py-1 border rounded text-sm flex-1"
                                   placeholder="标签值"
+                                  list={dedupLabelsKey[idx] ? `dedup-label-values-${idx}-${dedupLabelsKey[idx]}` : undefined}
                                 />
+                                {dedupLabelsKey[idx] && (
+                                  <datalist id={`dedup-label-values-${idx}-${dedupLabelsKey[idx]}`}>
+                                    {(fieldValuesCache.current[`labels.${dedupLabelsKey[idx]}`]?.data || []).map((item: any) => (
+                                      <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
+                                    ))}
+                                  </datalist>
+                                )}
                               </>
                             ) : (
                               <>
@@ -1452,15 +1492,25 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <>
                                 <input
                                   type="text"
-                                  value={cond.key || cond.field.replace('labels.', '') || ''}
+                                  value={aggLabelsKey[idx] || ''}
                                   onChange={(e) => {
+                                    const key = e.target.value
                                     const conditions = [...aggregationConfig.conditions]
-                                    conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
+                                    conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
                                     setAggregationConfig({ ...aggregationConfig, conditions })
+                                    if (key) {
+                                      fetchFieldValues(`labels.${key}`)
+                                    }
                                   }}
                                   className="px-2 py-1 border rounded text-sm w-28"
                                   placeholder="标签key"
+                                  list={`agg-label-keys-${idx}`}
                                 />
+                                <datalist id={`agg-label-keys-${idx}`}>
+                                  {(fieldValuesCache.current['labels']?.data || []).map((item: any) => (
+                                    <option key={item.value} value={item.value}>{item.value}</option>
+                                  ))}
+                                </datalist>
                                 <input
                                   type="text"
                                   value={cond.value}
@@ -1471,7 +1521,15 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                                   }}
                                   className="px-2 py-1 border rounded text-sm flex-1"
                                   placeholder="标签值"
+                                  list={aggLabelsKey[idx] ? `agg-label-values-${idx}-${aggLabelsKey[idx]}` : undefined}
                                 />
+                                {aggLabelsKey[idx] && (
+                                  <datalist id={`agg-label-values-${idx}-${aggLabelsKey[idx]}`}>
+                                    {(fieldValuesCache.current[`labels.${aggLabelsKey[idx]}`]?.data || []).map((item: any) => (
+                                      <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
+                                    ))}
+                                  </datalist>
+                                )}
                               </>
                             ) : (
                               <>
