@@ -1231,31 +1231,61 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <option value="metric_name">指标</option>
                               <option value="title">标题</option>
                               <option value="content">内容</option>
+                              <option value="labels">标签</option>
                             </select>
-                            <select
-                              value={cond.operator}
-                              onChange={(e) => {
-                                const conditions = [...deduplicationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], operator: e.target.value }
-                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm"
-                            >
-                              {OPERATORS.map((op) => (
-                                <option key={op.value} value={op.value}>{op.label}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="text"
-                              value={cond.value}
-                              onChange={(e) => {
-                                const conditions = [...deduplicationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm flex-1"
-                              placeholder="输入值"
-                            />
+                            {cond.field === 'labels' ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={cond.key || ''}
+                                  onChange={(e) => {
+                                    const conditions = [...deduplicationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
+                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm w-28"
+                                  placeholder="标签key"
+                                />
+                                <input
+                                  type="text"
+                                  value={cond.value}
+                                  onChange={(e) => {
+                                    const conditions = [...deduplicationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm flex-1"
+                                  placeholder="标签值"
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <select
+                                  value={cond.operator}
+                                  onChange={(e) => {
+                                    const conditions = [...deduplicationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], operator: e.target.value }
+                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm"
+                                >
+                                  {OPERATORS.map((op) => (
+                                    <option key={op.value} value={op.value}>{op.label}</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={cond.value}
+                                  onChange={(e) => {
+                                    const conditions = [...deduplicationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                    setDeduplicationConfig({ ...deduplicationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm flex-1"
+                                  placeholder="输入值"
+                                />
+                              </>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -1406,31 +1436,61 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
                               <option value="metric_name">指标</option>
                               <option value="title">标题</option>
                               <option value="content">内容</option>
+                              <option value="labels">标签</option>
                             </select>
-                            <select
-                              value={cond.operator}
-                              onChange={(e) => {
-                                const conditions = [...aggregationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], operator: e.target.value }
-                                setAggregationConfig({ ...aggregationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm"
-                            >
-                              {OPERATORS.map((op) => (
-                                <option key={op.value} value={op.value}>{op.label}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="text"
-                              value={cond.value}
-                              onChange={(e) => {
-                                const conditions = [...aggregationConfig.conditions]
-                                conditions[idx] = { ...conditions[idx], value: e.target.value }
-                                setAggregationConfig({ ...aggregationConfig, conditions })
-                              }}
-                              className="px-2 py-1 border rounded text-sm flex-1"
-                              placeholder="输入值"
-                            />
+                            {cond.field === 'labels' ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={cond.key || ''}
+                                  onChange={(e) => {
+                                    const conditions = [...aggregationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], key: e.target.value, field: `labels.${e.target.value}` }
+                                    setAggregationConfig({ ...aggregationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm w-28"
+                                  placeholder="标签key"
+                                />
+                                <input
+                                  type="text"
+                                  value={cond.value}
+                                  onChange={(e) => {
+                                    const conditions = [...aggregationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                    setAggregationConfig({ ...aggregationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm flex-1"
+                                  placeholder="标签值"
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <select
+                                  value={cond.operator}
+                                  onChange={(e) => {
+                                    const conditions = [...aggregationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], operator: e.target.value }
+                                    setAggregationConfig({ ...aggregationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm"
+                                >
+                                  {OPERATORS.map((op) => (
+                                    <option key={op.value} value={op.value}>{op.label}</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={cond.value}
+                                  onChange={(e) => {
+                                    const conditions = [...aggregationConfig.conditions]
+                                    conditions[idx] = { ...conditions[idx], value: e.target.value }
+                                    setAggregationConfig({ ...aggregationConfig, conditions })
+                                  }}
+                                  className="px-2 py-1 border rounded text-sm flex-1"
+                                  placeholder="输入值"
+                                />
+                              </>
+                            )}
                             <button
                               type="button"
                               onClick={() => {

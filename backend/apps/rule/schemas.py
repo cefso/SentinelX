@@ -87,6 +87,7 @@ class ConditionItem(BaseModel):
     field: str = Field(..., description="字段路径，如 labels.severity/severity/source")
     operator: str = Field(..., description="操作符: eq/ne/contains/in")
     value: Any = Field(..., description="比较值")
+    key: Optional[str] = Field(None, description="标签字段的 key（用于 labels 字段的初始化）")
 
 
 class FingerprintDeduplicationConfig(BaseModel):
