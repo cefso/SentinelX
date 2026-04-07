@@ -497,7 +497,7 @@ export function AlertDetailPage() {
                 </div>
                 {fpAlerts.total > 20 && (
                   <button
-                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
+                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}&aggregate=false`)}
                     className="text-xs text-blue-600 hover:text-blue-700"
                   >
                     查看全部
@@ -548,7 +548,7 @@ export function AlertDetailPage() {
               {fpAlerts.total > 10 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <button
-                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
+                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}&aggregate=false`)}
                     className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-1"
                   >
                     查看更多 ({fpAlerts.total - 10} 条)

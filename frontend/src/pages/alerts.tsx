@@ -139,7 +139,7 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '' })}
+              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '', fingerprint: '' })}
               className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
@@ -241,6 +241,17 @@ export function AlertsPage() {
                   {source.name}
                 </button>
               ))}
+            </div>
+
+            {/* 指纹搜索 */}
+            <div className="flex items-center gap-2 ml-auto">
+              <input
+                type="text"
+                placeholder="搜索指纹..."
+                value={filters.fingerprint}
+                onChange={(e) => { setFilters({ ...filters, fingerprint: e.target.value }); setPage(1); }}
+                className="px-3 py-1 text-sm border rounded-md w-48"
+              />
             </div>
           </div>
         </div>
