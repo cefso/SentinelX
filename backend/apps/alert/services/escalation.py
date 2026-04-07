@@ -3,7 +3,7 @@ SentinelX - 升级服务
 处理告警升级逻辑
 """
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 import structlog
 
@@ -74,13 +74,13 @@ class EscalationService:
 
         if last_notification:
             # 检查距离上次通知是否超过等待时间
-            elapsed = (datetime.utcnow() - last_notification).total_seconds() / 60
+            elapsed = (datetime.now(timezone.utc) - last_notification).total_seconds() / 60
             if elapsed < wait_minutes:
                 return False, wait_minutes - elapsed
 
         # 检查告警触发时间
         if alert.fired_at:
-            elapsed_since_fire = (datetime.utcnow() - alert.fired_at).total_seconds() / 60
+            elapsed_since_fire = (datetime.now(timezone.utc) - alert.fired_at).total_seconds() / 60
             expected_wait = sum(self.ESCALATION_WAITS.get(i, 60) for i in range(alert.escalation_count + 1))
             if elapsed_since_fire < expected_wait:
                 return False, expected_wait - elapsed_since_fire

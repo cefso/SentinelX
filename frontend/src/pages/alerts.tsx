@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
+import { formatLocalDateTime } from '@/utils/datetime'
 
 interface AlertSource {
   id: number
@@ -279,7 +280,7 @@ export function AlertsPage() {
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
-                      {item.latest.fired_at ? new Date(item.latest.fired_at).toLocaleString('zh-CN') : '-'}
+                      {item.latest.fired_at ? formatLocalDateTime(item.latest.fired_at) : '-'}
                     </td>
                     <td className="px-3 py-2"><StatusBadge status={item.latest.status} /></td>
                   </tr>
@@ -305,7 +306,7 @@ export function AlertsPage() {
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
-                      {alert.fired_at ? new Date(alert.fired_at).toLocaleString('zh-CN') : '-'}
+                      {alert.fired_at ? formatLocalDateTime(alert.fired_at) : '-'}
                     </td>
                     <td className="px-3 py-2"><StatusBadge status={alert.status} /></td>
                   </tr>

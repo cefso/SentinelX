@@ -228,7 +228,7 @@ def _build_preview_filters(
     window_seconds: int = 300,
 ) -> list:
     """构建预览查询的通用过滤器列表"""
-    from datetime import timedelta, datetime as dt
+    from datetime import timedelta, datetime as dt, timezone
 
     filters = [Alert.tenant_id == str(tenant_id)]
     if status:
@@ -238,7 +238,7 @@ def _build_preview_filters(
     if source:
         filters.append(Alert.source == source)
 
-    window_start = dt.utcnow() - timedelta(seconds=window_seconds)
+    window_start = dt.now(timezone.utc) - timedelta(seconds=window_seconds)
     filters.append(Alert.fired_at >= window_start)
     return filters
 
