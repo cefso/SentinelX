@@ -3,7 +3,7 @@ SentinelX - 告警分发器
 核心处理流程：接入 → 去重 → 抑制 → 聚合 → 规则匹配 → 通知
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import structlog
 
@@ -77,7 +77,7 @@ class AlertDispatcher:
             "trace_id": trace_id,
             "alert_id": str(alert.id),
             "tenant_id": alert.tenant_id,
-            "start_time": datetime.utcnow().isoformat(),
+            "start_time": datetime.now(timezone.utc).isoformat(),
             "final_status": "processing",
         }
         await self.redis.hset(trace_key, mapping=trace_data)
@@ -415,7 +415,7 @@ class AlertDispatcher:
 
                     # 更新聚合组计数
                     group.alert_count += 1
-                    group.last_alert_at = datetime.utcnow()
+                    group.last_alert_at = datetime.now(timezone.utc)
                     group.latest_alert_id = alert.id
                     await self.db.commit()
 
@@ -611,6 +611,6 @@ class AlertDispatcher:
             "title": title,
             "status": status,
             "data": data,
-            "time": datetime.utcnow().isoformat(),
+            "time": datetime.now(timezone.utc).isoformat(),
         }
         await self.redis.rpush(f"{trace_key}:steps", json.dumps(step))

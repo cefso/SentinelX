@@ -4,7 +4,7 @@ SentinelX - 告警管理路由
 import hashlib
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,7 +64,7 @@ async def _create_alerts_from_parsed(
         source = await db.get(AlertSource, source_id)
         if source and str(source.tenant_id) == tenant_id:
             source.alert_count = (source.alert_count or 0) + 1
-            source.last_alert_at = datetime.utcnow()
+            source.last_alert_at = datetime.now(timezone.utc)
 
     if isinstance(parsed_alert, list):
         results = []
@@ -91,7 +91,7 @@ async def _create_alerts_from_parsed(
                 instance_id=alert_data.instance_id,
                 instance_name=alert_data.instance_name,
                 trace_id=trace_id,
-                fired_at=datetime.utcnow(),
+                fired_at=datetime.now(timezone.utc),
             )
             db.add(alert)
             await db.flush()
@@ -127,7 +127,7 @@ async def _create_alerts_from_parsed(
             instance_id=parsed_alert.instance_id,
             instance_name=parsed_alert.instance_name,
             trace_id=trace_id,
-            fired_at=datetime.utcnow(),
+            fired_at=datetime.now(timezone.utc),
         )
         db.add(alert)
         await db.flush()
@@ -285,7 +285,7 @@ async def create_alert(
         instance_id=request.instance_id,
         instance_name=request.instance_name,
         trace_id=trace_id,
-        fired_at=datetime.utcnow(),
+        fired_at=datetime.now(timezone.utc),
     )
     db.add(alert)
     await db.flush()
@@ -495,7 +495,7 @@ async def create_alerts_batch(
             instance_id=alert_data.instance_id,
             instance_name=alert_data.instance_name,
             trace_id=trace_id,
-            fired_at=datetime.utcnow(),
+            fired_at=datetime.now(timezone.utc),
         )
         db.add(alert)
         await db.flush()
@@ -541,8 +541,14 @@ async def list_alerts(
             Alert.content.ilike(f"%{keyword}%")
         ))
     if start_time:
+        # 确保 start_time 是 timezone-aware (假设输入为 UTC)
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
         base_filter.append(Alert.fired_at >= start_time)
     if end_time:
+        # 确保 end_time 是 timezone-aware (假设输入为 UTC)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
         base_filter.append(Alert.fired_at <= end_time)
     if fingerprint:
         base_filter.append(Alert.fingerprint == fingerprint)
@@ -675,7 +681,7 @@ async def get_alert_stats(
     unique = unique_result.scalar() or 0
 
     # 查询4: 今日新增
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     today_result = await db.execute(
         select(func.count()).where(
             and_(tenant_filter, Alert.fired_at >= today_start)
