@@ -7,6 +7,7 @@ import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
 import { useCloudMetricsMap, useProductName, useMetricDesc } from '@/hooks/useCloudMetrics'
 import { Send, CheckCircle, AlertCircle, XCircle, Clock, Circle, ChevronDown } from 'lucide-react'
+import { formatLocalDateTime } from '@/utils/datetime'
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -417,7 +418,7 @@ export function AlertDetailPage() {
                         <div className="flex-1">
                           <div className="font-medium text-sm">{item.event}</div>
                           <div className="text-xs text-gray-500">
-                            {new Date(item.time).toLocaleString('zh-CN')}
+                            {formatLocalDateTime(item.time)}
                           </div>
                         </div>
                       </div>
@@ -521,7 +522,7 @@ export function AlertDetailPage() {
                           <div className="flex items-center gap-1.5">
                             <SeverityBadge severity={item.severity} />
                             <span className="text-xs text-gray-400 truncate">
-                              {new Date(item.fired_at).toLocaleString('zh-CN')}
+                              {formatLocalDateTime(item.fired_at)}
                             </span>
                             {item.id === alert.id && (
                               <span className="text-xs text-blue-600 font-medium shrink-0">当前</span>
@@ -574,7 +575,7 @@ export function AlertDetailPage() {
                       item.severity === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                     }`} />
                     <span className="text-xs text-gray-500 shrink-0">
-                      {new Date(item.fired_at).toLocaleString('zh-CN')}
+                      {formatLocalDateTime(item.fired_at)}
                     </span>
                     <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
                       item.severity === 'critical' ? 'bg-red-100 text-red-800' :
