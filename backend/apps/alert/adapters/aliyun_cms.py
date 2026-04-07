@@ -87,7 +87,6 @@ class AliyunCmsAdapter(AlertAdapter):
     def _determine_severity(self, raw_data: Dict[str, Any]) -> str:
         """根据告警状态和数据判断严重级别"""
         alert_state = raw_data.get("alertState", raw_data.get("alert_state", ""))
-        severity = raw_data.get("severity", "").upper()
 
         # 已恢复的告警降为 info
         if alert_state == "OK" or alert_state == "RESOLVED":
@@ -102,10 +101,17 @@ class AliyunCmsAdapter(AlertAdapter):
             "INFO": "info",
         }
 
+        # 1. 优先使用 triggerLevel 字段（阿里云云监控1.0的严重等级字段）
+        trigger_level = raw_data.get("triggerLevel", "").upper()
+        if trigger_level in severity_map:
+            return severity_map[trigger_level]
+
+        # 2. 检查 severity 字段
+        severity = raw_data.get("severity", "").upper()
         if severity in severity_map:
             return severity_map[severity]
 
-        # 默认根据表达式判断
+        # 3. 默认根据表达式判断
         expression = raw_data.get("expression", "")
         if ">" in expression or "<" in expression:
             return "high"  # 有阈值条件的默认为高级别
