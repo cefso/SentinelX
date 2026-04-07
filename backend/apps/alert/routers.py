@@ -579,9 +579,14 @@ async def list_alerts(
         )
 
         # 关联获取完整告警
+        # 注意: 需要在 JOIN 条件中再次应用 base_filter，确保返回的 Alert 符合过滤条件
+        alert_filter = [Alert.id == paginated_subq.c.max_id]
+        if severity:
+            alert_filter.append(Alert.severity == severity)
+
         result = await db.execute(
             select(Alert, paginated_subq.c.count)
-            .join(paginated_subq, Alert.id == paginated_subq.c.max_id)
+            .join(paginated_subq, and_(*alert_filter))
             .order_by(Alert.fired_at.desc())
         )
         rows = result.all()
