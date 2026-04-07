@@ -545,7 +545,7 @@ export function AlertDetailPage() {
                     ))}
                 </div>
               </div>
-              {fpAlerts.total > 20 && (
+              {fpAlerts.total > 10 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <button
                     onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
