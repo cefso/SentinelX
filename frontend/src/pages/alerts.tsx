@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
@@ -24,13 +24,28 @@ export function AlertsPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
+  const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
     sourceId: '' as number | '',
     keyword: '',
+    fingerprint: '',
   })
   const [aggregateMode, setAggregateMode] = useState(true)
+
+  // 初始化从 URL 参数
+  useEffect(() => {
+    const fp = searchParams.get('fingerprint')
+    const agg = searchParams.get('aggregate')
+    if (fp) {
+      setFilters(prev => ({ ...prev, fingerprint: fp }))
+      setPage(1)
+    }
+    if (agg === 'false') {
+      setAggregateMode(false)
+    }
+  }, [searchParams])
 
   const { data: stats } = useQuery<AlertStats>({
     queryKey: ['alertStats'],
@@ -51,6 +66,7 @@ export function AlertsPage() {
       severity: filters.severity || undefined,
       source_id: filters.sourceId || undefined,
       keyword: filters.keyword || undefined,
+      fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
     }),
   })
@@ -127,7 +143,7 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '' })}
+              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '', fingerprint: '' })}
               className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
@@ -229,6 +245,17 @@ export function AlertsPage() {
                   {source.name}
                 </button>
               ))}
+            </div>
+
+            {/* 指纹搜索 */}
+            <div className="flex items-center gap-2 ml-auto">
+              <input
+                type="text"
+                placeholder="搜索指纹..."
+                value={filters.fingerprint}
+                onChange={(e) => { setFilters({ ...filters, fingerprint: e.target.value }); setPage(1); }}
+                className="px-3 py-1 text-sm border rounded-md w-48"
+              />
             </div>
           </div>
         </div>
