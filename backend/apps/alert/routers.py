@@ -532,7 +532,7 @@ async def list_alerts(
     if status:
         base_filter.append(Alert.status == status)
     if severity:
-        base_filter.append(Alert.severity == severity)
+        base_filter.append(Alert.severity.in_(severity))
     if source:
         base_filter.append(Alert.source == source)
     if keyword:
@@ -582,7 +582,7 @@ async def list_alerts(
         # 注意: 需要在 JOIN 条件中再次应用 base_filter，确保返回的 Alert 符合过滤条件
         alert_filter = [Alert.id == paginated_subq.c.max_id]
         if severity:
-            alert_filter.append(Alert.severity == severity)
+            alert_filter.append(Alert.severity.in_(severity))
 
         result = await db.execute(
             select(Alert, paginated_subq.c.count)
