@@ -1,8 +1,13 @@
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
-
-export function formatLocalDateTime(utcDate: string, fmt: string = 'yyyy-MM-dd HH:mm:ss'): string {
-  // Parse as UTC, then format in local timezone
+export function formatLocalDateTime(utcDate: string): string {
   const date = new Date(utcDate)
-  return format(date, fmt, { locale: zhCN })
+  return date.toLocaleString('zh-CN', {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
 }
