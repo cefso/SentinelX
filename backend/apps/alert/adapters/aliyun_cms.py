@@ -64,7 +64,6 @@ class AliyunCmsAdapter(AlertAdapter):
             content=content,
             severity=severity,
             labels={
-                "last_time": last_time,
                 "raw_metric_name": raw_metric_name,
                 "expression": expression,
                 "metric_name": metric_name,
