@@ -4,8 +4,8 @@ SentinelX - 告警管理路由
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional, List, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, cast, Date

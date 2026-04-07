@@ -3,6 +3,19 @@ import { useAuthStore } from '@/stores/auth-store'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
+// FastAPI expects repeated query params for arrays: ?severity=critical&severity=high
+const paramsSerializer = (params: Record<string, any>) => {
+  const searchParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      value.forEach(v => searchParams.append(key, v))
+    } else if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value))
+    }
+  }
+  return searchParams.toString()
+}
+
 class ApiClient {
   private client: AxiosInstance
 
@@ -13,6 +26,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      paramsSerializer,
     })
 
     this.setupInterceptors()
