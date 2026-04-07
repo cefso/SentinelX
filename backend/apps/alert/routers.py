@@ -5,7 +5,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, cast, Date
@@ -515,7 +515,7 @@ async def list_alerts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
-    severity: Optional[str] = None,
+    severity: Optional[List[str]] = None,
     source: Optional[str] = None,
     keyword: Optional[str] = None,
     start_time: Optional[datetime] = None,
