@@ -686,6 +686,70 @@ class PrometheusAdapter(AlertAdapter):
         return AlertCreate(...)
 ```
 
+### 阿里云云监控1.0适配器
+
+阿里云云监控1.0适配器（`aliyun_cms.py`）处理阿里云云监控的告警格式，关键字段说明：
+
+**原始数据字段**:
+- `alertState`: 告警状态
+  - `OK` - 正常（恢复），会触发恢复逻辑
+  - `ALERT` - 报警（触发）
+  - `INSUFFICIENT_DATA` - 无数据
+- `triggerLevel`: 本次触发报警的级别
+  - `CRITICAL` - 严重
+  - `WARN` - 警告
+  - `INFO` - 信息
+- `alertName`: 告警名称
+- `rawMetricName`: 原始指标名
+- `metricName`: 指标名
+- `expression`: 触发表达式
+- `lastTime`: 持续时间
+
+**告警键生成**:
+```
+alert_key = aliyun_cms-{alertName}-{rawMetricName}-{instance_id}
+```
+注意：`lastTime` 不包含在 alert_key 中，避免同一告警因持续时间变化导致指纹不同。
+
+**严重等级映射**:
+| triggerLevel | severity |
+|-------------|----------|
+| CRITICAL | critical |
+| WARN | high |
+| INFO | info |
+
+**恢复处理**:
+当 `alertState=OK`（或等效的恢复状态）时，系统会：
+1. 通过 fingerprint 查找同指纹的 firing 状态告警，标记为 resolved
+2. 创建 AlertHistory 记录状态变化（action="resolved"）
+3. 创建新的告警记录（status=resolved），每条消息都忠实记录
+
+支持恢复处理的适配器：
+- **aliyun_cms**: `alertState=OK`
+- **aliyun_cms2**: `state=OK` 或 `state=RESOLVED`
+- **prometheus/alertmanager**: `status=resolved`
+
+**INSUFFICIENT_DATA 处理**:
+当 `alertState=INSUFFICIENT_DATA` 时，系统会：
+- 将 severity 降级为 low
+- 继续正常告警创建流程
+
+**指纹一致性**:
+恢复消息（OK）的 fingerprint 与触发消息相同，因为 fingerprint 计算使用的是 labels（不含 severity 字段）。
+
+**忠实记录原则**:
+所有适配器（aliyun_cms、aliyun_cms2、prometheus、zabbix、tencent、custom 等）都遵循忠实记录原则：
+- 每条告警消息都会创建独立的 Alert 记录
+- 不进行去重，重复消息继续通过完整处理流程
+- 每条记录的 fire_count = 1
+
+**通知去重**:
+虽然存储层忠实记录每条消息，但通知发送层会进行去重：
+- 使用 fingerprint 作为去重键
+- 去重窗口：5分钟（300秒）
+- 同一 fingerprint 在窗口期内只发送一次通知
+- OK 恢复消息不发送通知
+
 ### 添加新的通知渠道
 
 1. 在 `backend/apps/notify/channels/` 创建渠道类

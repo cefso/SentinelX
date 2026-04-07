@@ -81,6 +81,7 @@ class AliyunCms2Adapter(AlertAdapter):
             },
             annotations={
                 "alert_name": alert_name,
+                "alert_state": state,  # 用于恢复处理
                 "state": state,
                 "raw_data": raw_data,
             },
@@ -104,6 +105,7 @@ class AliyunCms2Adapter(AlertAdapter):
         # 级别映射
         severity_map = {
             "CRITICAL": "critical",
+            "WARN": "high",      # WARN 映射为 high
             "HIGH": "high",
             "MEDIUM": "medium",
             "LOW": "low",

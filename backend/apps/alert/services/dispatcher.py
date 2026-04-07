@@ -40,11 +40,11 @@ class AlertDispatcher:
             suppress_rule = await self._lookup_suppress_rule(alert)
             aggregate_rule = await self._lookup_aggregate_rule(alert)
 
-            # 1. 去重检查
+            # 1. 去重检查（不再进行去重，每条消息都忠实记录）
             is_duplicate, dedup_reason, dedup_key = await self._check_dedup(alert, trace_id, dedup_rule)
             if is_duplicate:
                 await self._handle_duplicate(alert, trace_id, dedup_reason, dedup_key)
-                return
+                # 不 return，继续执行后续流程
 
             # 2. 抑制检查
             is_suppressed, suppress_reason = await self._check_suppress(alert, trace_id, suppress_rule)
@@ -220,26 +220,10 @@ class AlertDispatcher:
             return True, f"相同指纹告警在{window_seconds}秒内已存在 (alert_id: {existing_id})", dedup_key
 
     async def _handle_duplicate(self, alert: Alert, trace_id: str, reason: str, dedup_key: Optional[str] = None):
-        """处理重复告警"""
-        # 更新原告警的计数
-        if dedup_key is None:
-            dedup_key = f"dedup:{alert.tenant_id}:{alert.fingerprint}"
-        existing_id = await self.redis.get(dedup_key)
-        if existing_id:
-            try:
-                existing_alert_id = int(existing_id)
-                result = await self.db.execute(
-                    select(Alert).where(Alert.id == existing_alert_id)
-                )
-                existing_alert = result.scalar_one_or_none()
-                if existing_alert:
-                    existing_alert.fire_count += 1
-                    existing_alert.repeat_count += 1
-                    await self.db.commit()
-            except Exception as e:
-                logger.warning("failed_to_update_duplicate", error=str(e))
-
+        """处理重复告警 - 不进行去重，仍然创建新记录"""
+        # 不再更新原告警的 fire_count，每条消息都忠实记录
         await self._finish_trace(trace_id, "duplicate", deduction_reason=reason)
+        # 继续执行后续流程（不 return），让告警创建新记录
 
     async def _check_suppress(self, alert: Alert, trace_id: str, rule: Optional[AlertRule] = None) -> tuple[bool, Optional[str]]:
         """抑制检查"""
@@ -530,6 +514,24 @@ class AlertDispatcher:
         trace_id: str
     ):
         """完成告警处理"""
+        # 检查是否为 OK 恢复消息（阿里云云监控1.0）
+        alert_state = alert.annotations.get("alert_state") if alert.annotations else None
+        if alert_state == "OK":
+            alert.status = "resolved"
+            alert.fire_count = 1
+            alert.notification_channels = channel_ids
+            # 记录恢复历史
+            history = AlertHistory(
+                tenant_id=alert.tenant_id,
+                alert_id=alert.id,
+                action="resolved",
+                description="阿里云云监控告警恢复",
+                new_value={"status": "resolved", "alert_state": "OK"},
+            )
+            self.db.add(history)
+            await self.db.commit()
+            return
+
         alert.status = "firing"
         alert.fire_count = 1
         alert.notification_channels = channel_ids
@@ -560,6 +562,21 @@ class AlertDispatcher:
             await self._finish_trace(trace_id, "no_channels")
             return
 
+        # 通知去重：检查是否在最近时间窗口内已经发送过通知
+        # 使用 fingerprint 作为去重键，同一告警只通知一次
+        notify_dedup_key = f"notified:{alert.tenant_id}:{alert.fingerprint}"
+        notify_window_seconds = 300  # 5分钟去重窗口
+
+        already_notified = await self.redis.get(notify_dedup_key)
+        if already_notified:
+            await self._add_trace_step(trace_id, "notification_queued", "通知队列", "dedup_skipped", {
+                "description": f"去重跳过，{notify_window_seconds}秒内已通知",
+                "fingerprint": alert.fingerprint,
+                "previous_alert_id": already_notified,
+            })
+            await self._finish_trace(trace_id, "dedup_skipped")
+            return
+
         # 构建通知消息
         notification_msg = {
             "alert_id": alert.id,
@@ -576,6 +593,9 @@ class AlertDispatcher:
         # 写入Redis队列 (简化实现，生产应该用PGMQ)
         queue_key = f"queue:notify:{alert.tenant_id}"
         await self.redis.lpush(queue_key, json.dumps(notification_msg))
+
+        # 设置去重键，标记已通知
+        await self.redis.set(notify_dedup_key, str(alert.id), ex=notify_window_seconds)
 
         await self._add_trace_step(trace_id, "notification_queued", "通知队列", "success", {
             "description": f"已加入通知队列，匹配 {len(matched_rules)} 个渠道",

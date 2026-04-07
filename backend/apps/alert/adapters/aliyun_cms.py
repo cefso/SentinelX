@@ -95,6 +95,7 @@ class AliyunCmsAdapter(AlertAdapter):
         # 级别映射
         severity_map = {
             "CRITICAL": "critical",
+            "WARN": "high",      # WARN 映射为 high
             "HIGH": "high",
             "MEDIUM": "medium",
             "LOW": "low",

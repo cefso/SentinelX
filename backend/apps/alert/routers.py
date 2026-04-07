@@ -66,6 +66,35 @@ async def _create_alerts_from_parsed(
             source.alert_count = (source.alert_count or 0) + 1
             source.last_alert_at = datetime.now(timezone.utc)
 
+    # 获取 alert_state（阿里云云监控1.0的告警状态字段）
+    alert_state = None
+    if isinstance(parsed_alert, list) and parsed_alert:
+        alert_state = parsed_alert[0].annotations.get("alert_state") if parsed_alert[0].annotations else None
+    elif isinstance(parsed_alert, AlertCreate) and parsed_alert.annotations:
+        alert_state = parsed_alert.annotations.get("alert_state")
+
+    # alertState=OK：恢复处理，查找并更新同 fingerprint 的 firing 告警
+    if alert_state == "OK":
+        fingerprints = []
+        if isinstance(parsed_alert, list):
+            for alert_data in parsed_alert:
+                fp = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
+                fingerprints.append(fp)
+        else:
+            fp = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
+            fingerprints.append(fp)
+
+        resolved = await _resolve_firing_alerts(db, tenant_id, fingerprints)
+        # 继续执行下面的创建逻辑（不 return），创建新告警 status=resolved
+
+    # alertState=INSUFFICIENT_DATA：降级处理
+    if alert_state == "INSUFFICIENT_DATA":
+        if isinstance(parsed_alert, list):
+            for alert_data in parsed_alert:
+                alert_data.severity = "low"
+        else:
+            parsed_alert.severity = "low"
+
     if isinstance(parsed_alert, list):
         results = []
         for alert_data in parsed_alert:
@@ -137,6 +166,55 @@ async def _create_alerts_from_parsed(
         await db.commit()
         await db.refresh(alert)
         return {"id": alert.id, "trace_id": alert.trace_id}
+
+
+async def _resolve_firing_alerts(
+    db: AsyncSession,
+    tenant_id: str,
+    fingerprints: List[str],
+) -> int:
+    """
+    将同 fingerprint 的 firing 告警标记为 resolved
+    返回：处理的告警数量
+    """
+    if not fingerprints:
+        return 0
+
+    # 查找 firing 状态的告警
+    result = await db.execute(
+        select(Alert).where(
+            Alert.tenant_id == tenant_id,
+            Alert.fingerprint.in_(fingerprints),
+            Alert.status == "firing",
+        )
+    )
+    firing_alerts = result.scalars().all()
+
+    resolved_count = 0
+    for alert in firing_alerts:
+        # 记录历史
+        history = AlertHistory(
+            tenant_id=tenant_id,
+            alert_id=alert.id,
+            action="resolved",
+            description="阿里云云监控告警恢复",
+            new_value={
+                "alert_state": "OK",
+                "resolved_by": "aliyun_cms_recovery",
+                "previous_status": alert.status,
+            },
+        )
+        db.add(history)
+
+        # 更新告警状态
+        alert.status = "resolved"
+        alert.resolved_at = datetime.now(timezone.utc)
+        resolved_count += 1
+
+    if firing_alerts:
+        await db.commit()
+
+    return resolved_count
 
 
 # ============ 告警源管理 ============

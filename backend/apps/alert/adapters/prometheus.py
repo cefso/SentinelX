@@ -43,6 +43,11 @@ class PrometheusAdapter(AlertAdapter):
         else:
             severity = labels.get("severity", "critical")
 
+        # 添加 alert_state 到 annotations 用于恢复处理
+        alert_annotations = dict(annotations)
+        if status == "resolved":
+            alert_annotations["alert_state"] = "OK"
+
         return AlertCreate(
             alert_key=labels.get("alertname", "unknown"),
             source="alertmanager",
@@ -50,7 +55,7 @@ class PrometheusAdapter(AlertAdapter):
             content=annotations.get("description", ""),
             severity=severity,
             labels=labels,
-            annotations=annotations,
+            annotations=alert_annotations,
             metric_name=labels.get("metric_name"),
             metric_value={"value": annotations.get("value")},
             raw_data=alert,
