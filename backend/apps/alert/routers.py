@@ -515,7 +515,7 @@ async def list_alerts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
-    severity: Optional[List[str]] = None,
+    severity: Optional[str] = None,
     source: Optional[str] = None,
     keyword: Optional[str] = None,
     start_time: Optional[datetime] = None,
@@ -532,7 +532,7 @@ async def list_alerts(
     if status:
         base_filter.append(Alert.status == status)
     if severity:
-        base_filter.append(Alert.severity.in_(severity))
+        base_filter.append(Alert.severity == severity)
     if source:
         base_filter.append(Alert.source == source)
     if keyword:
