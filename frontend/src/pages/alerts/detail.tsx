@@ -509,7 +509,7 @@ export function AlertDetailPage() {
                 <div className="space-y-2">
                   {fpAlerts.items
                     .sort((a, b) => new Date(b.fired_at).getTime() - new Date(a.fired_at).getTime())
-                    .slice(0, 20)
+                    .slice(0, 10)
                     .map((item) => (
                       <div
                         key={item.id}
@@ -551,7 +551,7 @@ export function AlertDetailPage() {
                     onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
                     className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-1"
                   >
-                    查看更多 ({fpAlerts.total - 20} 条)
+                    查看更多 ({fpAlerts.total - 10} 条)
                   </button>
                 </div>
               )}
