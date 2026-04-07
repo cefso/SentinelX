@@ -5,7 +5,7 @@ SentinelX - 回调处理
 import base64
 import hashlib
 import hmac
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -75,7 +75,7 @@ async def acknowledge_alert_callback(
 
     # 更新告警状态
     alert.status = "acknowledged"
-    alert.acknowledged_at = datetime.utcnow()
+    alert.acknowledged_at = datetime.now(timezone.utc)
     await db.commit()
 
     # 记录历史
@@ -120,7 +120,7 @@ async def resolve_alert_callback(
 
     # 更新告警状态
     alert.status = "resolved"
-    alert.resolved_at = datetime.utcnow()
+    alert.resolved_at = datetime.now(timezone.utc)
     await db.commit()
 
     # 记录历史
@@ -165,7 +165,7 @@ async def silence_alert_callback(
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新静默时间
-    alert.silenced_until = datetime.utcnow() + timedelta(hours=duration_hours)
+    alert.silenced_until = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
     await db.commit()
 
     logger.info("alert_silenced_via_callback", alert_id=alert_id, duration_hours=duration_hours)

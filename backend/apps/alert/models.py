@@ -1,9 +1,14 @@
 """
 SentinelX - 告警数据模型
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, ForeignKey
 from apps.core.database import Base
+
+
+def utc_now():
+    """返回当前UTC时间（timezone-aware）"""
+    return datetime.now(timezone.utc)
 
 
 class AlertSource(Base):
@@ -35,8 +40,8 @@ class AlertSource(Base):
     alert_count = Column(Integer, default=0)  # 累计接收告警数
     last_alert_at = Column(DateTime, nullable=True)  # 最后接收时间
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class Alert(Base):
@@ -93,7 +98,7 @@ class Alert(Base):
     assignee_name = Column(String(64), nullable=True)
 
     # 时间
-    fired_at = Column(DateTime, default=datetime.utcnow, index=True)  # 触发时间
+    fired_at = Column(DateTime, default=utc_now, index=True)  # 触发时间
     resolved_at = Column(DateTime, nullable=True)  # 恢复时间
     acknowledged_at = Column(DateTime, nullable=True)  # 确认时间
     silenced_until = Column(DateTime, nullable=True)  # 静默截止时间
@@ -105,8 +110,8 @@ class Alert(Base):
     matched_rules = Column(JSON, default=list)  # 匹配的规则列表
     notification_channels = Column(JSON, default=list)  # 通知渠道列表
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now, index=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class AlertHistory(Base):
@@ -130,7 +135,7 @@ class AlertHistory(Base):
     old_value = Column(JSON, nullable=True)
     new_value = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
 
 
 class AlertTrace(Base):
@@ -154,7 +159,7 @@ class AlertTrace(Base):
     # 完整步骤链 (JSON数组)
     steps_chain = Column(JSON)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     expired_at = Column(DateTime)  # 7天后过期
 
 
@@ -170,8 +175,8 @@ class AlertAggregateGroup(Base):
     alert_count = Column(Integer, default=1)
     fired_at = Column(DateTime, nullable=True)
     last_alert_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class AlertAggregateMember(Base):
@@ -182,7 +187,7 @@ class AlertAggregateMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("alert_aggregate_groups.id"), nullable=False)
     alert_id = Column(Integer, nullable=False, index=True)
-    added_at = Column(DateTime, default=datetime.utcnow)
+    added_at = Column(DateTime, default=utc_now)
 
 
 class CloudProductMetric(Base):
@@ -198,5 +203,5 @@ class CloudProductMetric(Base):
     unit = Column(String(32))  # 单位
     dimensions = Column(JSON, default=list)  # 维度列表
     is_active = Column(Integer, default=1)  # 启用状态
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
