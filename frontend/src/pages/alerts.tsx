@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
@@ -24,13 +24,24 @@ export function AlertsPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
+  const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
     sourceId: '' as number | '',
     keyword: '',
+    fingerprint: '',
   })
   const [aggregateMode, setAggregateMode] = useState(true)
+
+  // 初始化指纹过滤从 URL 参数
+  useEffect(() => {
+    const fp = searchParams.get('fingerprint')
+    if (fp) {
+      setFilters(prev => ({ ...prev, fingerprint: fp }))
+      setPage(1)
+    }
+  }, [searchParams])
 
   const { data: stats } = useQuery<AlertStats>({
     queryKey: ['alertStats'],
@@ -51,6 +62,7 @@ export function AlertsPage() {
       severity: filters.severity || undefined,
       source_id: filters.sourceId || undefined,
       keyword: filters.keyword || undefined,
+      fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
     }),
   })

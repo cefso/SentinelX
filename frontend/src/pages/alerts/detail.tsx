@@ -490,15 +490,26 @@ export function AlertDetailPage() {
           {/* 同指纹告警卡片 */}
           {fpAlerts && fpAlerts.items.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">同指纹告警 ({fpAlerts.total})</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-gray-500" />
+                  <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">同指纹告警 ({fpAlerts.total})</h2>
+                </div>
+                {fpAlerts.total > 20 && (
+                  <button
+                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
+                    className="text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    查看全部
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
                 <div className="space-y-2">
                   {fpAlerts.items
                     .sort((a, b) => new Date(b.fired_at).getTime() - new Date(a.fired_at).getTime())
+                    .slice(0, 20)
                     .map((item) => (
                       <div
                         key={item.id}
@@ -534,6 +545,16 @@ export function AlertDetailPage() {
                     ))}
                 </div>
               </div>
+              {fpAlerts.total > 20 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}`)}
+                    className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-1"
+                  >
+                    查看更多 ({fpAlerts.total - 20} 条)
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
