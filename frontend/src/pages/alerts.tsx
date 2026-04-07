@@ -34,12 +34,16 @@ export function AlertsPage() {
   })
   const [aggregateMode, setAggregateMode] = useState(true)
 
-  // 初始化指纹过滤从 URL 参数
+  // 初始化从 URL 参数
   useEffect(() => {
     const fp = searchParams.get('fingerprint')
+    const agg = searchParams.get('aggregate')
     if (fp) {
       setFilters(prev => ({ ...prev, fingerprint: fp }))
       setPage(1)
+    }
+    if (agg === 'false') {
+      setAggregateMode(false)
     }
   }, [searchParams])
 
