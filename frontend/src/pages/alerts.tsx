@@ -167,7 +167,7 @@ export function AlertsPage() {
               ].map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => setFilters({ ...filters, status: opt.value })}
+                  onClick={() => { setFilters({ ...filters, status: opt.value }); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     filters.status === opt.value
                       ? 'bg-white shadow text-gray-900 font-medium'
@@ -190,7 +190,7 @@ export function AlertsPage() {
               ].map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => setFilters({ ...filters, severity: opt.value })}
+                  onClick={() => { setFilters({ ...filters, severity: opt.value }); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     filters.severity === opt.value
                       ? 'bg-white shadow text-gray-900 font-medium'
@@ -206,7 +206,7 @@ export function AlertsPage() {
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
               <button
                 key="all"
-                onClick={() => setFilters({ ...filters, sourceId: '' })}
+                onClick={() => { setFilters({ ...filters, sourceId: '' }); setPage(1); }}
                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
                   filters.sourceId === ''
                     ? 'bg-white shadow text-gray-900 font-medium'
@@ -218,7 +218,7 @@ export function AlertsPage() {
               {sources.map(source => (
                 <button
                   key={source.id}
-                  onClick={() => setFilters({ ...filters, sourceId: source.id })}
+                  onClick={() => { setFilters({ ...filters, sourceId: source.id }); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     filters.sourceId === source.id
                       ? 'bg-white shadow text-gray-900 font-medium'
