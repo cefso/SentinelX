@@ -95,6 +95,105 @@ async def _create_alerts_from_parsed(
         else:
             parsed_alert.severity = "low"
 
+    # OK 消息：直接创建 resolved 状态告警，跳过 dispatcher
+    if alert_state == "OK":
+        if isinstance(parsed_alert, list):
+            results = []
+            for alert_data in parsed_alert:
+                trace_id = generate_trace_id()
+                fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
+
+                alert = Alert(
+                    tenant_id=tenant_id,
+                    alert_key=alert_data.alert_key,
+                    fingerprint=fingerprint,
+                    source=alert_data.source,
+                    source_id=source_id,
+                    title=alert_data.title,
+                    content=alert_data.content,
+                    severity=alert_data.severity,
+                    status="resolved",
+                    labels=alert_data.labels,
+                    annotations=alert_data.annotations,
+                    metric_name=alert_data.metric_name,
+                    metric_value=alert_data.metric_value,
+                    raw_data=alert_data.raw_data,
+                    namespace=alert_data.namespace,
+                    instance_id=alert_data.instance_id,
+                    instance_name=alert_data.instance_name,
+                    trace_id=trace_id,
+                    fired_at=datetime.now(timezone.utc),
+                    resolved_at=datetime.now(timezone.utc),
+                )
+                db.add(alert)
+                await db.flush()
+
+                # OK 消息不经过 dispatcher，直接记录历史
+                history = AlertHistory(
+                    tenant_id=tenant_id,
+                    alert_id=alert.id,
+                    action="resolved",
+                    description="阿里云云监控告警恢复",
+                    new_value={
+                        "alert_state": "OK",
+                        "resolved_by": "aliyun_cms_recovery",
+                    },
+                )
+                db.add(history)
+                results.append({"id": alert.id, "db_alert": alert, "trace_id": trace_id})
+
+            await db.commit()
+            return {
+                "received": len(results),
+                "alerts": [{"id": r["id"], "trace_id": r["trace_id"]} for r in results]
+            }
+        else:
+            trace_id = generate_trace_id()
+            fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
+
+            alert = Alert(
+                tenant_id=tenant_id,
+                alert_key=parsed_alert.alert_key,
+                fingerprint=fingerprint,
+                source=parsed_alert.source,
+                source_id=source_id,
+                title=parsed_alert.title,
+                content=parsed_alert.content,
+                severity=parsed_alert.severity,
+                status="resolved",
+                labels=parsed_alert.labels,
+                annotations=parsed_alert.annotations,
+                metric_name=parsed_alert.metric_name,
+                metric_value=parsed_alert.metric_value,
+                raw_data=parsed_alert.raw_data,
+                namespace=parsed_alert.namespace,
+                instance_id=parsed_alert.instance_id,
+                instance_name=parsed_alert.instance_name,
+                trace_id=trace_id,
+                fired_at=datetime.now(timezone.utc),
+                resolved_at=datetime.now(timezone.utc),
+            )
+            db.add(alert)
+            await db.flush()
+
+            # OK 消息不经过 dispatcher，直接记录历史
+            history = AlertHistory(
+                tenant_id=tenant_id,
+                alert_id=alert.id,
+                action="resolved",
+                description="阿里云云监控告警恢复",
+                new_value={
+                    "alert_state": "OK",
+                    "resolved_by": "aliyun_cms_recovery",
+                },
+            )
+            db.add(history)
+
+            await db.commit()
+            await db.refresh(alert)
+            return {"id": alert.id, "trace_id": alert.trace_id}
+
+    # 非 OK 消息：正常创建 firing 告警并通过 dispatcher 处理
     if isinstance(parsed_alert, list):
         results = []
         for alert_data in parsed_alert:
