@@ -16,7 +16,7 @@ export function useCloudMetricsMap() {
   return useQuery<Record<string, CloudMetricRecord[]>>({
     queryKey: ['cloudMetricsMap'],
     queryFn: () => apiClient.getCloudMetricsMap(),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 60 * 1000, // 1 minute
   })
 }
 
@@ -46,6 +46,29 @@ export function useMetricDesc(
     if (!records) return ''
     const record = records.find(m => m.metric_name === metricName)
     return record?.metric_desc || ''
+  }, [map, namespace, metricName])
+}
+
+/**
+ * Get namespace Chinese name for a given namespace.
+ */
+export function useNamespaceDesc(namespace: string, map?: Record<string, CloudMetricRecord[]>): string {
+  return useMemo(() => {
+    if (!map || !namespace) return ''
+    const records = map[namespace]
+    return records?.[0]?.namespace_desc || ''
+  }, [map, namespace])
+}
+
+/**
+ * Get metric_name Chinese name for a given namespace + metricName.
+ */
+export function useMetricNameDesc(namespace: string, metricName: string, map?: Record<string, CloudMetricRecord[]>): string {
+  return useMemo(() => {
+    if (!map || !namespace || !metricName) return ''
+    const records = map[namespace]
+    const record = records?.find(m => m.metric_name === metricName)
+    return record?.metric_name_desc || ''
   }, [map, namespace, metricName])
 }
 
