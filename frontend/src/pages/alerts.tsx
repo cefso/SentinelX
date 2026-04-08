@@ -58,7 +58,7 @@ export function AlertsPage() {
   })
 
   // 查询去重后的触发中告警数量
-  const { data: firingAlerts } = useQuery({
+  const { data: firingAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
     queryKey: ['alerts-dedup', 'firing'],
     queryFn: () => apiClient.get('/alerts', {
       page: 1,
@@ -69,7 +69,7 @@ export function AlertsPage() {
   })
 
   // 查询去重后的 Critical 告警数量
-  const { data: criticalAlerts } = useQuery({
+  const { data: criticalAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
     queryKey: ['alerts-dedup', 'critical'],
     queryFn: () => apiClient.get('/alerts', {
       page: 1,
@@ -81,7 +81,7 @@ export function AlertsPage() {
   })
 
   // 查询去重后的 High 告警数量
-  const { data: highAlerts } = useQuery({
+  const { data: highAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
     queryKey: ['alerts-dedup', 'high'],
     queryFn: () => apiClient.get('/alerts', {
       page: 1,
