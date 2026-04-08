@@ -74,10 +74,9 @@ class AliyunCmsAdapter(AlertAdapter):
             annotations={
                 "alert_name": alert_name,
                 "alert_state": alert_state,
-                "raw_data": raw_data,  # 保留原始数据用于追踪
             },
             metric_name=metric_name or raw_metric_name,
-            metric_value={"expression": expression},
+            metric_value={"expression": expression, "value": raw_data.get("curValue", "")},
             raw_data=raw_data,
             namespace=namespace,
             instance_id=instance_id,

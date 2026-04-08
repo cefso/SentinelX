@@ -33,7 +33,7 @@ class TencentCloudAdapter(AlertAdapter):
                 "appid": raw_data.get("appid"),
                 "region": raw_data.get("region"),
             },
-            annotations=raw_data,
+            annotations=raw_data.get("annotations", {}),
             raw_data=raw_data,
         )
 

@@ -703,6 +703,7 @@ class PrometheusAdapter(AlertAdapter):
 - `rawMetricName`: 原始指标名
 - `metricName`: 指标名
 - `expression`: 触发表达式
+- `curValue`: 当前值
 - `lastTime`: 持续时间
 
 **告警键生成**:

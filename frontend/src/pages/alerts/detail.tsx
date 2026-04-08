@@ -327,7 +327,14 @@ export function AlertDetailPage() {
               {alert.trace_id && (
                 <div className="flex flex-col">
                   <dt className="text-gray-500">Trace ID</dt>
-                  <dd className="font-mono text-xs text-blue-600">{alert.trace_id}</dd>
+                  <dd>
+                    <button
+                      onClick={() => navigate(`/diagnose?trace=${alert.trace_id}`)}
+                      className="font-mono text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      {alert.trace_id}
+                    </button>
+                  </dd>
                 </div>
               )}
             </dl>
@@ -336,19 +343,31 @@ export function AlertDetailPage() {
           {/* 告警内容卡片 */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">告警内容</h2>
-            <div className="text-gray-700 whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
-            {alert.metric_name && (
-              <div className="mt-3 p-3 bg-gray-50 rounded text-sm">
-                <div className="text-gray-500">指标名称</div>
-                <div className="font-mono">{metricDesc || alert.metric_name}</div>
-                {alert.metric_value && (
-                  <>
-                    <div className="text-gray-500 mt-1">指标值</div>
-                    <div className="font-mono">{JSON.stringify(alert.metric_value)}</div>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="flex gap-6">
+              <div className="flex-1 text-gray-700 whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
+              {alert.metric_name && (
+                <div className="w-1/2 p-3 bg-gray-50 rounded text-sm">
+                  <div className="text-gray-500">指标名称</div>
+                  <div className="font-mono">{metricDesc || alert.metric_name}</div>
+                  {alert.metric_value && typeof alert.metric_value === 'object' && (
+                    <div className="space-y-2">
+                      {alert.metric_value.expression && (
+                        <>
+                          <div className="text-gray-500">触发条件</div>
+                          <div className="font-mono">{alert.metric_value.expression}</div>
+                        </>
+                      )}
+                      {alert.metric_value.value !== undefined && alert.metric_value.value !== null && (
+                        <>
+                          <div className="text-gray-500">当前值</div>
+                          <div className="font-mono">{String(alert.metric_value.value)}</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 标签卡片 */}
@@ -369,7 +388,7 @@ export function AlertDetailPage() {
                 {displayedLabels.map(([key, value]) => (
                   <span key={key} className="inline-flex items-center px-2 py-1 bg-gray-100 rounded text-sm">
                     <span className="text-gray-500">{key}:</span>
-                    <span className="font-mono ml-1">{String(value)}</span>
+                    <span className="font-mono ml-1">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
                   </span>
                 ))}
               </div>
@@ -394,7 +413,7 @@ export function AlertDetailPage() {
                 {displayedAnnotations.map(([key, value]) => (
                   <div key={key} className="flex flex-col text-sm">
                     <span className="text-gray-500">{key}</span>
-                    <span>{String(value)}</span>
+                    <span>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
                   </div>
                 ))}
               </div>
