@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
-import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc, useMetricDesc } from '@/hooks/useCloudMetrics'
+import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc } from '@/hooks/useCloudMetrics'
 import { Send, CheckCircle, AlertCircle, XCircle, Clock, Circle, ChevronDown } from 'lucide-react'
 import { formatLocalDateTime } from '@/utils/datetime'
 
@@ -80,7 +80,6 @@ export function AlertDetailPage() {
 
   const namespaceDesc = useNamespaceDesc(alert?.namespace || '', cloudMetricsMap)
   const metricNameDesc = useMetricNameDesc(alert?.namespace || '', alert?.metric_name || '', cloudMetricsMap)
-  const metricDesc = useMetricDesc(alert?.namespace || '', alert?.metric_name || '', cloudMetricsMap)
 
   const { data: users = [] } = useQuery<{ id: number; username: string }[]>({
     queryKey: ['users-for-assign'],
