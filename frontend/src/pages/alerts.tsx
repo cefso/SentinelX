@@ -76,7 +76,8 @@ export function AlertsPage() {
   const getProductDisplayName = (namespace: string) => {
     if (!cloudMetricsMap || !namespace) return namespace || '-'
     const records = cloudMetricsMap[namespace]
-    return records?.[0]?.product || namespace || '-'
+    // 优先使用 namespace_desc，否则使用 product，否则使用原始 namespace
+    return records?.[0]?.namespace_desc || records?.[0]?.product || namespace || '-'
   }
 
   const totalPages = Math.ceil((alerts?.total || 0) / pageSize)

@@ -113,7 +113,9 @@ class ApiClient {
   }
 
   async getCloudMetricsMap(): Promise<Record<string, CloudMetricRecord[]>> {
-    const metrics = await this.get<CloudMetricRecord[]>('/cloud-metrics')
+    // Fetch all active metrics (page_size=1000 should cover most use cases)
+    const response = await this.get<CloudMetricsListResponse>('/cloud-metrics', { page: 1, page_size: 100, status: 'all' })
+    const metrics = response.items
     // Group by namespace for easy lookup
     const map: Record<string, CloudMetricRecord[]> = {}
     for (const m of metrics) {
@@ -121,6 +123,34 @@ class ApiClient {
       map[m.namespace].push(m)
     }
     return map
+  }
+
+  async getCloudMetrics(params?: { page?: number; page_size?: number; product?: string; namespace?: string; status?: 'all' | 'active' | 'inactive' }): Promise<CloudMetricsListResponse> {
+    return this.get('/cloud-metrics', params)
+  }
+
+  async getCloudMetric(id: number): Promise<CloudMetricRecord> {
+    return this.get(`/cloud-metrics/${id}`)
+  }
+
+  async createCloudMetric(data: CloudProductMetricInput): Promise<CloudMetricRecord> {
+    return this.post('/cloud-metrics', data)
+  }
+
+  async updateCloudMetric(id: number, data: Partial<CloudProductMetricInput>): Promise<CloudMetricRecord> {
+    return this.put(`/cloud-metrics/${id}`, data)
+  }
+
+  async deleteCloudMetric(id: number): Promise<void> {
+    return this.delete(`/cloud-metrics/${id}`)
+  }
+
+  async batchDeleteCloudMetrics(ids: number[]): Promise<void> {
+    return this.post('/cloud-metrics/batch-delete', ids)
+  }
+
+  async syncAllCloudMetrics(): Promise<{ message: string }> {
+    return this.post('/cloud-metrics/sync-all', {})
   }
 }
 
@@ -130,9 +160,29 @@ export interface CloudMetricRecord {
   namespace: string
   metric_name: string
   metric_desc?: string
+  namespace_desc?: string
+  metric_name_desc?: string
   unit?: string
   dimensions?: string[]
   is_active: number
+}
+
+export interface CloudProductMetricInput {
+  product: string
+  namespace: string
+  metric_name: string
+  metric_desc?: string
+  namespace_desc?: string
+  metric_name_desc?: string
+  unit?: string
+  is_active: number
+}
+
+export interface CloudMetricsListResponse {
+  items: CloudMetricRecord[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export const apiClient = new ApiClient()

@@ -200,6 +200,8 @@ class CloudProductMetric(Base):
     namespace = Column(String(128), nullable=False, index=True)  # 命名空间，如 "acs_ecs_dashboard"
     metric_name = Column(String(128), nullable=False)  # 指标名，如 "CPUUtilization"
     metric_desc = Column(String(256))  # 指标描述
+    namespace_desc = Column(String(128))  # 命名空间中文名，如 "云服务器 ECS"
+    metric_name_desc = Column(String(256))  # 指标名称中文名，如 "CPU 利用率"
     unit = Column(String(32))  # 单位
     dimensions = Column(JSON, default=list)  # 维度列表
     is_active = Column(Integer, default=1)  # 启用状态

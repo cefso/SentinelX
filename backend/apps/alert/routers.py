@@ -21,6 +21,8 @@ from apps.alert.schemas import (
     AlertSourceCreate, AlertSourceUpdate, AlertSourceResponse,
     AlertHistoryResponse, DiagnosisResponse, TraceStep,
     AlertAggregateMemberItem, AlertAggregateMembersResponse,
+    CloudProductMetricCreate, CloudProductMetricUpdate, CloudProductMetricResponse,
+    CloudMetricsListResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 
@@ -1084,24 +1086,182 @@ async def diagnose_alert(
 
 # ============ 云产品指标 ============
 
-@router.get("/cloud-metrics")
+@router.get("/cloud-metrics", response_model=CloudMetricsListResponse)
 async def list_cloud_metrics(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     product: Optional[str] = None,
     namespace: Optional[str] = None,
+    status: Optional[str] = Query("active", regex="^(all|active|inactive)$"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取云产品指标列表"""
-    query = select(CloudProductMetric).where(CloudProductMetric.is_active == 1)
+    """获取云产品指标列表（分页）
+    - status: all=全部, active=仅启用(默认), inactive=仅停用
+    """
+    base_filter = []
+
+    # 状态筛选
+    if status == "active":
+        base_filter.append(CloudProductMetric.is_active == 1)
+    elif status == "inactive":
+        base_filter.append(CloudProductMetric.is_active == 0)
+    # status=="all" 时不过滤
 
     if product:
-        query = query.where(CloudProductMetric.product == product)
+        base_filter.append(CloudProductMetric.product == product)
     if namespace:
-        query = query.where(CloudProductMetric.namespace == namespace)
+        base_filter.append(CloudProductMetric.namespace == namespace)
 
-    result = await db.execute(query.order_by(CloudProductMetric.product, CloudProductMetric.metric_name))
+    # Count total
+    count_query = select(func.count()).select_from(CloudProductMetric).where(and_(*base_filter))
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Paginated query
+    query = (
+        select(CloudProductMetric)
+        .where(and_(*base_filter))
+        .order_by(CloudProductMetric.product, CloudProductMetric.metric_name)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    return CloudMetricsListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post("/cloud-metrics/batch-delete")
+async def batch_delete_cloud_metrics(
+    ids: List[int],
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量删除云产品指标（软删除，设置为 inactive）"""
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids cannot be empty")
+
+    result = await db.execute(
+        select(CloudProductMetric).where(CloudProductMetric.id.in_(ids))
+    )
     metrics = result.scalars().all()
-    return metrics
+
+    if not metrics:
+        raise HTTPException(status_code=404, detail="No CloudProductMetric found")
+
+    for metric in metrics:
+        metric.is_active = 0
+
+    await db.commit()
+    return {"message": f"Deleted {len(metrics)} metrics"}
+
+
+@router.get("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
+async def get_cloud_metric(
+    metric_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取单个云产品指标详情"""
+    metric = await db.get(CloudProductMetric, metric_id)
+    if not metric:
+        raise HTTPException(status_code=404, detail="CloudProductMetric not found")
+    return metric
+
+
+@router.post("/cloud-metrics", response_model=CloudProductMetricResponse)
+async def create_cloud_metric(
+    request: CloudProductMetricCreate,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """创建云产品指标"""
+    metric = CloudProductMetric(
+        product=request.product,
+        namespace=request.namespace,
+        metric_name=request.metric_name,
+        metric_desc=request.metric_desc,
+        unit=request.unit,
+        dimensions=request.dimensions,
+        is_active=request.is_active,
+    )
+    db.add(metric)
+    await db.commit()
+    await db.refresh(metric)
+    return metric
+
+
+@router.put("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
+async def update_cloud_metric(
+    metric_id: int,
+    request: CloudProductMetricUpdate,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新云产品指标"""
+    metric = await db.get(CloudProductMetric, metric_id)
+    if not metric:
+        raise HTTPException(status_code=404, detail="CloudProductMetric not found")
+
+    for field, value in request.model_dump(exclude_unset=True).items():
+        setattr(metric, field, value)
+
+    await db.commit()
+    await db.refresh(metric)
+    return metric
+
+
+@router.delete("/cloud-metrics/{metric_id}")
+async def delete_cloud_metric(
+    metric_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除云产品指标（软删除，设置为 inactive）"""
+    metric = await db.get(CloudProductMetric, metric_id)
+    if not metric:
+        raise HTTPException(status_code=404, detail="CloudProductMetric not found")
+
+    metric.is_active = 0
+    await db.commit()
+    return {"message": "CloudProductMetric deleted"}
+
+
+@router.post("/cloud-metrics/sync")
+async def sync_cloud_metrics(
+    alert_ids: Optional[List[int]] = None,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    同步云产品指标（从告警中提取）
+    - 不传 alert_ids: 从最近的告警中同步
+    - 传 alert_ids: 从指定告警中同步
+    """
+    from apps.alert.services.cloud_metrics_sync import SyncService
+
+    sync_service = SyncService(db)
+    stats = await sync_service.sync_from_alerts(alert_ids=alert_ids, limit=1000)
+    return {"message": "Sync completed", "stats": stats}
+
+
+@router.post("/cloud-metrics/sync-all")
+async def sync_all_cloud_metrics(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """全量同步：从所有告警中提取云产品指标"""
+    from apps.alert.services.cloud_metrics_sync import SyncService
+
+    sync_service = SyncService(db)
+    stats = await sync_service.sync_all()
+    return {"message": "Full sync completed", "stats": stats}
 
 
 @router.get("/cloud-metrics/map")

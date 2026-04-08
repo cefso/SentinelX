@@ -223,3 +223,53 @@ class DiagnosisResponse(BaseModel):
     matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则")
     flow_steps: List[TraceStep] = Field(default_factory=list, description="处理流程步骤")
     timeline: List[Dict[str, str]] = Field(default_factory=list, description="时间线")
+
+
+# ============ 云产品指标Schema ============
+
+class CloudProductMetricBase(BaseModel):
+    product: str = Field(..., min_length=1, max_length=64, description="产品名称")
+    namespace: str = Field(..., min_length=1, max_length=128, description="命名空间")
+    metric_name: str = Field(..., min_length=1, max_length=128, description="指标名")
+    metric_desc: Optional[str] = Field(None, max_length=256, description="指标描述")
+    namespace_desc: Optional[str] = Field(None, max_length=128, description="命名空间中文名")
+    metric_name_desc: Optional[str] = Field(None, max_length=256, description="指标名称中文名")
+    unit: Optional[str] = Field(None, max_length=32, description="单位")
+    dimensions: Optional[List[Any]] = Field(default_factory=list, description="维度列表")
+    is_active: Optional[int] = Field(1, description="启用状态: 1=启用, 0=禁用")
+
+
+class CloudProductMetricCreate(CloudProductMetricBase):
+    """创建云产品指标"""
+    pass
+
+
+class CloudProductMetricUpdate(BaseModel):
+    """更新云产品指标"""
+    product: Optional[str] = Field(None, min_length=1, max_length=64)
+    namespace: Optional[str] = Field(None, min_length=1, max_length=128)
+    metric_name: Optional[str] = Field(None, min_length=1, max_length=128)
+    metric_desc: Optional[str] = Field(None, max_length=256)
+    namespace_desc: Optional[str] = Field(None, max_length=128)
+    metric_name_desc: Optional[str] = Field(None, max_length=256)
+    unit: Optional[str] = Field(None, max_length=32)
+    dimensions: Optional[List[Any]] = None
+    is_active: Optional[int] = None
+
+
+class CloudProductMetricResponse(CloudProductMetricBase):
+    """云产品指标响应"""
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CloudMetricsListResponse(BaseModel):
+    """云产品指标列表响应（分页）"""
+    items: List[CloudProductMetricResponse]
+    total: int
+    page: int
+    page_size: int
