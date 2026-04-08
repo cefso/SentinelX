@@ -3,12 +3,13 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3 } from 'lucide-react'
 
 const navigation = [
   { name: '告警', href: '/alerts', icon: Bell },
   { name: '规则', href: '/rules', icon: Settings2 },
   { name: '渠道', href: '/channels', icon: Send },
+  { name: '云指标', href: '/cloud-metrics', icon: BarChart3 },
   { name: '诊断', href: '/diagnose', icon: Search },
 ]
 

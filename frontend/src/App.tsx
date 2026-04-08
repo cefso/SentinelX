@@ -11,6 +11,7 @@ import { ChannelsPage } from './pages/channels'
 import { DiagnosePage } from './pages/diagnose'
 import { SettingsPage } from './pages/settings'
 import { AdminUsersPage } from './pages/admin/users'
+import { CloudMetricsPage } from './pages/cloud-metrics'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -66,6 +67,7 @@ function App() {
         <Route path="channels" element={<ChannelsPage />} />
         <Route path="diagnose" element={<DiagnosePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="cloud-metrics" element={<CloudMetricsPage />} />
         <Route path="admin/users" element={
           <SystemAdminRoute>
             <AdminUsersPage />
