@@ -51,7 +51,9 @@ async def list_tenants(
 ):
     """获取租户列表（仅超级管理员或系统管理员）"""
     payload = get_token_payload()
-    if not payload or not payload.get("is_superuser"):
+    is_superuser = payload.get("is_superuser", False) if payload else False
+    is_system = payload.get("is_system", False) if payload else False
+    if not is_system and not is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required")
 
     result = await db.execute(
@@ -69,7 +71,9 @@ async def create_tenant(
 ):
     """创建租户"""
     payload = get_token_payload()
-    if not payload or not payload.get("is_superuser"):
+    is_superuser = payload.get("is_superuser", False) if payload else False
+    is_system = payload.get("is_system", False) if payload else False
+    if not is_system and not is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required")
 
     # 检查slug唯一性
@@ -186,7 +190,9 @@ async def update_tenant(
 ):
     """更新租户"""
     payload = get_token_payload()
-    if not payload or not payload.get("is_superuser"):
+    is_superuser = payload.get("is_superuser", False) if payload else False
+    is_system = payload.get("is_system", False) if payload else False
+    if not is_system and not is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required")
 
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
