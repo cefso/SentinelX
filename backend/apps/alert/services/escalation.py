@@ -28,6 +28,14 @@ class EscalationService:
         3: 60,   # 第3级等待60分钟
     }
 
+    # 升级等待时间配置（秒）
+    ESCALATION_WAITS_S = {
+        0: 300,   # 第0级等待5分钟
+        1: 600,   # 第1级等待10分钟
+        2: 1800,  # 第2级等待30分钟
+        3: 3600,  # 第3级等待60分钟
+    }
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -133,6 +141,42 @@ class EscalationService:
         )
         return result.scalars().all()
 
+    async def check_and_escalate(self, alert_id: int) -> bool:
+        """根据 MQ 消息检查并执行升级"""
+        result = await self.db.execute(select(Alert).where(Alert.id == alert_id))
+        alert = result.scalar_one_or_none()
+
+        if not alert:
+            return False
+
+        # 若告警已确认或已解决，跳过
+        if alert.acknowledged_at or alert.status != "firing":
+            return False
+
+        current_level = alert.escalation_count or 0
+        if current_level >= 4:
+            return False  # 已达最高级别
+
+        # 检查是否应该升级
+        should_escalate, wait_minutes = await self._should_escalate(alert)
+        if should_escalate:
+            await self._escalate_alert(alert)
+
+            # 发送下一个级别的检查消息
+            next_level = current_level + 1
+            if next_level < 4:
+                from apps.core.mq import get_mq_async
+                mq = await get_mq_async()
+                next_vt = self.ESCALATION_WAITS_S.get(next_level, 3600)
+                await mq.send("alerts_escalation", {
+                    "alert_id": alert.id,
+                    "tenant_id": alert.tenant_id,
+                    "action": "check_escalation",
+                    "level": next_level
+                }, vt=next_vt)
+
+        return True
+
     async def auto_assign(self, alert: Alert, user_id: int, user_name: str):
         """自动指派告警"""
         old_assignee_id = alert.assignee_id
@@ -159,27 +203,45 @@ class EscalationService:
 
 
 class EscalationWorker:
-    """升级Worker - 定期检查并升级告警"""
+    """升级 Worker - 通过 MQ 事件驱动，而非轮询"""
+
+    # 升级等待时间配置（秒）
+    ESCALATION_WAITS_S = {
+        0: 300,   # 第0级等待5分钟
+        1: 600,   # 第1级等待10分钟
+        2: 1800,  # 第2级等待30分钟
+        3: 3600,  # 第3级等待60分钟
+    }
 
     def __init__(self, check_interval_seconds: int = 60):
         self.check_interval = check_interval_seconds
 
     async def run(self):
-        """运行Worker"""
+        """运行 Worker - 消费 MQ 消息"""
+        from apps.core.mq import get_mq_async
         from apps.core.database import AsyncSessionLocal as async_session_factory
+
+        mq = await get_mq_async()
+        logger.info("escalation_worker_started")
 
         while True:
             try:
+                msg = await mq.receive("alerts_escalation", count=1)
+                if not msg:
+                    await asyncio.sleep(1)
+                    continue
+
+                message = msg.message
+                alert_id = message.get("alert_id")
+
                 async with async_session_factory() as db:
                     service = EscalationService(db)
-                    stats = await service.check_escalations()
-                    if stats["escalated_count"] > 0:
-                        logger.info(
-                            "escalation_cycle_completed",
-                            escalated=stats["escalated_count"],
-                            notifications=stats["notifications_sent"],
-                        )
+                    await service.check_and_escalate(alert_id)
+
+                await mq.ack("alerts_escalation", msg.message_id)
+
             except Exception as e:
                 logger.error("escalation_worker_error", error=str(e))
-
-            await asyncio.sleep(self.check_interval)
+                if msg:
+                    await mq.nack("alerts_escalation", msg.message_id, vt=60)
+                await asyncio.sleep(1)

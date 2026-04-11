@@ -57,10 +57,20 @@ async def lifespan(app: FastAPI):
     notification_task = asyncio.create_task(notification_worker.start())
     logger.info("notification_worker_started")
 
+    # 启动告警消费 Consumer
+    from apps.alert.services.dispatcher import AlertDispatcher
+    from apps.core.mq import get_mq_async
+    alert_dispatcher = AlertDispatcher(None, None)
+    alert_consumer_task = asyncio.create_task(
+        alert_dispatcher.start_consumer(await get_mq_async())
+    )
+    logger.info("alert_consumer_started")
+
     yield
 
     # 关闭时
     logger.info("sentinelx_shutting_down")
+    alert_consumer_task.cancel()
     escalation_task.cancel()
     await notification_worker.stop()
     notification_task.cancel()

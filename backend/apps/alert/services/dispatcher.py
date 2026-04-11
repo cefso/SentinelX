@@ -2,6 +2,7 @@
 SentinelX - 告警分发器
 核心处理流程：接入 → 规则引擎处理(去重/抑制/聚合/匹配) → 通知队列
 """
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -14,6 +15,8 @@ from redis.asyncio import Redis
 from apps.alert.models import Alert, AlertHistory
 from apps.rule.models import AlertRule, NotificationChannel
 from apps.rule.engine import RuleEngine
+from apps.core.database import AsyncSessionLocal
+from apps.core.mq import get_mq_async
 
 logger = structlog.get_logger()
 
@@ -62,6 +65,18 @@ class AlertDispatcher:
 
             # 进入通知队列
             await self._queue_notification(alert, result.matched_rules, result.channel_ids, trace_id)
+
+            # 发送升级检查消息（VT = 第0级等待时间 = 5分钟 = 300秒）
+            try:
+                mq = await get_mq_async()
+                await mq.send("alerts_escalation", {
+                    "alert_id": alert.id,
+                    "tenant_id": alert.tenant_id,
+                    "action": "check_escalation",
+                    "level": 0
+                }, vt=300)  # 5分钟后可见
+            except Exception as e:
+                logger.warning("escalation_msg_send_failed", alert_id=alert.id, error=str(e))
 
             logger.info("alert_dispatched", alert_id=alert.id, trace_id=trace_id)
 
@@ -199,9 +214,9 @@ class AlertDispatcher:
             "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
         }
 
-        # 写入Redis队列 (简化实现，生产应该用PGMQ)
-        queue_key = f"queue:notify:{alert.tenant_id}"
-        await self.redis.lpush(queue_key, json.dumps(notification_msg))
+        # 写入 PGMQ 队列
+        mq = await get_mq_async()
+        await mq.send("alerts_notify", notification_msg)
 
         # 设置去重键，标记已通知
         await self.redis.set(notify_dedup_key, str(alert.id), ex=notify_window_seconds)
@@ -245,3 +260,38 @@ class AlertDispatcher:
             "time": datetime.now(timezone.utc).isoformat(),
         }
         await self.redis.rpush(f"{trace_key}:steps", json.dumps(step))
+
+    async def start_consumer(self, mq):
+        """启动告警消费 Consumer（替代 BackgroundTasks）"""
+        while True:
+            try:
+                msg = await mq.receive("alerts_raw", count=1, vt=60)
+                if not msg:
+                    continue
+                # msg 是 pgmq 的 Message 对象，有 message_id 和 message 属性
+                message = msg.message
+                alert_id = message.get("alert_id")
+                trace_id = message.get("trace_id")
+
+                if not alert_id:
+                    await mq.ack("alerts_raw", msg.message_id)
+                    continue
+
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+                    alert = result.scalar_one_or_none()
+                    if not alert:
+                        await mq.ack("alerts_raw", msg.message_id)
+                        continue
+
+                    # 重新获取 Redis 连接
+                    from apps.core.redis import get_redis
+                    redis = await get_redis()
+                    dispatcher = AlertDispatcher(db, redis)
+                    await dispatcher.dispatch(alert, trace_id)
+                    await mq.ack("alerts_raw", msg.message_id)
+            except Exception as e:
+                logger.error("alert_consumer_error", error=str(e))
+                if 'msg' in dir() and msg:
+                    await mq.nack("alerts_raw", msg.message_id, vt=60)
+                await asyncio.sleep(1)

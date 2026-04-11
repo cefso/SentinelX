@@ -5,6 +5,7 @@ SentinelX - 消息队列管理
 import json
 from typing import Optional, Any, List, Dict
 from datetime import datetime
+from urllib.parse import urlparse
 from apps.core.config import settings
 
 # PGMQ导入 (可选)
@@ -29,7 +30,15 @@ class MessageQueue:
     def __init__(self, database_url: str):
         if not PGMQ_AVAILABLE:
             raise ImportError("pgmq not installed. Run: pip install pgmq")
-        self.mq = PGMQueue(database_url)
+        # 解析 postgresql://user:pass@host:port/dbname
+        parsed = urlparse(database_url)
+        self.mq = PGMQueue(
+            host=parsed.hostname or "localhost",
+            port=str(parsed.port or 5432),
+            database=parsed.path.lstrip("/") or "postgres",
+            username=parsed.username or "postgres",
+            password=parsed.password or "",
+        )
         self._queues_initialized = False
 
     async def init_queues(self):
