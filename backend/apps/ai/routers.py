@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("/alerts/{alert_id}/analyze")
 async def analyze_alert(
     alert_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -28,7 +28,7 @@ async def analyze_alert(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()
@@ -54,7 +54,7 @@ async def polish_alert_content(
     alert_id: int,
     template: Optional[str] = None,
     style: str = Query("formal", regex="^(formal|simple|friendly)$"),
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -65,7 +65,7 @@ async def polish_alert_content(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()
@@ -89,7 +89,7 @@ async def polish_alert_content(
 @router.post("/alerts/{alert_id}/suggest-actions")
 async def suggest_alert_actions(
     alert_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -100,7 +100,7 @@ async def suggest_alert_actions(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()
@@ -111,7 +111,7 @@ async def suggest_alert_actions(
     # 获取历史告警
     history_result = await db.execute(
         select(Alert).where(
-            Alert.tenant_id == tenant_id,
+            Alert.tenant_id == str(tenant_id),
             Alert.alert_key == alert.alert_key,
             Alert.id != alert_id,
         ).order_by(Alert.fired_at.desc()).limit(10)
@@ -143,7 +143,7 @@ async def suggest_alert_actions(
 @router.post("/alerts/{alert_id}/predict-impact")
 async def predict_alert_impact(
     alert_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -154,7 +154,7 @@ async def predict_alert_impact(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == tenant_id
+            Alert.tenant_id == str(tenant_id)
         )
     )
     alert = result.scalar_one_or_none()

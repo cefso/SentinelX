@@ -51,11 +51,19 @@ async def lifespan(app: FastAPI):
     escalation_task = asyncio.create_task(escalation_worker.run())
     logger.info("escalation_worker_started")
 
+    # 启动通知Worker
+    from apps.notify.worker import NotificationWorker
+    notification_worker = NotificationWorker()
+    notification_task = asyncio.create_task(notification_worker.start())
+    logger.info("notification_worker_started")
+
     yield
 
     # 关闭时
     logger.info("sentinelx_shutting_down")
     escalation_task.cancel()
+    await notification_worker.stop()
+    notification_task.cancel()
     await RedisClient.close()
     await close_db()
     logger.info("sentinelx_stopped")

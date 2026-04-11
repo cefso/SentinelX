@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/alerts/escalation/candidates")
 async def list_escalation_candidates(
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -38,7 +38,7 @@ async def list_escalation_candidates(
                 "assignee_name": a.assignee_name,
             }
             for a in alerts
-            if a.tenant_id == tenant_id
+            if a.tenant_id == str(tenant_id)
         ],
     }
 
@@ -46,7 +46,7 @@ async def list_escalation_candidates(
 @router.post("/alerts/{alert_id}/escalate")
 async def manual_escalate(
     alert_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -58,7 +58,7 @@ async def manual_escalate(
     from apps.alert.models import Alert, AlertHistory
 
     result = await db.execute(
-        select(Alert).where(Alert.id == alert_id, Alert.tenant_id == tenant_id)
+        select(Alert).where(Alert.id == alert_id, Alert.tenant_id == str(tenant_id))
     )
     alert = result.scalar_one_or_none()
 
@@ -89,7 +89,7 @@ async def manual_escalate(
 
 @router.post("/alerts/escalation/check")
 async def run_escalation_check(
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

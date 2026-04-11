@@ -8,7 +8,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
-from apps.notify.models import NotificationRecord
+from apps.rule.models import NotificationRecord
 from apps.notify.channels import ChannelFactory
 from apps.alert.models import Alert
 from apps.rule.models import NotificationChannel as ChannelModel, NotificationTemplate
@@ -66,10 +66,10 @@ class NotificationService:
                 NotificationTemplate.channel_type == channel.channel_type,
                 NotificationTemplate.is_active == True,
                 or_(
-                    NotificationTemplate.tenant_id == alert.tenant_id,
+                    NotificationTemplate.tenant_id == str(alert.tenant_id),
                     NotificationTemplate.is_default == True
                 )
-            ).order_by(NotificationTemplate.is_default == True)  # 非默认模板优先
+            ).order_by(NotificationTemplate.is_default.desc())
         )
         template = template_result.scalar_one_or_none()
         template_content = template.content if template else None
@@ -88,7 +88,7 @@ class NotificationService:
 
         try:
             # 发送通知
-            success, error = ChannelFactory.send_alert(
+            success, error = await ChannelFactory.send_alert(
                 channel.channel_type,
                 channel.config,
                 alert,
