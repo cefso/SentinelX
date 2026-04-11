@@ -267,14 +267,31 @@ SentinelX/
 ### 告警处理流程
 
 ```
-告警接入 → 指纹生成 → 去重检查(5分钟窗口) → 抑制检查(维护期) →
-聚合检查(告警列表聚合视图) → 规则匹配(AND/OR条件) → 通知队列 → 多渠道发送
+告警接入 → 指纹生成 → 去重检查 → 抑制检查 → 聚合检查 → 规则匹配(AND/OR条件) → 通知队列 → 多渠道发送
 ```
 
+每个处理阶段仅在配置了对应规则时生效；未配置规则则跳过该阶段，告警继续向下流转。
+
+### Trace 诊断步骤说明
+
+每条告警附带唯一 Trace ID，诊断页面展示处理全链路。各步骤状态含义：
+
+| 步骤 | 状态 | 含义 |
+|------|------|------|
+| 去重检查 | passed / 未配置去重规则，跳过 | 未命中去重 / 无规则 |
+| 去重检查 | blocked | 触发去重，告警被丢弃 |
+| 抑制检查 | passed / 未配置抑制规则，跳过 | 未命中抑制 / 无规则 |
+| 抑制检查 | 抑制规则已禁用，跳过 | 规则存在但已关闭 |
+| 抑制检查 | blocked | 触发抑制（维护窗口期），告警被丢弃 |
+| 抑制检查 | 未触发抑制 | 规则已启用，条件未命中 |
+| 聚合检查 | skipped / 未配置聚合规则，跳过 | 无规则 / 条件不匹配 |
+| 聚合检查 | aggregated | 加入现有聚合组 |
+| 聚合检查 | new_group | 创建新聚合组 |
+| 规则匹配 | success | 匹配到 N 条规则 |
+| 通知队列 | success / fallback | 正常入队 / 无规则命中，使用默认渠道 |
+| 通知队列 | dedup_skipped | 60 秒内同指纹已通知，跳过 |
+
 ## 核心概念
-```
-接入 → 指纹生成 → 去重检查 → 抑制检查 → 聚合检查（可选，API 层面）→ 规则匹配 → 通知发送
-```
 
 ### 多租户架构
 
@@ -322,7 +339,7 @@ SentinelX 支持用户属于多个租户，通过 UserTenant 关联表实现 N:M
 | API Key | Agent/服务 | `X-API-Key: sxk_v1_xxx` |
 
 ### Trace ID 诊断
-每条告警都有唯一的 12 位 Trace ID，可用于诊断告警处理全流程。
+每条告警都有唯一的 12 位 Trace ID，可通过诊断页面或 `GET /api/v1/alerts/diagnose/{trace_id}` 查看处理全链路。各步骤含义见 [Trace 诊断步骤说明](#trace-诊断步骤说明)。
 
 ## 配置说明
 
@@ -749,9 +766,13 @@ alert_key = aliyun_cms-{alertName}-{rawMetricName}-{instance_id}
 **通知去重**:
 虽然存储层忠实记录每条消息，但通知发送层会进行去重：
 - 使用 fingerprint 作为去重键
-- 去重窗口：5分钟（300秒）
+- 去重窗口：60 秒
 - 同一 fingerprint 在窗口期内只发送一次通知
 - OK 恢复消息不发送通知
+
+**告警级去重**（需配置去重规则）:
+- 通过规则配置指纹字段或条件，在指定时间窗口内丢弃重复告警
+- 未配置去重规则时不进行去重，每条告警消息均正常流转
 
 ### 添加新的通知渠道
 
@@ -797,8 +818,10 @@ GitHub Actions 自动处理:
 - 检查 Redis 是否运行: `docker compose -f docker/docker-compose.yml ps redis`
 
 #### 2. 告警未收到通知
-- 检查规则是否正确配置
-- 检查通知渠道是否启用
+- 检查通知渠道是否启用，是否设置为默认渠道（无规则时的兜底渠道）
+- 检查 Redis 通知队列是否积压: `redis-cli LLEN queue:notify:1`
+- 检查通知发送记录: `GET /api/v1/notifications`（status=failed 时查看 error_message）
+- 检查 Trace 诊断页面，确认步骤是否走到 "通知队列" 且状态非 `dedup_skipped`
 - 查看后端日志: `docker compose -f docker/docker-compose.yml logs -f backend | grep notification`
 
 #### 3. 性能问题

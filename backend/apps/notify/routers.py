@@ -9,7 +9,7 @@ from sqlalchemy import select, func
 from apps.core.database import get_db
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.alert.models import Alert
-from apps.notify.models import NotificationRecord
+from apps.rule.models import NotificationRecord
 from apps.rule.models import NotificationChannel, NotificationTemplate
 from apps.notify.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, ChannelTypeInfo, ChannelTypesResponse,
@@ -76,11 +76,11 @@ async def list_channel_types():
 async def list_channels(
     is_active: Optional[bool] = None,
     channel_type: Optional[str] = None,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取通知渠道列表"""
-    query = select(NotificationChannel).where(NotificationChannel.tenant_id == tenant_id)
+    query = select(NotificationChannel).where(NotificationChannel.tenant_id == str(tenant_id))
     if is_active is not None:
         query = query.where(NotificationChannel.is_active == is_active)
     if channel_type:
@@ -92,14 +92,14 @@ async def list_channels(
 @router.post("/channels", response_model=ChannelResponse)
 async def create_channel(
     request: ChannelCreate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """创建通知渠道"""
     # 检查 code 是否重复
     existing = await db.execute(
         select(NotificationChannel).where(
-            NotificationChannel.tenant_id == tenant_id,
+            NotificationChannel.tenant_id == str(tenant_id),
             NotificationChannel.code == request.code,
         )
     )
@@ -107,7 +107,7 @@ async def create_channel(
         raise HTTPException(status_code=400, detail=f"渠道代码 '{request.code}' 已存在")
 
     channel = NotificationChannel(
-        tenant_id=tenant_id,
+        tenant_id=str(tenant_id),
         name=request.name,
         code=request.code,
         channel_type=request.channel_type,
@@ -124,14 +124,14 @@ async def create_channel(
 @router.get("/channels/{channel_id}", response_model=ChannelResponse)
 async def get_channel(
     channel_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取通知渠道详情"""
     result = await db.execute(
         select(NotificationChannel).where(
             NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == tenant_id,
+            NotificationChannel.tenant_id == str(tenant_id),
         )
     )
     channel = result.scalar_one_or_none()
@@ -144,14 +144,14 @@ async def get_channel(
 async def update_channel(
     channel_id: int,
     request: ChannelUpdate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """更新通知渠道"""
     result = await db.execute(
         select(NotificationChannel).where(
             NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == tenant_id,
+            NotificationChannel.tenant_id == str(tenant_id),
         )
     )
     channel = result.scalar_one_or_none()
@@ -162,7 +162,7 @@ async def update_channel(
     if request.code is not None and request.code != channel.code:
         existing = await db.execute(
             select(NotificationChannel).where(
-                NotificationChannel.tenant_id == tenant_id,
+                NotificationChannel.tenant_id == str(tenant_id),
                 NotificationChannel.code == request.code,
                 NotificationChannel.id != channel_id,
             )
@@ -181,14 +181,14 @@ async def update_channel(
 @router.delete("/channels/{channel_id}")
 async def delete_channel(
     channel_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """删除通知渠道"""
     result = await db.execute(
         select(NotificationChannel).where(
             NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == tenant_id,
+            NotificationChannel.tenant_id == str(tenant_id),
         )
     )
     channel = result.scalar_one_or_none()
@@ -204,7 +204,7 @@ async def delete_channel(
 async def test_channel(
     channel_id: int,
     request: ChannelTestRequest,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """测试发送通知到指定渠道"""
@@ -212,7 +212,7 @@ async def test_channel(
     result = await db.execute(
         select(NotificationChannel).where(
             NotificationChannel.id == channel_id,
-            NotificationChannel.tenant_id == tenant_id,
+            NotificationChannel.tenant_id == str(tenant_id),
         )
     )
     channel = result.scalar_one_or_none()
@@ -245,16 +245,16 @@ async def test_channel(
             NotificationTemplate.channel_type == channel.channel_type,
             NotificationTemplate.is_active == True,
             or_(
-                NotificationTemplate.tenant_id == tenant_id,
+                NotificationTemplate.tenant_id == str(tenant_id),
                 NotificationTemplate.is_default == True,
             ),
-        ).order_by(NotificationTemplate.is_default == False)
+        ).order_by(NotificationTemplate.is_default.desc())
     )
     template = template_result.scalar_one_or_none()
     template_content = template.content if template else None
 
     # 发送测试通知
-    success, error = ChannelFactory.send_alert(
+    success, error = await ChannelFactory.send_alert(
         channel.channel_type,
         channel.config,
         test_alert,
@@ -278,11 +278,11 @@ async def list_notifications(
     channel_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取通知记录（支持分页）"""
-    query = select(NotificationRecord).where(NotificationRecord.tenant_id == tenant_id)
+    query = select(NotificationRecord).where(NotificationRecord.tenant_id == str(tenant_id))
 
     if alert_id is not None:
         query = query.where(NotificationRecord.alert_id == alert_id)
@@ -311,11 +311,11 @@ async def list_notifications(
 @router.get("/templates", response_model=List[TemplateResponse])
 async def list_templates(
     channel_type: Optional[str] = None,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取通知模板列表"""
-    query = select(NotificationTemplate).where(NotificationTemplate.tenant_id == tenant_id)
+    query = select(NotificationTemplate).where(NotificationTemplate.tenant_id == str(tenant_id))
     if channel_type:
         query = query.where(NotificationTemplate.channel_type == channel_type)
     result = await db.execute(query.order_by(NotificationTemplate.id))
@@ -325,14 +325,14 @@ async def list_templates(
 @router.post("/templates", response_model=TemplateResponse)
 async def create_template(
     request: TemplateCreate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """创建通知模板"""
     # 检查 code 是否重复
     existing = await db.execute(
         select(NotificationTemplate).where(
-            NotificationTemplate.tenant_id == tenant_id,
+            NotificationTemplate.tenant_id == str(tenant_id),
             NotificationTemplate.code == request.code,
         )
     )
@@ -358,14 +358,14 @@ async def create_template(
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
 async def get_template(
     template_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """获取模板详情"""
     result = await db.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.id == template_id,
-            NotificationTemplate.tenant_id == tenant_id,
+            NotificationTemplate.tenant_id == str(tenant_id),
         )
     )
     template = result.scalar_one_or_none()
@@ -378,14 +378,14 @@ async def get_template(
 async def update_template(
     template_id: int,
     request: TemplateUpdate,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """更新通知模板"""
     result = await db.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.id == template_id,
-            NotificationTemplate.tenant_id == tenant_id,
+            NotificationTemplate.tenant_id == str(tenant_id),
         )
     )
     template = result.scalar_one_or_none()
@@ -403,14 +403,14 @@ async def update_template(
 @router.delete("/templates/{template_id}")
 async def delete_template(
     template_id: int,
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """删除通知模板"""
     result = await db.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.id == template_id,
-            NotificationTemplate.tenant_id == tenant_id,
+            NotificationTemplate.tenant_id == str(tenant_id),
         )
     )
     template = result.scalar_one_or_none()

@@ -166,7 +166,7 @@ class EscalationWorker:
 
     async def run(self):
         """运行Worker"""
-        from apps.core.database import async_session_factory
+        from apps.core.database import AsyncSessionLocal as async_session_factory
 
         while True:
             try:

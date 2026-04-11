@@ -3,15 +3,32 @@ SentinelX - 规则引擎
 基于条件的告警路由匹配
 """
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from redis.asyncio import Redis
 
 from apps.rule.models import AlertRule
+from apps.alert.models import Alert, AlertAggregateGroup, AlertAggregateMember
 
 import structlog
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class AlertProcessResult:
+    """告警处理结果"""
+    is_duplicate: bool = False
+    is_suppressed: bool = False
+    suppress_reason: Optional[str] = None
+    aggregated_info: Optional[Dict[str, Any]] = None
+    matched_rules: List[AlertRule] = field(default_factory=list)
+    channel_ids: List[int] = field(default_factory=list)
+    trace_steps: List[Dict] = field(default_factory=list)
 
 
 class RuleEngine:
@@ -150,3 +167,511 @@ class RuleEngine:
                 return None
 
         return value
+
+    async def process_alert(
+        self,
+        db: AsyncSession,
+        redis: Redis,
+        alert: Alert,
+        trace_id: str,
+        add_trace_step: Callable = None
+    ) -> AlertProcessResult:
+        """
+        统一处理告警：去重、抑制、聚合、规则匹配
+        """
+        result = AlertProcessResult()
+
+        # 1. 去重检查
+        is_duplicate, dedup_result = await self._check_dedup(db, redis, alert, trace_id, add_trace_step)
+        if is_duplicate:
+            result.is_duplicate = True
+            result.trace_steps = dedup_result
+            return result
+
+        # 2. 抑制检查
+        is_suppressed, reason, suppress_result = await self._check_suppress(db, redis, alert, trace_id, add_trace_step)
+        if is_suppressed:
+            result.is_suppressed = True
+            result.suppress_reason = reason
+            result.trace_steps = suppress_result
+            return result
+
+        # 3. 聚合检查
+        aggregated_info, agg_result = await self._check_aggregate(db, redis, alert, trace_id, add_trace_step)
+        result.aggregated_info = aggregated_info
+
+        # 4. 规则匹配（获取通知渠道）
+        matched_rules, channel_ids, match_result = await self._match_rules(db, alert, trace_id, add_trace_step)
+        result.matched_rules = matched_rules
+        result.channel_ids = channel_ids
+
+        # 合并所有 trace_steps
+        result.trace_steps = dedup_result + suppress_result + agg_result + match_result
+
+        return result
+
+    async def _check_dedup(
+        self,
+        db: AsyncSession,
+        redis: Redis,
+        alert: Alert,
+        trace_id: str,
+        add_trace_step: Callable = None
+    ) -> tuple[bool, List[Dict]]:
+        """去重检查"""
+        trace_steps = []
+
+        async def _add_step(step_type, title, status, data):
+            step = {
+                "type": step_type,
+                "title": title,
+                "status": status,
+                "data": data,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            trace_steps.append(step)
+            if add_trace_step:
+                await add_trace_step(trace_id, step_type, title, status, data)
+
+        await _add_step("dedup_check", "去重检查", "processing", {"description": "检查是否为重复告警"})
+
+        # 查找去重规则
+        dedup_rule = await self._lookup_dedup_rule(db, alert)
+        dedup_config = getattr(dedup_rule, "deduplication_config", None) if dedup_rule else None
+
+        # 没有去重配置，跳过去重
+        if not dedup_config:
+            await _add_step("dedup_result", "去重检查", "passed", {"description": "未配置去重规则，跳过"})
+            return False, trace_steps
+
+        # 基于规则的去重检查
+        if dedup_config.get("disabled", not dedup_config.get("enabled", False)):
+            await _add_step("dedup_result", "去重检查", "passed", {"description": "去重配置已禁用"})
+            return False, trace_steps
+
+        dedup_type = dedup_config.get("dedup_type", "fingerprint")
+        window_seconds = dedup_config.get("window_seconds", 300)
+
+        if dedup_type == "fingerprint":
+            # 指纹模式去重
+            fp_fields = dedup_config.get("fingerprint_fields", ["alert_key"])
+            dedup_key_parts = [str(alert.tenant_id)]
+
+            for field_name in fp_fields:
+                if field_name == "alert_key":
+                    dedup_key_parts.append(str(alert.alert_key or ""))
+                elif field_name == "fingerprint":
+                    dedup_key_parts.append(str(alert.fingerprint or ""))
+                elif field_name == "source":
+                    dedup_key_parts.append(str(alert.source or ""))
+                elif field_name == "severity":
+                    dedup_key_parts.append(str(alert.severity or ""))
+                elif field_name.startswith("labels."):
+                    label_key = field_name.split(".", 1)[1]
+                    dedup_key_parts.append(str((alert.labels or {}).get(label_key, "")))
+                else:
+                    val = getattr(alert, field_name, None)
+                    dedup_key_parts.append(str(val) if val is not None else "")
+
+            dedup_key = "dedup:" + ":".join(dedup_key_parts)
+
+        elif dedup_type == "condition":
+            # 条件模式去重
+            conditions = dedup_config.get("conditions", [])
+            condition_mode = dedup_config.get("condition_mode", "and")
+
+            if not conditions:
+                await _add_step("dedup_result", "去重检查", "passed", {"description": "无去重条件"})
+                return False, trace_steps
+
+            alert_data = self._alert_to_dict(alert)
+            is_match, _, _ = self.evaluate_conditions(conditions, condition_mode, alert_data)
+
+            if not is_match:
+                await _add_step("dedup_result", "去重检查", "passed", {"description": "去重条件不匹配"})
+                return False, trace_steps
+
+            cond_sig = "|".join(
+                f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
+                for c in conditions
+            )
+            dedup_key = f"dedup:cond:{hash(cond_sig)}:{alert.tenant_id}"
+        else:
+            await _add_step("dedup_result", "去重检查", "passed", {"description": "未知去重类型"})
+            return False, trace_steps
+
+        existing = await redis.get(dedup_key)
+        if existing:
+            logger.info("dedup_check_passed", alert_id=alert.id, trace_id=trace_id, dedup_key=dedup_key, existing_id=existing)
+            await _add_step("dedup_result", "去重检查", "blocked", {
+                "description": f"触发去重，已存在告警: {existing}"
+            })
+            return True, trace_steps
+
+        await redis.set(dedup_key, str(alert.id), ex=window_seconds)
+        await _add_step("dedup_result", "去重检查", "passed", {"description": "未触发去重"})
+        return False, trace_steps
+
+    def _alert_to_dict(self, alert: Alert) -> Dict[str, Any]:
+        """将告警转换为字典"""
+        return {
+            "id": alert.id,
+            "tenant_id": alert.tenant_id,
+            "source": alert.source,
+            "alert_key": alert.alert_key,
+            "fingerprint": alert.fingerprint,
+            "severity": alert.severity,
+            "title": alert.title,
+            "content": alert.content,
+            "labels": alert.labels or {},
+            "annotations": alert.annotations or {},
+            "status": alert.status,
+            "namespace": getattr(alert, 'namespace', None),
+            "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
+        }
+
+    async def _lookup_dedup_rule(self, db: AsyncSession, alert: Alert) -> Optional[AlertRule]:
+        """查找用于去重的规则（取最高优先级规则）"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.tenant_id == alert.tenant_id,
+                AlertRule.is_active == True,
+                AlertRule.deduplication_config.isnot(None),
+            ).order_by(AlertRule.priority.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _lookup_suppress_rule(self, db: AsyncSession, alert: Alert) -> Optional[AlertRule]:
+        """查找用于抑制的规则（取最高优先级规则）"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.tenant_id == alert.tenant_id,
+                AlertRule.is_active == True,
+                AlertRule.suppress_config.isnot(None),
+            ).order_by(AlertRule.priority.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _lookup_aggregate_rule(self, db: AsyncSession, alert: Alert) -> Optional[AlertRule]:
+        """查找用于聚合的规则（取最高优先级规则）"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.tenant_id == alert.tenant_id,
+                AlertRule.is_active == True,
+                AlertRule.aggregate_config.isnot(None),
+            ).order_by(AlertRule.priority.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _check_suppress(
+        self,
+        db: AsyncSession,
+        redis: Redis,
+        alert: Alert,
+        trace_id: str,
+        add_trace_step: Callable = None
+    ) -> tuple[bool, Optional[str], List[Dict]]:
+        """抑制检查"""
+        trace_steps = []
+
+        async def _add_step(step_type, title, status, data):
+            step = {
+                "type": step_type,
+                "title": title,
+                "status": status,
+                "data": data,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            trace_steps.append(step)
+            if add_trace_step:
+                await add_trace_step(trace_id, step_type, title, status, data)
+
+        await _add_step("suppress_check", "抑制检查", "processing", {"description": "检查是否应该抑制此告警"})
+
+        suppress_rule = await self._lookup_suppress_rule(db, alert)
+        suppress_config = getattr(suppress_rule, "suppress_config", None) if suppress_rule else None
+
+        # 基于规则的抑制检查（兼容 disabled 和 enabled 字段）
+        if suppress_config and not suppress_config.get("disabled", not suppress_config.get("enabled", False)):
+            suppress_type = suppress_config.get("type", "maintenance_window")
+
+            if suppress_type == "maintenance_window":
+                # 维护窗口抑制
+                maintenance_config = suppress_config.get("maintenance_window", {})
+                cluster_labels = maintenance_config.get("cluster_labels", [])
+                alert_cluster = (alert.labels or {}).get("cluster", "")
+
+                for cluster_name in cluster_labels:
+                    if alert_cluster == cluster_name:
+                        logger.info("suppress_triggered", alert_id=alert.id, trace_id=trace_id, reason="maintenance_window")
+                        await _add_step("suppress_result", "抑制检查", "blocked", {
+                            "description": f"处于维护窗口期 (cluster: {alert_cluster})"
+                        })
+                        return True, f"处于维护窗口期 (cluster: {alert_cluster})", trace_steps
+
+            elif suppress_type == "rule_based":
+                # 基于规则的抑制：评估条件
+                conditions = suppress_config.get("conditions", [])
+                condition_mode = suppress_config.get("condition_mode", "and")
+
+                alert_data = self._alert_to_dict(alert)
+                is_suppressed, reason, _ = self.evaluate_conditions(
+                    conditions, condition_mode, alert_data
+                )
+
+                if is_suppressed:
+                    logger.info("suppress_triggered", alert_id=alert.id, trace_id=trace_id, reason=reason)
+                    await _add_step("suppress_result", "抑制检查", "blocked", {
+                        "description": f"触发规则抑制: {reason}"
+                    })
+                    return True, f"触发规则抑制: {reason}", trace_steps
+        elif suppress_config:
+            # 配置存在但已禁用，跳过
+            await _add_step("suppress_result", "抑制检查", "passed", {"description": "抑制规则已禁用，跳过"})
+            return False, None, trace_steps
+        else:
+            # 无规则配置，检查 Redis 维护窗口（旧逻辑兼容）
+            suppress_key = f"suppress:{alert.tenant_id}"
+            redis_config = await redis.hgetall(suppress_key)
+
+            if redis_config:
+                labels = alert.labels or {}
+                for key, value in redis_config.items():
+                    if key.startswith("window:") and labels.get("cluster") == value:
+                        logger.info("suppress_triggered", alert_id=alert.id, trace_id=trace_id, reason="redis_maintenance_window")
+                        await _add_step("suppress_result", "抑制检查", "blocked", {
+                            "description": "处于维护窗口期"
+                        })
+                        return True, f"处于维护窗口期", trace_steps
+
+            await _add_step("suppress_result", "抑制检查", "passed", {"description": "未配置抑制规则，跳过"})
+            return False, None, trace_steps
+
+        logger.info("suppress_check_passed", alert_id=alert.id, trace_id=trace_id)
+        await _add_step("suppress_result", "抑制检查", "passed", {"description": "未触发抑制"})
+        return False, None, trace_steps
+
+    async def _check_aggregate(
+        self,
+        db: AsyncSession,
+        redis: Redis,
+        alert: Alert,
+        trace_id: str,
+        add_trace_step: Callable = None
+    ) -> tuple[Optional[Dict], List[Dict]]:
+        """聚合检查"""
+        trace_steps = []
+
+        async def _add_step(step_type, title, status, data):
+            step = {
+                "type": step_type,
+                "title": title,
+                "status": status,
+                "data": data,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            trace_steps.append(step)
+            if add_trace_step:
+                await add_trace_step(trace_id, step_type, title, status, data)
+
+        await _add_step("aggregate_check", "聚合检查", "processing", {"description": "检查是否需要聚合此告警"})
+
+        aggregate_rule = await self._lookup_aggregate_rule(db, alert)
+        agg_config = getattr(aggregate_rule, "aggregate_config", None) if aggregate_rule else None
+
+        if agg_config and not agg_config.get("disabled", not agg_config.get("enabled", False)):
+            agg_mode = agg_config.get("mode", "group_by")
+            window_seconds = agg_config.get("window_seconds", 300)
+            max_count = agg_config.get("max_count", 100)
+            store_original = agg_config.get("store_original_alerts", True)
+
+            if agg_mode == "condition":
+                # 条件模式：评估条件决定聚合组
+                conditions = agg_config.get("conditions", [])
+                condition_mode = agg_config.get("condition_mode", "and")
+
+                alert_data = self._alert_to_dict(alert)
+                is_match, reason, _ = self.evaluate_conditions(
+                    conditions, condition_mode, alert_data
+                )
+
+                if is_match and conditions:
+                    cond_sig = "|".join(
+                        f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
+                        for c in conditions
+                    )
+                    group_key = f"cond:{hash(cond_sig)}"
+                elif is_match:
+                    group_key = "cond:match"
+                else:
+                    # 条件不匹配，跳过聚合
+                    await _add_step("aggregate_result", "聚合检查", "skipped", {"description": "聚合条件不匹配"})
+                    return None, trace_steps
+            else:
+                # group_by 模式（默认）：按字段值聚合
+                group_by_fields = agg_config.get("group_by", ["source", "fingerprint"])
+                group_parts = []
+                for field_name in group_by_fields:
+                    if field_name == "source":
+                        group_parts.append(str(alert.source or ""))
+                    elif field_name == "fingerprint":
+                        group_parts.append(str(alert.fingerprint or ""))
+                    elif field_name == "alert_key":
+                        group_parts.append(str(alert.alert_key or ""))
+                    elif field_name == "severity":
+                        group_parts.append(str(alert.severity or ""))
+                    elif field_name == "namespace":
+                        group_parts.append(str(alert.namespace or ""))
+                    elif field_name.startswith("labels."):
+                        label_key = field_name.split(".", 1)[1]
+                        group_parts.append(str((alert.labels or {}).get(label_key, "")))
+                    else:
+                        val = getattr(alert, field_name, None)
+                        if val is None and "." in field_name:
+                            group_parts.append(str((alert.labels or {}).get(field_name.split(".", 1)[1], "")))
+                        else:
+                            group_parts.append(str(val) if val is not None else "")
+
+                group_key = "|".join(group_parts)
+
+            aggregate_key = f"aggregate:{alert.tenant_id}:{group_key}"
+            existing_id = await redis.get(aggregate_key)
+
+            if existing_id:
+                # 加入现有聚合组
+                existing_alert_id = int(existing_id)
+
+                # 检查 max_count 限制
+                result = await db.execute(
+                    select(AlertAggregateGroup).where(
+                        AlertAggregateGroup.group_key == aggregate_key,
+                        AlertAggregateGroup.tenant_id == alert.tenant_id,
+                    )
+                )
+                group = result.scalar_one_or_none()
+
+                if group is None:
+                    # Redis 与 DB 不一致，按新组处理
+                    pass
+                elif group.alert_count >= max_count:
+                    await _add_step("aggregate_result", "聚合检查", "skipped", {
+                        "description": f"聚合组达到上限 ({max_count})"
+                    })
+                    return None, trace_steps
+                else:
+                    # 创建聚合组成员记录
+                    if store_original:
+                        member = AlertAggregateMember(
+                            tenant_id=alert.tenant_id,
+                            group_id=group.id,
+                            alert_id=alert.id,
+                        )
+                        db.add(member)
+
+                    # 更新聚合组计数
+                    group.alert_count += 1
+                    group.last_alert_at = datetime.now(timezone.utc)
+                    group.latest_alert_id = alert.id
+                    await db.commit()
+
+                    logger.info("aggregate_joined", alert_id=alert.id, trace_id=trace_id, group_key=group_key, parent_id=existing_id)
+                    await _add_step("aggregate_result", "聚合检查", "aggregated", {
+                        "description": f"加入聚合组，现有告警数: {group.alert_count}",
+                        "parent_alert_id": existing_id,
+                        "group_key": group_key,
+                    })
+                    return {
+                        "aggregated": True,
+                        "parent_alert_id": existing_id,
+                        "group_key": group_key,
+                    }, trace_steps
+
+            # 创建新聚合组
+            new_group = AlertAggregateGroup(
+                tenant_id=alert.tenant_id,
+                group_key=aggregate_key,
+                rule_id=aggregate_rule.id if aggregate_rule else None,
+                alert_count=1,
+                fired_at=alert.fired_at,
+                last_alert_at=alert.fired_at,
+                first_alert_id=alert.id,
+                latest_alert_id=alert.id,
+            )
+            db.add(new_group)
+            await db.flush()
+
+            if store_original:
+                member = AlertAggregateMember(
+                    tenant_id=alert.tenant_id,
+                    group_id=new_group.id,
+                    alert_id=alert.id,
+                )
+                db.add(member)
+
+            await db.commit()
+
+            # 设置 Redis TTL
+            await redis.set(aggregate_key, str(alert.id), ex=window_seconds)
+
+            logger.info("aggregate_new_group", alert_id=alert.id, trace_id=trace_id, group_key=group_key)
+            await _add_step("aggregate_result", "聚合检查", "new_group", {
+                "description": "创建新聚合组",
+                "group_key": group_key,
+            })
+            return None, trace_steps
+        else:
+            # 没有聚合配置，跳过聚合
+            await _add_step("aggregate_result", "聚合检查", "skipped", {"description": "未配置聚合规则，跳过"})
+            return None, trace_steps
+
+    async def _match_rules(
+        self,
+        db: AsyncSession,
+        alert: Alert,
+        trace_id: str,
+        add_trace_step: Callable = None
+    ) -> tuple[List[AlertRule], List[int], List[Dict]]:
+        """规则匹配
+        返回: (匹配的规则列表, 通知渠道ID列表, trace步骤)
+        """
+        trace_steps = []
+
+        async def _add_step(step_type, title, status, data):
+            step = {
+                "type": step_type,
+                "title": title,
+                "status": status,
+                "data": data,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            trace_steps.append(step)
+            if add_trace_step:
+                await add_trace_step(trace_id, step_type, title, status, data)
+
+        await _add_step("rule_match", "规则匹配", "processing", {"description": "匹配告警规则"})
+
+        alert_data = self._alert_to_dict(alert)
+
+        # 使用规则引擎匹配
+        matched_rules = await self.match_rules(db, alert.tenant_id, alert_data)
+
+        # 从匹配的规则中提取通知渠道ID
+        channel_ids = []
+        for rule in matched_rules:
+            actions = rule.actions or []
+            for action in actions:
+                if isinstance(action, int):
+                    channel_ids.append(action)
+                elif isinstance(action, dict) and action.get("type") == "notify":
+                    channel_ids.extend(action.get("channels", []))
+
+        logger.info("rule_matched", alert_id=alert.id, trace_id=trace_id, matched_count=len(matched_rules), channel_ids=channel_ids)
+
+        matched_rules_info = [{"id": r.id, "name": r.name, "priority": r.priority} for r in matched_rules]
+        await _add_step("rule_match_result", "规则匹配", "success", {
+            "description": f"匹配到 {len(matched_rules)} 条规则",
+            "matched_rules": matched_rules_info,
+            "channel_ids": channel_ids,
+        })
+
+        return matched_rules, channel_ids, trace_steps

@@ -7,7 +7,7 @@ import json
 from typing import List, Dict, Any
 import structlog
 
-from apps.core.database import async_session_factory
+from apps.core.database import AsyncSessionLocal as async_session_factory
 from apps.core.redis import RedisClient
 from apps.notify.services.sender import NotificationService
 

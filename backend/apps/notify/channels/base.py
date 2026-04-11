@@ -93,11 +93,11 @@ class ChannelFactory:
         return channel_class(config)
 
     @classmethod
-    def send_alert(cls, channel_type: str, config: Dict[str, Any], alert: Alert, template: str = None) -> tuple[bool, Optional[str]]:
+    async def send_alert(cls, channel_type: str, config: Dict[str, Any], alert: Alert, template: str = None) -> tuple[bool, Optional[str]]:
         """快捷发送方法"""
         try:
             channel = cls.get_channel(channel_type, config)
-            return channel.send(alert, template)
+            return await channel.send(alert, template)
         except Exception as e:
             logger.error("channel_send_error", channel_type=channel_type, error=str(e))
             return False, str(e)
