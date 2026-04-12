@@ -294,3 +294,70 @@ class PreviewAggregateResponse(BaseModel):
     total: int = Field(..., description="总组数")
     page: int = Field(..., description="当前页")
     page_size: int = Field(..., description="每页数量")
+
+
+# ============ 策略配置API Schema ============
+
+class StrategyDedupRequest(BaseModel):
+    """去重策略更新请求"""
+    config: Optional[Dict[str, Any]] = Field(None, description="去重配置，null 表示禁用")
+
+
+class StrategySuppressRequest(BaseModel):
+    """抑制策略更新请求"""
+    config: Optional[Dict[str, Any]] = Field(None, description="抑制配置，null 表示禁用")
+
+
+class StrategyAggregateRequest(BaseModel):
+    """聚合策略更新请求"""
+    config: Optional[Dict[str, Any]] = Field(None, description="聚合配置，null 表示禁用")
+
+
+class StrategyResponse(BaseModel):
+    """策略配置响应"""
+    config: Optional[Dict[str, Any]] = None
+    rule_id: Optional[int] = None
+
+
+# ============ 多规则策略Schema ============
+
+class StrategyRuleCreate(BaseModel):
+    """策略规则创建（去重/抑制/聚合）"""
+    name: str = Field(..., min_length=1, max_length=128)
+    description: Optional[str] = None
+    priority: int = Field(0, ge=0, le=1000)
+    is_active: bool = True
+    conditions: List[Condition] = []
+    condition_mode: str = Field("and", pattern="^(and|or)$")
+    config: Dict[str, Any] = Field(..., description="dedup/suppress/aggregate 配置")
+
+
+class StrategyRuleUpdate(BaseModel):
+    """策略规则更新"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+    conditions: Optional[List[Condition]] = None
+    condition_mode: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+
+
+class StrategyRuleResponse(BaseModel):
+    """策略规则响应"""
+    id: int
+    name: str
+    code: str
+    description: Optional[str] = None
+    priority: int
+    is_active: bool
+    conditions: List[Condition] = []
+    condition_mode: str = "and"
+    config: Optional[Dict[str, Any]] = None
+    match_count: int = 0
+    last_match_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

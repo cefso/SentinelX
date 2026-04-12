@@ -120,6 +120,28 @@ export function DiagnosePage() {
                     {step.reason && (
                       <div className="text-sm text-red-500 mt-1">{step.reason}</div>
                     )}
+                    {step.details && (
+                      <div className="mt-2 text-xs text-gray-500 space-y-1">
+                        {step.details.rule_name && (
+                          <div>规则: {step.details.rule_name}</div>
+                        )}
+                        {step.details.blocked_by_rule && (
+                          <div>触发规则: {step.details.blocked_by_rule}</div>
+                        )}
+                        {step.details.triggered_by_rule && (
+                          <div>触发规则: {step.details.triggered_by_rule}</div>
+                        )}
+                        {step.details.matched_rules && (
+                          <div>匹配规则: {step.details.matched_rules.map((r: any) => r.name).join(', ')}</div>
+                        )}
+                        {step.details.group_key && (
+                          <div>聚合组: {step.details.group_key}</div>
+                        )}
+                        {step.details.channel_ids && (
+                          <div>通知渠道: {step.details.channel_ids.join(', ')}</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <StatusIndicator status={step.status} />
                 </div>
@@ -133,17 +155,23 @@ export function DiagnosePage() {
 }
 
 function StatusIndicator({ status }: { status: string }) {
-  const config = {
-    success: 'bg-green-100 text-green-600',
-    passed: 'bg-blue-100 text-blue-600',
-    skipped: 'bg-gray-100 text-gray-600',
-    blocked: 'bg-red-100 text-red-600',
-    failed: 'bg-red-100 text-red-600',
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    success: { bg: 'bg-green-100', text: 'text-green-600', label: '成功' },
+    passed: { bg: 'bg-blue-100', text: 'text-blue-600', label: '通过' },
+    skipped: { bg: 'bg-gray-100', text: 'text-gray-600', label: '跳过' },
+    blocked: { bg: 'bg-red-100', text: 'text-red-600', label: '阻止' },
+    failed: { bg: 'bg-red-100', text: 'text-red-600', label: '失败' },
+    processing: { bg: 'bg-yellow-100', text: 'text-yellow-600', label: '处理中' },
+    aggregated: { bg: 'bg-purple-100', text: 'text-purple-600', label: '已聚合' },
+    new_group: { bg: 'bg-indigo-100', text: 'text-indigo-600', label: '新组' },
+    fallback: { bg: 'bg-gray-100', text: 'text-gray-600', label: '回退' },
   }
 
+  const statusConfig = config[status] || config.skipped
+
   return (
-    <span className={`px-2 py-1 text-xs rounded ${config[status as keyof typeof config] || config.skipped}`}>
-      {status}
+    <span className={`px-2 py-1 text-xs rounded ${statusConfig.bg} ${statusConfig.text}`}>
+      {statusConfig.label}
     </span>
   )
 }
