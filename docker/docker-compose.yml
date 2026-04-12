@@ -57,11 +57,8 @@ services:
         max-file: "5"
     labels:
       service: "sentinelx-backend"
-    command: >
-      sh -c "
-        alembic upgrade head &&
-        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level info
-      "
+    # 启动由 Dockerfile ENTRYPOINT (backend-entrypoint.sh) 负责
+    # 先执行 alembic migration，再启动 uvicorn
 
   # ============================================================================
   # Frontend 前端应用
@@ -72,22 +69,18 @@ services:
     image: ghcr.io/cefso/sentinelx/frontend:latest
     container_name: sentinelx-frontend
     ports:
-      - "3000:3000"
-    environment:
-      VITE_API_BASE_URL: /api/v1
-      VITE_API_PROXY_TARGET: http://backend:8000
+      - "3000:80"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
     networks:
       - sentinelx-network
-    command: npm run dev -- --host
     logging:
       driver: "json-file"
       options:
