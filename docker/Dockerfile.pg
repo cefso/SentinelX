@@ -1,10 +1,7 @@
 FROM postgres:16
 
-# 安装 PGMQ 扩展 (通过源码安装 SQL)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    && git clone https://github.com/pgmq/pgmq.git /tmp/pgmq \
-    && rm -rf /var/lib/apt/lists/*
+# 复制 PGMQ 扩展 SQL 文件
+COPY pgmq.sql /tmp/pgmq.sql
 
 # 复制数据库初始化脚本
 COPY init-db.sh /docker-entrypoint-initdb.d/init-db.sh
