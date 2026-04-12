@@ -63,9 +63,9 @@ class MessageQueue:
 
         self._queues_initialized = True
 
-    async def send(self, queue: str, message: Dict[str, Any], vt: Optional[int] = None) -> int:
+    async def send(self, queue: str, message: Dict[str, Any]) -> int:
         """发送消息，返回消息ID"""
-        return await self.mq.send(queue, message, vt=vt)
+        return await self.mq.send(queue, message)
 
     async def receive(self, queue: str, count: int = 1, vt: Optional[int] = None):
         """消费消息"""

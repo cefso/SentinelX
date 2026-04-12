@@ -66,7 +66,7 @@ class AlertDispatcher:
             # 进入通知队列
             await self._queue_notification(alert, result.matched_rules, result.channel_ids, trace_id)
 
-            # 发送升级检查消息（VT = 第0级等待时间 = 5分钟 = 300秒）
+            # 发送升级检查消息
             try:
                 mq = await get_mq_async()
                 await mq.send("alerts_escalation", {
@@ -74,7 +74,7 @@ class AlertDispatcher:
                     "tenant_id": alert.tenant_id,
                     "action": "check_escalation",
                     "level": 0
-                }, vt=300)  # 5分钟后可见
+                })
             except Exception as e:
                 logger.warning("escalation_msg_send_failed", alert_id=alert.id, error=str(e))
 
