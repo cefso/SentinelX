@@ -180,11 +180,11 @@ export function DedupRulesPage() {
   )
 }
 
-function DedupRuleModal({ rule, onClose, onSuccess }: { rule: StrategyRule | null; onClose: () => void; onSuccess: () => void }) {
+export function DedupRuleModal({ rule, initialConditions, onClose, onSuccess }: { rule: StrategyRule | null; initialConditions?: Condition[]; onClose: () => void; onSuccess: () => void }) {
   const [name, setName] = useState(rule?.name || '')
   const [description, setDescription] = useState(rule?.description || '')
   const [priority, setPriority] = useState(rule?.priority || 0)
-  const [conditions, setConditions] = useState<Condition[]>(rule?.conditions || [])
+  const [conditions, setConditions] = useState<Condition[]>(rule?.conditions || initialConditions || [])
   const [conditionMode, setConditionMode] = useState(rule?.condition_mode || 'and')
   const [config, setConfig] = useState<DedupConfig>(() => {
     if (rule?.config) {

@@ -772,7 +772,7 @@ async def _get_alert_key_field_values(
 ) -> FieldValuesResponse:
     """从 alerts 表获取 alert_key 去重列表（带 Redis 缓存）"""
     tenant_str = str(tenant_id)
-    redis = RedisClient.get()
+    redis = await RedisClient.get_instance()
 
     cache_key = f"field_values:{tenant_str}:alert_key"
     cached = await redis.get(cache_key)

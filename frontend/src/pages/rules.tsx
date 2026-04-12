@@ -241,10 +241,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const actions = formData.selected_channels.map(channelId => ({
-      type: 'notify',
-      channels: [channelId]
-    }))
+    const actions = formData.selected_channels.map(String)
     const payload = {
       name: formData.name,
       code: rule ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
