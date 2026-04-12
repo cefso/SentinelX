@@ -11,7 +11,7 @@ from apps.core.config import settings
 # PGMQ导入 (可选)
 try:
     import pgmq
-    from pgmq import PGMQueue
+    from pgmq.async_queue import PGMQueue
 
     PGMQ_AVAILABLE = True
 except ImportError:
