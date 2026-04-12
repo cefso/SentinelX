@@ -950,7 +950,15 @@ async def get_aggregated_members(
     )
     member = member_result.scalar_one_or_none()
     if not member:
-        raise HTTPException(status_code=404, detail="Alert is not part of any aggregate group")
+        # 没有聚合组成员，返回空数据而非 404
+        return AlertAggregateMembersResponse(
+            items=[],
+            total=0,
+            group_key=None,
+            alert_count=0,
+            page=page,
+            page_size=page_size,
+        )
 
     group_id = member.group_id
 
