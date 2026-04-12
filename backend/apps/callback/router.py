@@ -2,9 +2,7 @@
 SentinelX - 回调处理
 处理来自外部系统的告警回调
 """
-import base64
-import hashlib
-import hmac
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -19,18 +17,6 @@ import structlog
 logger = structlog.get_logger()
 
 router = APIRouter()
-
-
-def verify_dingtalk_signature(token: str, signature: str, timestamp: str) -> bool:
-    """验证钉钉回调签名"""
-    if not signature or not timestamp:
-        return False
-    string_to_sign = f"{timestamp}\n{token}"
-    secret_enc = token.encode("utf-8")
-    string_to_sign_enc = string_to_sign.encode("utf-8")
-    hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
-    my_signature = base64.b64encode(hmac_code).decode("utf-8")
-    return my_signature == signature
 
 
 @router.post("/callback/dingtalk")
@@ -68,23 +54,22 @@ async def acknowledge_alert_callback(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    # 验证token（简化实现，实际应该验证签名）
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    # 验证token
+    if not alert.callback_token or not secrets.compare_digest(token, alert.callback_token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
+    old_status = alert.status
     alert.status = "acknowledged"
     alert.acknowledged_at = datetime.now(timezone.utc)
-    await db.commit()
 
-    # 记录历史
+    # 记录历史（与状态更新在同一事务中提交）
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
         action="acknowledge_callback",
         description="通过回调确认告警",
-        old_value={"status": "firing"},
+        old_value={"status": old_status},
         new_value={"status": "acknowledged"},
     )
     db.add(history)
@@ -114,22 +99,21 @@ async def resolve_alert_callback(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # 验证token
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    if not alert.callback_token or not secrets.compare_digest(token, alert.callback_token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
+    old_status = alert.status
     alert.status = "resolved"
     alert.resolved_at = datetime.now(timezone.utc)
-    await db.commit()
 
-    # 记录历史
+    # 记录历史（与状态更新在同一事务中提交）
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
         action="resolve_callback",
         description="通过回调解决告警",
-        old_value={"status": alert.status},
+        old_value={"status": old_status},
         new_value={"status": "resolved"},
     )
     db.add(history)
@@ -160,12 +144,23 @@ async def silence_alert_callback(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # 验证token
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    if not alert.callback_token or not secrets.compare_digest(token, alert.callback_token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新静默时间
+    old_status = alert.status
     alert.silenced_until = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+
+    # 记录历史（与静默更新在同一事务中提交）
+    history = AlertHistory(
+        tenant_id=alert.tenant_id,
+        alert_id=alert.id,
+        action="silence_callback",
+        description=f"通过回调静默告警 {duration_hours} 小时",
+        old_value={"status": old_status, "silenced_until": None},
+        new_value={"status": old_status, "silenced_until": alert.silenced_until.isoformat()},
+    )
+    db.add(history)
     await db.commit()
 
     logger.info("alert_silenced_via_callback", alert_id=alert_id, duration_hours=duration_hours)
