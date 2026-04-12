@@ -52,7 +52,7 @@ class MessageQueue:
         # 初始化连接池
         await self.mq.init(init_extension=False)
 
-        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai"]
+        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai", "alerts_escalation"]
 
         for queue_name in queues:
             try:
@@ -63,9 +63,9 @@ class MessageQueue:
 
         self._queues_initialized = True
 
-    async def send(self, queue: str, message: Dict[str, Any]) -> int:
+    async def send(self, queue: str, message: Dict[str, Any], vt: Optional[int] = None) -> int:
         """发送消息，返回消息ID"""
-        return await self.mq.send(queue, message)
+        return await self.mq.send(queue, message, vt=vt)
 
     async def receive(self, queue: str, count: int = 1, vt: Optional[int] = None):
         """消费消息"""
