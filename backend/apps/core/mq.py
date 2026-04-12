@@ -47,16 +47,11 @@ class MessageQueue:
         if self._queues_initialized:
             return
 
-        queues = {
-            "alerts_raw": 60,       # 原始告警队列，VT=60秒
-            "alerts_notify": 300,   # 通知队列，VT=5分钟
-            "alerts_dlq": 86400,    # 死信队列，VT=24小时
-            "alerts_ai": 3600,      # AI分析队列，VT=1小时
-        }
+        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai"]
 
-        for queue_name, vt in queues.items():
+        for queue_name in queues:
             try:
-                await self.mq.create_queue(queue_name, vt=vt)
+                await self.mq.create_queue(queue_name)
             except Exception:
                 # 队列已存在
                 pass
