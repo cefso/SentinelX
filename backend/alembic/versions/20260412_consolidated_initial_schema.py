@@ -460,49 +460,6 @@ def upgrade() -> None:
     op.create_index('ix_alert_aggregate_members_id', 'alert_aggregate_members', ['id'], unique=False)
     op.create_index('ix_alert_aggregate_members_alert_id', 'alert_aggregate_members', ['alert_id'], unique=False)
 
-    # ─── Seed data ────────────────────────────────────────────────────
-
-    # cloud_product_metrics seed data
-    op.execute("""
-        INSERT INTO cloud_product_metrics
-            (product, namespace, metric_name, metric_desc, namespace_desc, metric_name_desc, unit, dimensions, is_active)
-        VALUES
-            -- 阿里云 ECS (acs_ecs)
-            ('阿里云ECS', 'acs_ecs', 'CPUUtilization', 'CPU使用率', '云服务器 ECS', 'CPU 利用率', '%', '["instanceId"]', 1),
-            ('阿里云ECS', 'acs_ecs', 'MemoryUsage', '内存使用率', '云服务器 ECS', '内存利用率', '%', '["instanceId"]', 1),
-            ('阿里云ECS', 'acs_ecs', 'DiskUsage', '磁盘使用率', '云服务器 ECS', '磁盘使用率', '%', '["instanceId"]', 1),
-            ('阿里云ECS', 'acs_ecs', 'InternetInRate', '公网入带宽', '云服务器 ECS', '公网流入带宽', 'bps', '["instanceId"]', 1),
-            ('阿里云ECS', 'acs_ecs', 'InternetOutRate', '公网出带宽', '云服务器 ECS', '公网流出带宽', 'bps', '["instanceId"]', 1),
-            ('阿里云ECS', 'acs_ecs', 'diskusage_utilization', '磁盘使用率', '云服务器 ECS', '磁盘利用率', '%', '["instanceId"]', 1),
-            -- 阿里云 RDS (acs_rds)
-            ('阿里云RDS', 'acs_rds', 'CPUUsage', 'CPU使用率', '云数据库 RDS', 'CPU 利用率', '%', '["instanceId"]', 1),
-            ('阿里云RDS', 'acs_rds', 'MemoryUsage', '内存使用率', '云数据库 RDS', '内存利用率', '%', '["instanceId"]', 1),
-            ('阿里云RDS', 'acs_rds', 'DiskUsage', '磁盘使用率', '云数据库 RDS', '磁盘使用率', '%', '["instanceId"]', 1),
-            ('阿里云RDS', 'acs_rds', 'ConnectionUsage', '连接数使用率', '云数据库 RDS', '连接数利用率', '%', '["instanceId"]', 1),
-            ('阿里云RDS', 'acs_rds', 'QPS', '每秒查询数', '云数据库 RDS', 'QPS', 'count/s', '["instanceId"]', 1),
-            -- 阿里云 SLB (acs_slb)
-            ('阿里云SLB', 'acs_slb', 'TrafficRX', '入流量', '负载均衡', '入流量', 'bps', '["instanceId", "vip"]', 1),
-            ('阿里云SLB', 'acs_slb', 'TrafficTX', '出流量', '负载均衡', '出流量', 'bps', '["instanceId", "vip"]', 1),
-            ('阿里云SLB', 'acs_slb', 'ActiveConnection', '活跃连接数', '负载均衡', '活跃连接数', 'count', '["instanceId", "vip"]', 1),
-            -- 阿里云 Redis (acs_kvstore)
-            ('阿里云Redis', 'acs_kvstore', 'MemoryUsage', '内存使用率', '云数据库 Redis', '内存利用率', '%', '["instanceId"]', 1),
-            ('阿里云Redis', 'acs_kvstore', 'QPS', '每秒命令数', '云数据库 Redis', 'QPS', 'count/s', '["instanceId"]', 1),
-            ('阿里云Redis', 'acs_kvstore', 'ConnectionUsage', '连接数使用率', '云数据库 Redis', '连接数利用率', '%', '["instanceId"]', 1),
-            -- 腾讯云 CVM (QCE/CVM)
-            ('腾讯云CVM', 'QCE/CVM', 'CPUUsage', 'CPU使用率', '云服务器 CVM', 'CPU 使用率', '%', '["unInstanceId"]', 1),
-            ('腾讯云CVM', 'QCE/CVM', 'MemUsage', '内存使用率', '云服务器 CVM', '内存使用率', '%', '["unInstanceId"]', 1),
-            ('腾讯云CVM', 'QCE/CVM', 'DiskUsage', '磁盘使用率', '云服务器 CVM', '磁盘使用率', '%', '["unInstanceId"]', 1),
-            ('腾讯云CVM', 'QCE/CVM', 'InternetInRate', '公网入带宽', '云服务器 CVM', '公网入带宽', 'bps', '["unInstanceId"]', 1),
-            ('腾讯云CVM', 'QCE/CVM', 'InternetOutRate', '公网出带宽', '云服务器 CVM', '公网出带宽', 'bps', '["unInstanceId"]', 1),
-            -- 腾讯云 CBS (QCE/CBS)
-            ('腾讯云CBS', 'QCE/CBS', 'DiskUsage', '磁盘使用率', '云硬盘 CBS', '磁盘使用率', '%', '["diskId"]', 1),
-            ('腾讯云CBS', 'QCE/CBS', 'DiskIops', '磁盘IOPS', '云硬盘 CBS', '磁盘 IOPS', 'iops', '["diskId"]', 1),
-            -- 腾讯云 CLB (QCE/LOADBALANCE)
-            ('腾讯云CLB', 'QCE/LOADBALANCE', 'TrafficRX', '入流量', '负载均衡 CLB', '入流量', 'bps', '["vip"]', 1),
-            ('腾讯云CLB', 'QCE/LOADBALANCE', 'TrafficTX', '出流量', '负载均衡 CLB', '出流量', 'bps', '["vip"]', 1),
-            ('腾讯云CLB', 'QCE/LOADBALANCE', 'ActiveConnection', '活跃连接数', '负载均衡 CLB', '活跃连接数', 'count', '["vip"]', 1)
-    """)
-
 
 def downgrade() -> None:
     # Drop tables in reverse dependency order
