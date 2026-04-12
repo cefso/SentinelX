@@ -6,8 +6,10 @@
 
 | 文件 | 说明 | 使用场景 |
 |------|------|---------|
-| `docker-compose.yml` | 完整服务 (后端 + 前端) | Docker 完整部署 |
-| `docker-compose.infra.yml` | PostgreSQL + Redis | 本地开发、生产基础设施 |
+| `docker-compose.yml` | 完整服务 (后端 + 前端)，使用预构建镜像 | 生产部署 |
+| `docker-compose.build.yml` | 完整服务，本地构建镜像 | 本地开发全栈 |
+| `docker-compose.infra.yml` | PostgreSQL + Redis，使用预构建镜像 | 本地开发仅基础设施 |
+| `docker-compose.infra.build.yml` | PostgreSQL + Redis，本地构建镜像 | 本地开发仅基础设施（需自定义 postgres） |
 
 ## 容器日志配置
 
@@ -73,14 +75,23 @@ docker compose -f docker/docker-compose.yml up -d
 ## 使用示例
 
 ```bash
-# 使用自定义配置启动
+# 生产部署（使用预构建镜像）
+docker compose -f docker/docker-compose.yml up -d
+
+# 生产部署（使用自定义配置）
 docker compose -f docker/docker-compose.yml --env-file ./docker/.env.docker up -d
+
+# 本地开发全栈（本地构建所有镜像）
+docker compose -f docker/docker-compose.build.yml up -d --build
+
+# 本地开发仅基础设施（使用预构建镜像）
+docker compose -f docker/docker-compose.infra.yml up -d
+
+# 本地开发仅基础设施（本地构建 postgres 镜像）
+docker compose -f docker/docker-compose.infra.build.yml up -d --build
 
 # 带管理工具 (pgAdmin, Redis Commander)
 docker compose -f docker/docker-compose.yml --profile tools up -d
-
-# 仅启动基础设施（本地开发时，后端和前端在本地运行）
-docker compose -f docker-compose.infra.yml up -d
 
 # 停止服务
 docker compose -f docker/docker-compose.yml down

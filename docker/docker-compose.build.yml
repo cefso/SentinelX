@@ -1,0 +1,48 @@
+# =============================================================================
+# SentinelX 全栈本地构建 - Docker Compose 配置文件
+# =============================================================================
+# 使用说明:
+#   启动全栈构建: docker compose -f docker/docker-compose.build.yml up -d --build
+#   停止服务:     docker compose -f docker/docker-compose.build.yml down
+#   带管理工具:   docker compose -f docker/docker-compose.build.yml --profile tools up -d --build
+# =============================================================================
+
+services:
+  backend:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile
+
+  frontend:
+    extends:
+      file: docker-compose.yml
+      service: frontend
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pg
+
+  redis:
+    extends:
+      file: docker-compose.yml
+      service: redis
+
+  pgadmin:
+    extends:
+      file: docker-compose.yml
+      service: pgadmin
+
+  redis-commander:
+    extends:
+      file: docker-compose.yml
+      service: redis-commander

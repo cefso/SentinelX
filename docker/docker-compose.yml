@@ -8,8 +8,8 @@
 #   4. 停止服务: docker compose -f docker/docker-compose.yml down
 #   5. 清理数据: docker compose -f docker/docker-compose.yml down -v (会删除所有数据!)
 #
-# 注意: 后端和前端默认使用 GitHub Packages 镜像运行
-#       如需本地构建: docker compose -f docker/docker-compose.yml up -d --build
+# 注意: 所有服务默认使用 GitHub Packages 镜像运行
+#       如需本地构建: docker compose -f docker/docker-compose.build.yml up -d --build
 #
 # 自定义配置:
 #   复制 .env.example 为 .env.docker，修改后运行:
@@ -93,10 +93,7 @@ services:
   # PostgreSQL + TimescaleDB 数据库
   # ============================================================================
   postgres:
-    # image: ghcr.io/cefso/sentinelx/postgres:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.pg
+    image: ghcr.io/cefso/sentinelx/postgres:latest
     container_name: sentinelx-postgres
     environment:
       POSTGRES_USER: postgres
