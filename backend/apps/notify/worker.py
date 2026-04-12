@@ -47,10 +47,10 @@ class NotificationWorker:
         notification = msg.message
         try:
             await self.send_notification(notification)
-            await mq.ack("alerts_notify", msg.message_id)
+            await mq.ack("alerts_notify", msg.msg_id)
         except Exception as e:
             logger.error("notification_processing_error", error=str(e))
-            await mq.nack("alerts_notify", msg.message_id, vt=60)
+            await mq.nack("alerts_notify", msg.msg_id, vt=60)
 
     async def send_notification(self, notification: Dict[str, Any]):
         """发送单个通知"""

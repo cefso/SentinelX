@@ -238,10 +238,10 @@ class EscalationWorker:
                     service = EscalationService(db)
                     await service.check_and_escalate(alert_id)
 
-                await mq.ack("alerts_escalation", msg.message_id)
+                await mq.ack("alerts_escalation", msg.msg_id)
 
             except Exception as e:
                 logger.error("escalation_worker_error", error=str(e))
                 if msg:
-                    await mq.nack("alerts_escalation", msg.message_id, vt=60)
+                    await mq.nack("alerts_escalation", msg.msg_id, vt=60)
                 await asyncio.sleep(1)

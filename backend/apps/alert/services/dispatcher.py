@@ -274,14 +274,14 @@ class AlertDispatcher:
                 trace_id = message.get("trace_id")
 
                 if not alert_id:
-                    await mq.ack("alerts_raw", msg.message_id)
+                    await mq.ack("alerts_raw", msg.msg_id)
                     continue
 
                 async with AsyncSessionLocal() as db:
                     result = await db.execute(select(Alert).where(Alert.id == alert_id))
                     alert = result.scalar_one_or_none()
                     if not alert:
-                        await mq.ack("alerts_raw", msg.message_id)
+                        await mq.ack("alerts_raw", msg.msg_id)
                         continue
 
                     # 重新获取 Redis 连接
@@ -289,9 +289,9 @@ class AlertDispatcher:
                     redis = await get_redis()
                     dispatcher = AlertDispatcher(db, redis)
                     await dispatcher.dispatch(alert, trace_id)
-                    await mq.ack("alerts_raw", msg.message_id)
+                    await mq.ack("alerts_raw", msg.msg_id)
             except Exception as e:
                 logger.error("alert_consumer_error", error=str(e))
                 if 'msg' in dir() and msg:
-                    await mq.nack("alerts_raw", msg.message_id, vt=60)
+                    await mq.nack("alerts_raw", msg.msg_id, vt=60)
                 await asyncio.sleep(1)
