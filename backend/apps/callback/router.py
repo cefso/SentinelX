@@ -2,9 +2,7 @@
 SentinelX - 回调处理
 处理来自外部系统的告警回调
 """
-import base64
-import hashlib
-import hmac
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -59,6 +57,7 @@ def verify_dingtalk_signature(token: str, signature: str, timestamp: str) -> boo
     return my_signature == signature
 
 
+
 @router.post("/callback/dingtalk")
 async def dingtalk_callback(
     challenge: Optional[str] = None,
@@ -99,17 +98,17 @@ async def acknowledge_alert_callback(
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
+    old_status = alert.status
     alert.status = "acknowledged"
     alert.acknowledged_at = datetime.now(timezone.utc)
-    await db.commit()
 
-    # 记录历史
+    # 记录历史（与状态更新在同一事务中提交）
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
         action="acknowledge_callback",
         description="通过回调确认告警",
-        old_value={"status": "firing"},
+        old_value={"status": old_status},
         new_value={"status": "acknowledged"},
     )
     db.add(history)
@@ -143,11 +142,11 @@ async def resolve_alert_callback(
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
+    old_status = alert.status
     alert.status = "resolved"
     alert.resolved_at = datetime.now(timezone.utc)
-    await db.commit()
 
-    # 记录历史
+    # 记录历史（与状态更新在同一事务中提交）
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
@@ -188,7 +187,19 @@ async def silence_alert_callback(
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新静默时间
+    old_status = alert.status
     alert.silenced_until = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+
+    # 记录历史（与静默更新在同一事务中提交）
+    history = AlertHistory(
+        tenant_id=alert.tenant_id,
+        alert_id=alert.id,
+        action="silence_callback",
+        description=f"通过回调静默告警 {duration_hours} 小时",
+        old_value={"status": old_status, "silenced_until": None},
+        new_value={"status": old_status, "silenced_until": alert.silenced_until.isoformat()},
+    )
+    db.add(history)
     await db.commit()
 
     logger.info("alert_silenced_via_callback", alert_id=alert_id, duration_hours=duration_hours)

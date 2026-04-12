@@ -4,12 +4,16 @@ FastAPI 应用入口
 """
 import logging
 
-# 配置标准 logging
-for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
-    _log = logging.getLogger(_name)
-    _log.setLevel(logging.WARNING)
-    _log.propagate = False
-    _log.handlers.clear()
+def _suppress_pgmq_logging():
+    """Suppress noisy pgmq logger output."""
+    for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+        _log = logging.getLogger(_name)
+        _log.setLevel(logging.WARNING)
+        _log.propagate = False
+        _log.handlers.clear()
+
+
+_suppress_pgmq_logging()
 
 # 配置 loguru（pgmq 使用），移除默认 handler 并设置级别
 try:
@@ -17,8 +21,6 @@ try:
     loguru_logger.remove()  # 移除默认的 stderr handler
 except ImportError:
     pass
-
-from contextlib import asynccontextmanager
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -37,7 +39,7 @@ from apps.core.middleware import (
     ErrorHandlingMiddleware,
 )
 from apps.core.middleware_audit import AuditLoggingMiddleware
-from apps.core.exceptions import SentinelXException
+from apps.core.exceptions import SentinelXException, http_exception_from_sentinelx
 from sqlalchemy import text
 
 logger = get_logger(__name__)
@@ -73,12 +75,8 @@ async def lifespan(app: FastAPI):
 
     # 启动告警升级Worker
     from apps.alert.services.escalation import EscalationWorker
-    # 确保 pgmq 日志级别已设置
-    for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
-        _log = logging.getLogger(_name)
-        _log.setLevel(logging.WARNING)
-        _log.propagate = False
-        _log.handlers.clear()
+    # 确保 pgmq 日志级别已设置（uvicorn 可能重新初始化 logging）
+    _suppress_pgmq_logging()
     escalation_worker = EscalationWorker(check_interval_seconds=60)
     escalation_task = asyncio.create_task(escalation_worker.run())
     logger.info("escalation_worker_started")
@@ -142,6 +140,7 @@ app.add_middleware(AuditLoggingMiddleware)
 @app.exception_handler(SentinelXException)
 async def sentinelx_exception_handler(request: Request, exc: SentinelXException):
     """SentinelX自定义异常处理"""
+    http_exc = http_exception_from_sentinelx(exc)
     logger.error(
         "sentinelx_exception",
         code=exc.code,
@@ -150,12 +149,8 @@ async def sentinelx_exception_handler(request: Request, exc: SentinelXException)
         path=request.url.path,
     )
     return JSONResponse(
-        status_code=500,
-        content={
-            "message": exc.message,
-            "code": exc.code,
-            "details": exc.details,
-        }
+        status_code=http_exc.status_code,
+        content=http_exc.detail,
     )
 
 
