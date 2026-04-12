@@ -321,7 +321,7 @@ export function AlertsPage() {
                   <td colSpan={8} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
                 </tr>
               ) : aggregateMode ? (
-                (alerts?.items as unknown as AlertAggregatedItem[]).map((item, idx) => (
+                (alerts?.items as unknown as AlertAggregatedItem[] || []).map((item, idx) => (
                   <tr
                     key={item.fingerprint}
                     className="hover:bg-gray-50 cursor-pointer"
@@ -349,7 +349,7 @@ export function AlertsPage() {
                   </tr>
                 ))
               ) : (
-                alerts?.items.map((alert, idx) => (
+                alerts?.items?.map((alert, idx) => (
                   <tr
                     key={alert.id}
                     className="hover:bg-gray-50 cursor-pointer"

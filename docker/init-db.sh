@@ -6,18 +6,14 @@ set -e
 
 echo "Initializing SentinelX database..."
 
-# 创建TimescaleDB扩展
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-    CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 EOSQL
 
-echo "Database extensions created successfully."
+# 安装 PGMQ 扩展 (SQL-only 模式，不依赖 deb)
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f /tmp/pgmq.sql
 
-# 验证TimescaleDB
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-    SELECT extname, extversion FROM pg_extension WHERE extname IN ('timescaledb', 'uuid-ossp');
-EOSQL
+echo "Database extensions created successfully."
 
 echo "SentinelX database initialization complete."
 echo ""

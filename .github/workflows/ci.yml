@@ -14,20 +14,6 @@ jobs:
   backend-test:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sentinelx_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -41,6 +27,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build and start postgres
+        run: |
+          docker build -t sentinelx/postgres:test -f docker/Dockerfile.pg docker/
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=sentinelx_test \
+            -p 5432:5432 \
+            sentinelx/postgres:test
+          until docker exec postgres pg_isready -U postgres; do sleep 1; done
+
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
@@ -52,6 +49,11 @@ jobs:
           cd backend
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov httpx
+
+      - name: Run migrations
+        run: |
+          cd backend
+          DB_NAME=sentinelx_test alembic upgrade head
 
       - name: Run tests
         run: |
@@ -136,23 +138,20 @@ jobs:
   # ============ 数据库迁移测试 ============
   migration-test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sentinelx_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build and start postgres
+        run: |
+          docker build -t sentinelx/postgres:test -f docker/Dockerfile.pg docker/
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=sentinelx_test \
+            -p 5432:5432 \
+            sentinelx/postgres:test
+          until docker exec postgres pg_isready -U postgres; do sleep 1; done
 
       - name: Set up Python
         uses: actions/setup-python@v5

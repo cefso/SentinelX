@@ -1,6 +1,6 @@
 """
 SentinelX - 数据库连接管理
-支持 PostgreSQL + TimescaleDB
+支持 PostgreSQL + PGMQ
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
@@ -67,13 +67,10 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """初始化数据库 (创建扩展、超表等)"""
+    """初始化数据库 (创建扩展等)"""
     from sqlalchemy import text
 
     async with async_engine.begin() as conn:
-        # 创建TimescaleDB扩展
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
-
         # 创建UUID扩展
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
 

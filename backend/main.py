@@ -2,6 +2,24 @@
 SentinelX - 综合告警平台
 FastAPI 应用入口
 """
+import logging
+
+# 配置标准 logging
+for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+    _log = logging.getLogger(_name)
+    _log.setLevel(logging.WARNING)
+    _log.propagate = False
+    _log.handlers.clear()
+
+# 配置 loguru（pgmq 使用），移除默认 handler 并设置级别
+try:
+    from loguru import logger as loguru_logger
+    loguru_logger.remove()  # 移除默认的 stderr handler
+except ImportError:
+    pass
+
+from contextlib import asynccontextmanager
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +65,12 @@ async def lifespan(app: FastAPI):
 
     # 启动告警升级Worker
     from apps.alert.services.escalation import EscalationWorker
+    # 确保 pgmq 日志级别已设置
+    for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+        _log = logging.getLogger(_name)
+        _log.setLevel(logging.WARNING)
+        _log.propagate = False
+        _log.handlers.clear()
     escalation_worker = EscalationWorker(check_interval_seconds=60)
     escalation_task = asyncio.create_task(escalation_worker.run())
     logger.info("escalation_worker_started")
@@ -57,10 +81,20 @@ async def lifespan(app: FastAPI):
     notification_task = asyncio.create_task(notification_worker.start())
     logger.info("notification_worker_started")
 
+    # 启动告警消费 Consumer
+    from apps.alert.services.dispatcher import AlertDispatcher
+    from apps.core.mq import get_mq_async
+    alert_dispatcher = AlertDispatcher(None, None)
+    alert_consumer_task = asyncio.create_task(
+        alert_dispatcher.start_consumer(await get_mq_async())
+    )
+    logger.info("alert_consumer_started")
+
     yield
 
     # 关闭时
     logger.info("sentinelx_shutting_down")
+    alert_consumer_task.cancel()
     escalation_task.cancel()
     await notification_worker.stop()
     notification_task.cancel()

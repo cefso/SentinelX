@@ -3,27 +3,24 @@ SentinelX - 通知Worker
 处理通知队列中的消息
 """
 import asyncio
-import json
 from typing import List, Dict, Any
 import structlog
 
 from apps.core.database import AsyncSessionLocal as async_session_factory
-from apps.core.redis import RedisClient
+from apps.core.mq import get_mq_async
 from apps.notify.services.sender import NotificationService
 
 logger = structlog.get_logger()
 
 
 class NotificationWorker:
-    """通知Worker - 从队列消费并发送通知"""
+    """通知Worker - 从 PGMQ 队列消费并发送通知"""
 
     def __init__(self):
-        self.redis = None
         self.running = False
 
     async def start(self):
         """启动Worker"""
-        self.redis = await RedisClient.get_instance()
         self.running = True
         logger.info("notification_worker_started")
 
@@ -40,25 +37,20 @@ class NotificationWorker:
         logger.info("notification_worker_stopped")
 
     async def process_queue(self):
-        """处理队列"""
-        # 获取所有租户的队列
-        tenant_pattern = "queue:notify:*"
-        keys = await self.redis.keys(tenant_pattern)
+        """从 PGMQ 消费通知消息"""
+        mq = await get_mq_async()
 
-        for queue_key in keys:
-            # 从队列中获取消息 (阻塞等待)
-            result = await self.redis.brpop(queue_key, timeout=1)
-            if not result:
-                continue
+        msg = await mq.receive("alerts_notify", count=1, vt=300)
+        if not msg:
+            return
 
-            _, message = result
-            try:
-                notification = json.loads(message)
-                await self.send_notification(notification)
-            except json.JSONDecodeError as e:
-                logger.error("invalid_notification_message", error=str(e), message=message)
-            except Exception as e:
-                logger.error("notification_processing_error", error=str(e))
+        notification = msg.message
+        try:
+            await self.send_notification(notification)
+            await mq.ack("alerts_notify", msg.msg_id)
+        except Exception as e:
+            logger.error("notification_processing_error", error=str(e))
+            await mq.nack("alerts_notify", msg.msg_id, vt=60)
 
     async def send_notification(self, notification: Dict[str, Any]):
         """发送单个通知"""

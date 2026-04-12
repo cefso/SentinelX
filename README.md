@@ -272,6 +272,47 @@ SentinelX/
 
 每个处理阶段仅在配置了对应规则时生效；未配置规则则跳过该阶段，告警继续向下流转。
 
+## 核心组件
+
+### Worker
+
+Worker 是独立于主服务的后台进程，通过 FastAPI lifespan 在启动时创建（见 main.py），负责处理需要持续运行或耗时较长的任务。
+
+### EscalationWorker
+
+| 属性 | 值 |
+|------|-----|
+| 文件 | apps/alert/services/escalation.py |
+| 启动方式 | main.py lifespan asyncio.create_task |
+| 检查间隔 | 60 秒（轮询模式） |
+
+**职责**：监控触发中（firing）且未确认的告警，按等待时间表自动升级：
+
+| 级别 | 等待时间 | 说明 |
+|------|---------|------|
+| 第 0 级 | 5 分钟 | 首次通知 |
+| 第 1 级 | 10 分钟 | 未确认则升级 |
+| 第 2 级 | 30 分钟 | 未确认则升级 |
+| 第 3 级 | 60 分钟 | 最高级别 |
+
+升级后记录 AlertHistory（action: "escalate_level_N"）。
+
+> **MQ 迁移**：升级 Worker 将从数据库轮询改为 PGMQ 事件驱动，告警创建时直接入队，到期自动触发检查。
+
+### NotificationWorker
+
+| 属性 | 值 |
+|------|-----|
+| 文件 | apps/notify/worker.py |
+| 启动方式 | main.py lifespan asyncio.create_task |
+| 队列 | queue:notify:{tenant_id}（Redis List）|
+
+**职责**：从 Redis 队列消费通知消息，调用 ChannelFactory 发送至各渠道（钉钉、飞书、企业微信、邮件、Webhook、Slack）。
+
+处理流程：BRPOP → 查询告警+渠道配置 → 渲染模板 → 发送 → 写入 notification_records。
+
+> **MQ 迁移**：将从 Redis 队列改为 PGMQ alerts_notify 队列，获得 ACK/NACK 确认和死信队列支持。
+
 ### Trace 诊断步骤说明
 
 每条告警附带唯一 Trace ID，诊断页面展示处理全链路。各步骤状态含义：

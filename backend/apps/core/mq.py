@@ -3,14 +3,16 @@ SentinelX - 消息队列管理
 支持 PGMQ (PostgreSQL原生消息队列)
 """
 import json
+import logging
 from typing import Optional, Any, List, Dict
 from datetime import datetime
+from urllib.parse import urlparse
 from apps.core.config import settings
 
 # PGMQ导入 (可选)
 try:
     import pgmq
-    from pgmq import PGMQueue
+    from pgmq.async_queue import PGMQueue
 
     PGMQ_AVAILABLE = True
 except ImportError:
@@ -29,7 +31,17 @@ class MessageQueue:
     def __init__(self, database_url: str):
         if not PGMQ_AVAILABLE:
             raise ImportError("pgmq not installed. Run: pip install pgmq")
-        self.mq = PGMQueue(database_url)
+        # 解析 postgresql://user:pass@host:port/dbname
+        parsed = urlparse(database_url)
+        self.mq = PGMQueue(
+            host=parsed.hostname or "localhost",
+            port=str(parsed.port or 5432),
+            database=parsed.path.lstrip("/") or "postgres",
+            username=parsed.username or "postgres",
+            password=parsed.password or "",
+            verbose=False,
+            log_filename=None,
+        )
         self._queues_initialized = False
 
     async def init_queues(self):
@@ -37,16 +49,14 @@ class MessageQueue:
         if self._queues_initialized:
             return
 
-        queues = {
-            "alerts_raw": 60,       # 原始告警队列，VT=60秒
-            "alerts_notify": 300,   # 通知队列，VT=5分钟
-            "alerts_dlq": 86400,    # 死信队列，VT=24小时
-            "alerts_ai": 3600,      # AI分析队列，VT=1小时
-        }
+        # 初始化连接池
+        await self.mq.init(init_extension=False)
 
-        for queue_name, vt in queues.items():
+        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai"]
+
+        for queue_name in queues:
             try:
-                await self.mq.create_queue(queue_name, vt=vt)
+                await self.mq.create_queue(queue_name)
             except Exception:
                 # 队列已存在
                 pass
@@ -59,7 +69,9 @@ class MessageQueue:
 
     async def receive(self, queue: str, count: int = 1, vt: Optional[int] = None):
         """消费消息"""
-        return await self.mq.receive(queue, count, vt=vt)
+        if count == 1:
+            return await self.mq.read(queue, vt=vt)
+        return await self.mq.read_batch(queue, vt=vt, batch_size=count)
 
     async def ack(self, queue: str, message_id: int):
         """确认消息已处理"""
@@ -67,7 +79,7 @@ class MessageQueue:
 
     async def nack(self, queue: str, message_id: int, vt: int = 300):
         """未确认，延迟重试"""
-        await self.mq.receive(queue, 1, vt=vt)
+        await self.mq.read(queue, vt=vt)
 
     async def purge(self, queue: str):
         """清空队列"""

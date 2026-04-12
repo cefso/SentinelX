@@ -1,6 +1,7 @@
 """
 SentinelX - 告警管理路由
 """
+import asyncio
 import hashlib
 import json
 import uuid
@@ -12,6 +13,7 @@ from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, c
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
+from apps.core.mq import get_mq_async
 from apps.core.security import verify_password
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember
@@ -52,7 +54,6 @@ async def _create_alerts_from_parsed(
     tenant_id: str,
     db: AsyncSession,
     redis,
-    background_tasks: BackgroundTasks,
     source_id: int = None,
 ) -> dict:
     """
@@ -226,7 +227,13 @@ async def _create_alerts_from_parsed(
             db.add(alert)
             await db.flush()
 
-            background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+            mq = await get_mq_async()
+            await mq.send("alerts_raw", {
+                "alert_id": alert.id,
+                "tenant_id": alert.tenant_id,
+                "trace_id": trace_id,
+                "action": "process"
+            })
             results.append({"id": None, "db_alert": alert})
 
         await db.commit()
@@ -262,7 +269,13 @@ async def _create_alerts_from_parsed(
         db.add(alert)
         await db.flush()
 
-        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+        mq = await get_mq_async()
+        await mq.send("alerts_raw", {
+            "alert_id": alert.id,
+            "tenant_id": alert.tenant_id,
+            "trace_id": trace_id,
+            "action": "process"
+        })
 
         await db.commit()
         await db.refresh(alert)
@@ -435,7 +448,6 @@ async def toggle_source(
 @router.post("/alerts", response_model=AlertResponse)
 async def create_alert(
     request: AlertCreate,
-    background_tasks: BackgroundTasks,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -470,8 +482,13 @@ async def create_alert(
     await db.flush()
 
     # 启动后台分发处理
-    dispatcher = AlertDispatcher(db, redis)
-    background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+    mq = await get_mq_async()
+    await mq.send("alerts_raw", {
+        "alert_id": alert.id,
+        "tenant_id": str(tenant_id),
+        "trace_id": trace_id,
+        "action": "process"
+    })
 
     await db.commit()
     await db.refresh(alert)
@@ -482,7 +499,6 @@ async def create_alert(
 async def receive_webhook_alert(
     source_type: str,
     raw_data: dict,
-    background_tasks: BackgroundTasks,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -503,7 +519,7 @@ async def receive_webhook_alert(
     if not parsed_alert:
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
+    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis)
 
 
 @router.post("/webhooks/{tenant_slug}/{source_type}/{identifier}")
@@ -512,7 +528,6 @@ async def receive_webhook_by_source(
     source_type: str,
     identifier: str,
     request: Request,
-    background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -582,7 +597,7 @@ async def receive_webhook_by_source(
 
     # 7. 处理告警
     return await _create_alerts_from_parsed(
-        parsed_alert, tenant_id, db, redis, background_tasks, source_id=alert_source.id
+        parsed_alert, tenant_id, db, redis, source_id=alert_source.id
     )
 
 
@@ -590,7 +605,6 @@ async def receive_webhook_by_source(
 async def receive_aliyun_cms_webhook(
     tenant_slug: str,
     request: Request,
-    background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -637,13 +651,12 @@ async def receive_aliyun_cms_webhook(
         raise HTTPException(status_code=400, detail="Unsupported alert format for source: aliyun_cms")
 
     # 6. 处理告警
-    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis, background_tasks)
+    return await _create_alerts_from_parsed(parsed_alert, tenant_id, db, redis)
 
 
 @router.post("/alerts/batch")
 async def create_alerts_batch(
     alerts: List[AlertCreate],
-    background_tasks: BackgroundTasks,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -681,7 +694,13 @@ async def create_alerts_batch(
         created_alerts.append(alert)
 
         # 异步分发
-        background_tasks.add_task(dispatcher.dispatch, alert, trace_id)
+        mq = await get_mq_async()
+        await mq.send("alerts_raw", {
+            "alert_id": alert.id,
+            "tenant_id": str(tenant_id),
+            "trace_id": trace_id,
+            "action": "process"
+        })
 
     await db.commit()
     return {"created": len(created_alerts), "alerts": created_alerts}
@@ -931,7 +950,15 @@ async def get_aggregated_members(
     )
     member = member_result.scalar_one_or_none()
     if not member:
-        raise HTTPException(status_code=404, detail="Alert is not part of any aggregate group")
+        # 没有聚合组成员，返回空数据而非 404
+        return AlertAggregateMembersResponse(
+            items=[],
+            total=0,
+            group_key=None,
+            alert_count=0,
+            page=page,
+            page_size=page_size,
+        )
 
     group_id = member.group_id
 
