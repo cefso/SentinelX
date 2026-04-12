@@ -492,10 +492,14 @@ function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel | null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const data = {
+      ...formData,
+      code: channel ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    }
     if (channel) {
-      updateMutation.mutate(formData)
+      updateMutation.mutate(data)
     } else {
-      createMutation.mutate(formData)
+      createMutation.mutate(data)
     }
   }
 
@@ -513,27 +517,15 @@ function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel | null
           <h2 className="text-xl font-bold">{channel ? '编辑渠道' : '创建渠道'}</h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">渠道名称</label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">渠道代码</label>
-              <input
-                type="text"
-                required
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">渠道名称</label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border rounded-md"
+            />
           </div>
 
           <div>

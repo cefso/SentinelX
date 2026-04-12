@@ -52,7 +52,7 @@ class MessageQueue:
         # 初始化连接池
         await self.mq.init(init_extension=False)
 
-        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai"]
+        queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai", "alerts_escalation"]
 
         for queue_name in queues:
             try:

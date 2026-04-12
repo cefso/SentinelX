@@ -483,10 +483,11 @@ function SourceModal({
     e.preventDefault()
     setError('')
     const isActive = formData.is_active ? 'active' : 'inactive'
+    const code = source ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     if (source) {
       updateMutation.mutate({
         name: formData.name,
-        code: formData.code,
+        code,
         source_type: formData.source_type,
         description: formData.description,
         config: formData.config,
@@ -495,7 +496,7 @@ function SourceModal({
     } else {
       createMutation.mutate({
         name: formData.name,
-        code: formData.code,
+        code,
         source_type: formData.source_type,
         description: formData.description,
         config: formData.config,
@@ -526,17 +527,6 @@ function SourceModal({
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg"
               placeholder="如: 生产环境 Prometheus"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">代码</label>
-            <input
-              type="text"
-              required
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg"
-              placeholder="如: prod-prometheus"
             />
           </div>
           <div>
@@ -572,7 +562,18 @@ function SourceModal({
                 type="button"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(webhookUrl)
+                    if (navigator.clipboard && window.isSecureContext) {
+                      await navigator.clipboard.writeText(webhookUrl)
+                    } else {
+                      const textarea = document.createElement('textarea')
+                      textarea.value = webhookUrl
+                      textarea.style.position = 'fixed'
+                      textarea.style.opacity = '0'
+                      document.body.appendChild(textarea)
+                      textarea.select()
+                      document.execCommand('copy')
+                      document.body.removeChild(textarea)
+                    }
                     toast.success('已复制')
                   } catch (err) {
                     toast.error('复制失败')

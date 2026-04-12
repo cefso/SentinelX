@@ -54,6 +54,8 @@ class Alert(Base):
         Index("idx_alerts_labels", "tenant_id", "labels"),
         Index("idx_alerts_fired_at", "tenant_id", "fired_at"),
         Index("idx_alerts_status_severity", "tenant_id", "status", "severity"),
+        # GIN索引用于JSONB labels查询
+        Index("ix_alerts_labels_gin", "labels", postgresql_using="gin"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

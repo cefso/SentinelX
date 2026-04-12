@@ -1,0 +1,31 @@
+# =============================================================================
+# SentinelX 基础设施本地构建 - Docker Compose 配置文件
+# =============================================================================
+# 使用说明:
+#   启动基础设施构建: docker compose -f docker/docker-compose.infra.build.yml up -d --build
+#   停止服务:         docker compose -f docker/docker-compose.infra.build.yml down
+# =============================================================================
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.infra.yml
+      service: postgres
+    build:
+      context: .
+      dockerfile: Dockerfile.pg
+
+  redis:
+    extends:
+      file: docker-compose.infra.yml
+      service: redis
+
+networks:
+  sentinelx-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

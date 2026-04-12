@@ -167,13 +167,12 @@ class EscalationService:
             if next_level < 4:
                 from apps.core.mq import get_mq_async
                 mq = await get_mq_async()
-                next_vt = self.ESCALATION_WAITS_S.get(next_level, 3600)
                 await mq.send("alerts_escalation", {
                     "alert_id": alert.id,
                     "tenant_id": alert.tenant_id,
                     "action": "check_escalation",
                     "level": next_level
-                }, vt=next_vt)
+                })
 
         return True
 
