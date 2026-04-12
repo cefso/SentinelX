@@ -562,7 +562,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     }))
     const payload = {
       name: formData.name,
-      code: formData.code,
+      code: rule ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
       description: formData.description,
       conditions: formData.conditions,
       condition_mode: formData.condition_mode,
@@ -639,27 +639,15 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
           <h2 className="text-xl font-bold">{rule ? '编辑规则' : initialConditions ? '快捷创建规则' : '创建规则'}</h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">规则代码</label>
-              <input
-                type="text"
-                required
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border rounded-md"
+            />
           </div>
 
           <div>
