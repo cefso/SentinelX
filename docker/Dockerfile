@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
+# 复制依赖文件 (上下文为 ./backend)
 COPY requirements.txt .
 
 # 安装Python依赖
