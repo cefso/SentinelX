@@ -572,7 +572,18 @@ function SourceModal({
                 type="button"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(webhookUrl)
+                    if (navigator.clipboard && window.isSecureContext) {
+                      await navigator.clipboard.writeText(webhookUrl)
+                    } else {
+                      const textarea = document.createElement('textarea')
+                      textarea.value = webhookUrl
+                      textarea.style.position = 'fixed'
+                      textarea.style.opacity = '0'
+                      document.body.appendChild(textarea)
+                      textarea.select()
+                      document.execCommand('copy')
+                      document.body.removeChild(textarea)
+                    }
                     toast.success('已复制')
                   } catch (err) {
                     toast.error('复制失败')
