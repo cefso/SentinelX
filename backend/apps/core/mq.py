@@ -3,6 +3,7 @@ SentinelX - 消息队列管理
 支持 PGMQ (PostgreSQL原生消息队列)
 """
 import json
+import logging
 from typing import Optional, Any, List, Dict
 from datetime import datetime
 from urllib.parse import urlparse
@@ -38,7 +39,12 @@ class MessageQueue:
             database=parsed.path.lstrip("/") or "postgres",
             username=parsed.username or "postgres",
             password=parsed.password or "",
+            verbose=False,
+            log_filename=None,
         )
+        # 降低 pgmq 日志级别
+        for logger_name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
         self._queues_initialized = False
 
     async def init_queues(self):
