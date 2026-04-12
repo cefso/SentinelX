@@ -1,6 +1,7 @@
 """
 SentinelX - 告警数据模型
 """
+import secrets
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, ForeignKey
 from apps.core.database import Base
@@ -109,6 +110,9 @@ class Alert(Base):
     # 路由信息
     matched_rules = Column(JSON, default=list)  # 匹配的规则列表
     notification_channels = Column(JSON, default=list)  # 通知渠道列表
+
+    # 回调认证
+    callback_token = Column(String(64), nullable=False, default=lambda: secrets.token_urlsafe(32), index=True)
 
     created_at = Column(DateTime(timezone=True), default=utc_now, index=True)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

@@ -40,11 +40,9 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Login: form submitted', { username, password })
     setLoading(true)
 
     try {
-      console.log('Login: sending request to /auth/login')
       const response = await apiClient.post<LoginResponse>('/auth/login', { username, password })
 
       // 设置 tokens
@@ -57,9 +55,11 @@ export function LoginPage() {
       setTenants(response.tenants)
 
       navigate('/')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error:', err)
-      const errorMessage = err.response?.data?.detail || '登录失败，请检查用户名和密码'
+      const errorMessage =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        '登录失败，请检查用户名和密码'
       toast.error(errorMessage)
     } finally {
       setLoading(false)
