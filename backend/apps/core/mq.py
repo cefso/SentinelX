@@ -15,11 +15,6 @@ try:
     from pgmq.async_queue import PGMQueue
 
     PGMQ_AVAILABLE = True
-    # 降低 pgmq 日志级别（模块级别，只需配置一次）
-    for logger_name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
-        _log = logging.getLogger(logger_name)
-        _log.setLevel(logging.WARNING)
-        _log.propagate = False
 except ImportError:
     PGMQ_AVAILABLE = False
     PGMQueue = None

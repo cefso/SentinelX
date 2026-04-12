@@ -2,6 +2,17 @@
 SentinelX - 综合告警平台
 FastAPI 应用入口
 """
+import logging
+
+# 在所有导入之前配置日志，降低 pgmq 日志级别
+for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+    _log = logging.getLogger(_name)
+    _log.setLevel(logging.WARNING)
+    _log.propagate = False
+    _log.handlers.clear()
+
+from contextlib import asynccontextmanager
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +58,12 @@ async def lifespan(app: FastAPI):
 
     # 启动告警升级Worker
     from apps.alert.services.escalation import EscalationWorker
+    # 确保 pgmq 日志级别已设置
+    for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
+        _log = logging.getLogger(_name)
+        _log.setLevel(logging.WARNING)
+        _log.propagate = False
+        _log.handlers.clear()
     escalation_worker = EscalationWorker(check_interval_seconds=60)
     escalation_task = asyncio.create_task(escalation_worker.run())
     logger.info("escalation_worker_started")
