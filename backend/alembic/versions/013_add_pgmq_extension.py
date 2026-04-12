@@ -1,4 +1,4 @@
-"""Add pgmq extension
+"""Add pgmq extension (SQL-only mode)
 
 Revision ID: 013_add_pgmq
 Revises: 012_add_aggregate_tables
@@ -15,8 +15,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS pgmq CASCADE;")
+    # SQL-only 模式：pgmq 通过 init-db.sh 中 psql -f /tmp/pgmq.sql 安装
+    # 不使用 CREATE EXTENSION，而是验证函数是否存在
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'pgmq' AND p.proname = 'send'
+            ) THEN
+                RAISE EXCEPTION 'pgmq functions not installed. Run: psql -f /tmp/pgmq.sql';
+            END IF;
+        END $$;
+    """)
 
 
 def downgrade() -> None:
-    op.execute("DROP EXTENSION IF EXISTS pgmq CASCADE;")
+    # SQL-only 模式下只清理数据，不删除 schema（避免误删）
+    op.execute("""
+        DELETE FROM pgmq.meta WHERE true;
+    """)

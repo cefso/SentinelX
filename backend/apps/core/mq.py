@@ -38,6 +38,7 @@ class MessageQueue:
             database=parsed.path.lstrip("/") or "postgres",
             username=parsed.username or "postgres",
             password=parsed.password or "",
+            init_extension=False,  # SQL-only 模式，扩展已在 init-db.sh 中安装
         )
         self._queues_initialized = False
 
