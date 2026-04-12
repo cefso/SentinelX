@@ -49,6 +49,43 @@ def generate_trace_id() -> str:
     return str(uuid.uuid4())[:12]
 
 
+def _build_alert(
+    alert_data: AlertCreate,
+    tenant_id: str,
+    source_id: int,
+    status: str,
+    trace_id: str,
+) -> Alert:
+    """构建 Alert 模型实例"""
+    fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
+    now = datetime.now(timezone.utc)
+
+    alert = Alert(
+        tenant_id=tenant_id,
+        alert_key=alert_data.alert_key,
+        fingerprint=fingerprint,
+        source=alert_data.source,
+        source_id=source_id,
+        title=alert_data.title,
+        content=alert_data.content,
+        severity=alert_data.severity,
+        status=status,
+        labels=alert_data.labels,
+        annotations=alert_data.annotations,
+        metric_name=alert_data.metric_name,
+        metric_value=alert_data.metric_value,
+        raw_data=alert_data.raw_data,
+        namespace=alert_data.namespace,
+        instance_id=alert_data.instance_id,
+        instance_name=alert_data.instance_name,
+        trace_id=trace_id,
+        fired_at=now,
+    )
+    if status == "resolved":
+        alert.resolved_at = now
+    return alert
+
+
 async def _create_alerts_from_parsed(
     parsed_alert: AlertCreate | List[AlertCreate],
     tenant_id: str,
@@ -104,30 +141,7 @@ async def _create_alerts_from_parsed(
             results = []
             for alert_data in parsed_alert:
                 trace_id = generate_trace_id()
-                fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
-
-                alert = Alert(
-                    tenant_id=tenant_id,
-                    alert_key=alert_data.alert_key,
-                    fingerprint=fingerprint,
-                    source=alert_data.source,
-                    source_id=source_id,
-                    title=alert_data.title,
-                    content=alert_data.content,
-                    severity=alert_data.severity,
-                    status="resolved",
-                    labels=alert_data.labels,
-                    annotations=alert_data.annotations,
-                    metric_name=alert_data.metric_name,
-                    metric_value=alert_data.metric_value,
-                    raw_data=alert_data.raw_data,
-                    namespace=alert_data.namespace,
-                    instance_id=alert_data.instance_id,
-                    instance_name=alert_data.instance_name,
-                    trace_id=trace_id,
-                    fired_at=datetime.now(timezone.utc),
-                    resolved_at=datetime.now(timezone.utc),
-                )
+                alert = _build_alert(alert_data, tenant_id, source_id, "resolved", trace_id)
                 db.add(alert)
                 await db.flush()
 
@@ -152,30 +166,7 @@ async def _create_alerts_from_parsed(
             }
         else:
             trace_id = generate_trace_id()
-            fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
-
-            alert = Alert(
-                tenant_id=tenant_id,
-                alert_key=parsed_alert.alert_key,
-                fingerprint=fingerprint,
-                source=parsed_alert.source,
-                source_id=source_id,
-                title=parsed_alert.title,
-                content=parsed_alert.content,
-                severity=parsed_alert.severity,
-                status="resolved",
-                labels=parsed_alert.labels,
-                annotations=parsed_alert.annotations,
-                metric_name=parsed_alert.metric_name,
-                metric_value=parsed_alert.metric_value,
-                raw_data=parsed_alert.raw_data,
-                namespace=parsed_alert.namespace,
-                instance_id=parsed_alert.instance_id,
-                instance_name=parsed_alert.instance_name,
-                trace_id=trace_id,
-                fired_at=datetime.now(timezone.utc),
-                resolved_at=datetime.now(timezone.utc),
-            )
+            alert = _build_alert(parsed_alert, tenant_id, source_id, "resolved", trace_id)
             db.add(alert)
             await db.flush()
 
@@ -201,29 +192,7 @@ async def _create_alerts_from_parsed(
         results = []
         for alert_data in parsed_alert:
             trace_id = generate_trace_id()
-            fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
-
-            alert = Alert(
-                tenant_id=tenant_id,
-                alert_key=alert_data.alert_key,
-                fingerprint=fingerprint,
-                source=alert_data.source,
-                source_id=source_id,
-                title=alert_data.title,
-                content=alert_data.content,
-                severity=alert_data.severity,
-                status="firing",
-                labels=alert_data.labels,
-                annotations=alert_data.annotations,
-                metric_name=alert_data.metric_name,
-                metric_value=alert_data.metric_value,
-                raw_data=alert_data.raw_data,
-                namespace=alert_data.namespace,
-                instance_id=alert_data.instance_id,
-                instance_name=alert_data.instance_name,
-                trace_id=trace_id,
-                fired_at=datetime.now(timezone.utc),
-            )
+            alert = _build_alert(alert_data, tenant_id, source_id, "firing", trace_id)
             db.add(alert)
             await db.flush()
 
@@ -243,29 +212,7 @@ async def _create_alerts_from_parsed(
         }
     else:
         trace_id = generate_trace_id()
-        fingerprint = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
-
-        alert = Alert(
-            tenant_id=tenant_id,
-            alert_key=parsed_alert.alert_key,
-            fingerprint=fingerprint,
-            source=parsed_alert.source,
-            source_id=source_id,
-            title=parsed_alert.title,
-            content=parsed_alert.content,
-            severity=parsed_alert.severity,
-            status="firing",
-            labels=parsed_alert.labels,
-            annotations=parsed_alert.annotations,
-            metric_name=parsed_alert.metric_name,
-            metric_value=parsed_alert.metric_value,
-            raw_data=parsed_alert.raw_data,
-            namespace=parsed_alert.namespace,
-            instance_id=parsed_alert.instance_id,
-            instance_name=parsed_alert.instance_name,
-            trace_id=trace_id,
-            fired_at=datetime.now(timezone.utc),
-        )
+        alert = _build_alert(parsed_alert, tenant_id, source_id, "firing", trace_id)
         db.add(alert)
         await db.flush()
 

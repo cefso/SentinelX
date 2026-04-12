@@ -301,7 +301,7 @@ class LLMFactory:
         return client_class(api_key=api_key, model=model)
 
     @classmethod
-    def generate_text(
+    async def generate_text(
         cls,
         provider: str,
         prompt: str,
@@ -313,4 +313,4 @@ class LLMFactory:
     ) -> tuple[str, Optional[str]]:
         """快捷文本生成"""
         client = cls.create_client(provider, api_key, model)
-        return client.generate(prompt, system, temperature, max_tokens)
+        return await client.generate(prompt, system, temperature, max_tokens)

@@ -24,25 +24,34 @@ class NotificationWorker:
         self.running = True
         logger.info("notification_worker_started")
 
+        backoff = 1  # 指数退避起始值（秒）
+        max_backoff = 30  # 最大退避时间
+
         while self.running:
             try:
-                await self.process_queue()
+                received = await self.process_queue()
+                if received:
+                    backoff = 1  # 收到消息，重置退避
+                else:
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, max_backoff)
             except Exception as e:
                 logger.error("worker_error", error=str(e))
-                await asyncio.sleep(5)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
 
     async def stop(self):
         """停止Worker"""
         self.running = False
         logger.info("notification_worker_stopped")
 
-    async def process_queue(self):
-        """从 PGMQ 消费通知消息"""
+    async def process_queue(self) -> bool:
+        """从 PGMQ 消费通知消息，返回是否收到消息"""
         mq = await get_mq_async()
 
         msg = await mq.receive("alerts_notify", count=1, vt=300)
         if not msg:
-            return
+            return False
 
         notification = msg.message
         try:
@@ -51,6 +60,7 @@ class NotificationWorker:
         except Exception as e:
             logger.error("notification_processing_error", error=str(e))
             await mq.nack("alerts_notify", msg.msg_id, vt=60)
+        return True
 
     async def send_notification(self, notification: Dict[str, Any]):
         """发送单个通知"""

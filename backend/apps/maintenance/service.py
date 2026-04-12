@@ -1,7 +1,7 @@
 """
 SentinelX - 维护窗口服务
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import structlog
 
@@ -64,7 +64,7 @@ class MaintenanceService:
         """列出维护窗口"""
         query = select(MaintenanceWindow).where(MaintenanceWindow.tenant_id == tenant_id)
         if active_only:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             query = query.where(
                 and_(
                     MaintenanceWindow.is_active == True,
@@ -135,7 +135,7 @@ class MaintenanceService:
         检查告警是否应该被抑制
         返回: (是否抑制, 抑制原因)
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # 查询当前有效的维护窗口
         result = await self.db.execute(
@@ -190,7 +190,7 @@ class MaintenanceService:
         await redis.hset(key, field, str(scope_data))
 
         # 设置过期时间
-        ttl = int((window.end_time - datetime.utcnow()).total_seconds())
+        ttl = int((window.end_time - datetime.now(timezone.utc)).total_seconds())
         if ttl > 0:
             await redis.expire(key, ttl + 3600)  # 多加1小时缓冲
         else:

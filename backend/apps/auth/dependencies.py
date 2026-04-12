@@ -1,6 +1,7 @@
 """
 SentinelX - 认证依赖注入
 """
+import contextvars
 from typing import Optional
 from fastapi import Depends, HTTPException, Header, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,20 +15,18 @@ from apps.auth.api_key import APIKeyAuth
 from apps.core.exceptions import AuthenticationError, AuthorizationError
 
 
-# 全局变量存储当前请求的token payload
-# 在生产环境中应使用 request.state 或 contextvars
-_token_payload: Optional[dict] = None
+# 使用 ContextVar 替代全局变量，避免异步并发竞态条件
+_token_payload_var: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar('token_payload', default=None)
 
 
 def set_token_payload(payload: dict):
     """设置当前请求的token payload"""
-    global _token_payload
-    _token_payload = payload
+    _token_payload_var.set(payload)
 
 
-def get_token_payload() -> dict:
+def get_token_payload() -> Optional[dict]:
     """获取当前请求的token payload"""
-    return _token_payload
+    return _token_payload_var.get()
 
 
 async def get_auth_service(

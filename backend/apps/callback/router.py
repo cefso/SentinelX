@@ -12,13 +12,39 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from apps.core.config import settings
 from apps.core.database import get_db
+from apps.core.security import generate_signature, verify_signature
 from apps.alert.models import Alert, AlertHistory
 import structlog
 
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def generate_callback_token(alert_id: int) -> str:
+    """生成 HMAC 签名的回调 token"""
+    timestamp = str(int(datetime.now(timezone.utc).timestamp()))
+    signature = generate_signature(settings.JWT_SECRET_KEY, timestamp, str(alert_id))
+    return f"{timestamp}.{signature}"
+
+
+def verify_callback_token(alert_id: int, token: str) -> bool:
+    """验证 HMAC 签名的回调 token（有效期 24 小时）"""
+    parts = token.split(".", 1)
+    if len(parts) != 2:
+        return False
+    timestamp, signature = parts
+    # 验证时间戳（24 小时有效期）
+    try:
+        ts = int(timestamp)
+        now = int(datetime.now(timezone.utc).timestamp())
+        if now - ts > 86400:
+            return False
+    except (ValueError, TypeError):
+        return False
+    return verify_signature(settings.JWT_SECRET_KEY, timestamp, str(alert_id), signature)
 
 
 def verify_dingtalk_signature(token: str, signature: str, timestamp: str) -> bool:
@@ -68,9 +94,8 @@ async def acknowledge_alert_callback(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    # 验证token（简化实现，实际应该验证签名）
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    # 验证 HMAC 签名 token
+    if not verify_callback_token(alert.id, token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
@@ -113,9 +138,8 @@ async def resolve_alert_callback(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    # 验证token
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    # 验证 HMAC 签名 token
+    if not verify_callback_token(alert.id, token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新告警状态
@@ -129,7 +153,7 @@ async def resolve_alert_callback(
         alert_id=alert.id,
         action="resolve_callback",
         description="通过回调解决告警",
-        old_value={"status": alert.status},
+        old_value={"status": "acknowledged"},
         new_value={"status": "resolved"},
     )
     db.add(history)
@@ -159,9 +183,8 @@ async def silence_alert_callback(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    # 验证token
-    expected_token = f"sentinelx_{alert.id}_{alert.fingerprint}"
-    if token != expected_token:
+    # 验证 HMAC 签名 token
+    if not verify_callback_token(alert.id, token):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # 更新静默时间

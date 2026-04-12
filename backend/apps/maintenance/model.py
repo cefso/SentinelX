@@ -1,7 +1,7 @@
 """
 SentinelX - 维护窗口数据模型
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Boolean, Index
 from apps.core.database import Base
 
@@ -21,8 +21,8 @@ class MaintenanceWindow(Base):
     description = Column(String(512), nullable=True)
 
     # 时间范围
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
 
     # 影响的范围 (JSON) - 可按 labels/severity/source 过滤
     # 例如: {"labels": {"cluster": "prod"}, "severity": ["high", "critical"]}
@@ -34,5 +34,5 @@ class MaintenanceWindow(Base):
     # 统计
     suppressed_count = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
