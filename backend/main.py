@@ -4,12 +4,19 @@ FastAPI 应用入口
 """
 import logging
 
-# 在所有导入之前配置日志，降低 pgmq 日志级别
+# 配置标准 logging
 for _name in ["pgmq.async_queue", "pgmq.decorators", "pgmq.logger"]:
     _log = logging.getLogger(_name)
     _log.setLevel(logging.WARNING)
     _log.propagate = False
     _log.handlers.clear()
+
+# 配置 loguru（pgmq 使用），移除默认 handler 并设置级别
+try:
+    from loguru import logger as loguru_logger
+    loguru_logger.remove()  # 移除默认的 stderr handler
+except ImportError:
+    pass
 
 from contextlib import asynccontextmanager
 
