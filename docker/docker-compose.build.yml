@@ -13,7 +13,7 @@ services:
       file: docker-compose.yml
       service: backend
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: ../docker/Dockerfile
 
   frontend:
@@ -21,7 +21,7 @@ services:
       file: docker-compose.yml
       service: frontend
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: ../docker/Dockerfile.frontend
 
   postgres:
@@ -30,7 +30,7 @@ services:
       service: postgres
     build:
       context: .
-      dockerfile: docker/Dockerfile.pg
+      dockerfile: Dockerfile.pg
 
   redis:
     extends:
@@ -46,3 +46,15 @@ services:
     extends:
       file: docker-compose.yml
       service: redis-commander
+
+networks:
+  sentinelx-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local

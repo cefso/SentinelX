@@ -13,9 +13,19 @@ services:
       service: postgres
     build:
       context: .
-      dockerfile: docker/Dockerfile.pg
+      dockerfile: Dockerfile.pg
 
   redis:
     extends:
       file: docker-compose.infra.yml
       service: redis
+
+networks:
+  sentinelx-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
