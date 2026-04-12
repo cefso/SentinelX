@@ -2,7 +2,7 @@
 SentinelX - 通知服务
 """
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,7 +98,7 @@ class NotificationService:
             # 更新记录
             record.status = "success" if success else "failed"
             record.error_message = error
-            record.sent_at = datetime.utcnow()
+            record.sent_at = datetime.now(timezone.utc)
             record.response_data = {"success": success, "error": error}
 
             # 更新渠道统计
@@ -107,7 +107,7 @@ class NotificationService:
                 channel.success_count += 1
             else:
                 channel.fail_count += 1
-            channel.last_send_at = datetime.utcnow()
+            channel.last_send_at = datetime.now(timezone.utc)
 
             await self.db.commit()
 

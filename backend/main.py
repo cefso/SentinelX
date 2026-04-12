@@ -53,6 +53,14 @@ async def lifespan(app: FastAPI):
     # 启动时
     logger.info("sentinelx_starting", version=settings.APP_VERSION)
 
+    # 检查 JWT_SECRET_KEY 是否仍为默认值
+    if settings.JWT_SECRET_KEY == "your-secret-key-change-in-production":
+        logger.warning(
+            "jwt_secret_key_is_default",
+            message="JWT_SECRET_KEY is using the default value. "
+                    "This is insecure in production. Set a unique secret in .env",
+        )
+
     # 初始化数据库
     await init_db()
     logger.info("database_initialized")

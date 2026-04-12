@@ -14,10 +14,9 @@ from apps.auth.services.auth import AuthService, PermissionService, AuditService
 from apps.auth.api_key import APIKeyAuth
 
 
-# 使用 ContextVar 存储当前请求的 token payload，避免异步并发竞态
-_token_payload_var: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar(
-    "token_payload", default=None
-)
+# 使用 ContextVar 替代全局变量，避免异步并发竞态条件
+_token_payload_var: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar('token_payload', default=None)
+
 
 
 def set_token_payload(payload: dict):

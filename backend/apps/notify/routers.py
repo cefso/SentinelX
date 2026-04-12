@@ -16,6 +16,7 @@ from apps.notify.schemas import (
     ChannelTestRequest, ChannelTestResponse,
     NotificationRecordResponse, NotificationListResponse,
     TemplateCreate, TemplateUpdate, TemplateResponse,
+    _validate_config_by_type,
 )
 from apps.notify.channels import ChannelFactory
 
@@ -169,6 +170,10 @@ async def update_channel(
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail=f"渠道代码 '{request.code}' 已存在")
+
+    # 如果更新 config，使用现有 channel_type 进行验证
+    if request.config is not None:
+        _validate_config_by_type(channel.channel_type, request.config)
 
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(channel, field, value)

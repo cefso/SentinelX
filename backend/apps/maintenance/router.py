@@ -1,7 +1,7 @@
 """
 SentinelX - 维护窗口路由
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -174,7 +174,7 @@ async def check_maintenance_status(
     if not window:
         raise HTTPException(status_code=404, detail="Maintenance window not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     is_active = (
         window.is_active
         and window.start_time <= now

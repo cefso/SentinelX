@@ -261,8 +261,59 @@ class SyncService:
         await self.db.commit()
         return stats
 
-    async def sync_all(self) -> Dict[str, int]:
+    async def sync_all(self, batch_size: int = 1000) -> Dict[str, int]:
         """
-        全量同步：从所有来源的告警中提取指标
+        全量同步：从所有来源的告警中提取指标（分批查询避免内存风险）
         """
-        return await self.sync_from_alerts(limit=10000)
+        total_stats = {"processed": 0, "created": 0, "updated": 0, "skipped": 0}
+        offset = 0
+
+        while True:
+            conditions = [
+                text("raw_data IS NOT NULL AND raw_data != 'null'::jsonb AND raw_data != '{}'::jsonb"),
+                Alert.namespace.isnot(None),
+            ]
+
+            result = await self.db.execute(
+                select(Alert)
+                .where(and_(*conditions))
+                .order_by(Alert.id.desc())
+                .limit(batch_size)
+                .offset(offset)
+            )
+            alerts = result.scalars().all()
+
+            if not alerts:
+                break
+
+            seen_keys = set()
+            for alert in alerts:
+                namespace, metric_name, unit, dimensions = extract_namespace_metric(alert.raw_data, alert.source)
+
+                if not namespace and not metric_name:
+                    total_stats["skipped"] += 1
+                    continue
+
+                if not namespace:
+                    namespace = alert.namespace or ""
+
+                key = f"{alert.source}:{namespace}:{metric_name}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                product = get_product_name(alert.source, namespace)
+                await self.upsert_metric(
+                    product=product,
+                    namespace=namespace,
+                    metric_name=metric_name or alert.metric_name or "",
+                    metric_desc=None,
+                    unit=unit,
+                    dimensions=dimensions,
+                )
+
+            total_stats["processed"] += len(seen_keys)
+            offset += batch_size
+
+        await self.db.commit()
+        return total_stats

@@ -109,9 +109,11 @@ from apps.notify.channels.feishu import FeishuChannel
 from apps.notify.channels.wecom import WeComChannel
 from apps.notify.channels.email import EmailChannel
 from apps.notify.channels.webhook import WebhookChannel
+from apps.notify.channels.slack import SlackChannel
 
 ChannelFactory.register("dingtalk", DingTalkChannel)
 ChannelFactory.register("feishu", FeishuChannel)
 ChannelFactory.register("wecom", WeComChannel)
 ChannelFactory.register("email", EmailChannel)
 ChannelFactory.register("webhook", WebhookChannel)
+ChannelFactory.register("slack", SlackChannel)

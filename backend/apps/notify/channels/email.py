@@ -1,6 +1,7 @@
 """
 SentinelX - 邮件通知渠道
 """
+import asyncio
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -49,11 +50,11 @@ class EmailChannel(NotificationChannel):
             html_part = MIMEText(html_content, "html", "utf-8")
             msg.attach(html_part)
 
-            # 发送邮件
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
-                server.login(username, password)
-                server.sendmail(from_addr, recipients.split(","), msg.as_string())
+            # 使用 asyncio.to_thread 避免阻塞事件循环
+            await asyncio.to_thread(
+                self._send_smtp, smtp_host, smtp_port, username, password,
+                from_addr, recipients, msg
+            )
 
             logger.info("email_send_success", alert_id=alert.id)
             return True, None
@@ -61,6 +62,14 @@ class EmailChannel(NotificationChannel):
         except Exception as e:
             logger.error("email_send_exception", alert_id=alert.id, error=str(e))
             return False, str(e)
+
+    @staticmethod
+    def _send_smtp(smtp_host, smtp_port, username, password, from_addr, recipients, msg):
+        """同步发送 SMTP 邮件（在单独线程中运行）"""
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(username, password)
+            server.sendmail(from_addr, recipients.split(","), msg.as_string())
 
     def _generate_html(self, alert: Alert, template: str = None) -> str:
         """生成HTML格式"""

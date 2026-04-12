@@ -224,12 +224,19 @@ class EscalationWorker:
         mq = await get_mq_async()
         logger.info("escalation_worker_started")
 
+        backoff = 1  # 指数退避起始值（秒）
+        max_backoff = 30  # 最大退避时间
+
         while True:
             try:
                 msg = await mq.receive("alerts_escalation", count=1)
                 if not msg:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, max_backoff)
                     continue
+
+                # 收到消息，重置退避
+                backoff = 1
 
                 message = msg.message
                 alert_id = message.get("alert_id")
@@ -244,4 +251,5 @@ class EscalationWorker:
                 logger.error("escalation_worker_error", error=str(e))
                 if msg:
                     await mq.nack("alerts_escalation", msg.msg_id, vt=60)
-                await asyncio.sleep(1)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
