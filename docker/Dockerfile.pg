@@ -1,16 +1,10 @@
-FROM timescale/timescaledb:latest-pg16
+FROM postgres:16
 
-# 安装基础工具（wget 更常用）
+# 安装 PGMQ 扩展 (通过源码安装 SQL)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    && apt-get clean \
+    git \
+    && git clone https://github.com/pgmq/pgmq.git /tmp/pgmq \
     && rm -rf /var/lib/apt/lists/*
-
-# 安装 PGMQ 扩展
-RUN wget -q https://github.com/pgmq/pgmq/releases/latest/download/pgmq-pg16.deb -O /tmp/pgmq.deb \
-    && apt-get install -y /tmp/pgmq.deb \
-    && rm /tmp/pgmq.deb \
-    && apt-get clean
 
 # 复制数据库初始化脚本
 COPY init-db.sh /docker-entrypoint-initdb.d/init-db.sh
