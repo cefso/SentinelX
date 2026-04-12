@@ -69,7 +69,7 @@ class MessageQueue:
 
     async def receive(self, queue: str, count: int = 1, vt: Optional[int] = None):
         """消费消息"""
-        return await self.mq.receive(queue, count, vt=vt)
+        return await self.mq.read(queue, count, vt=vt)
 
     async def ack(self, queue: str, message_id: int):
         """确认消息已处理"""
@@ -77,7 +77,7 @@ class MessageQueue:
 
     async def nack(self, queue: str, message_id: int, vt: int = 300):
         """未确认，延迟重试"""
-        await self.mq.receive(queue, 1, vt=vt)
+        await self.mq.read(queue, 1, vt=vt)
 
     async def purge(self, queue: str):
         """清空队列"""
