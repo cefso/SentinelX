@@ -1,15 +1,11 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import { ConditionRow } from '@/components/condition/ConditionRow'
-import { OPERATORS, SEVERITY_OPTIONS } from '@/components/condition/constants'
+import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
+import { FIELD_CONFIGS } from '@/components/condition/constants'
+import { RulesLayout } from '@/components/rules/RulesLayout'
 
-export interface Condition {
-  field: string
-  operator: string
-  value: any
-  key?: string  // 用于 labels 字段的 key 传递
-}
+export type { Condition }
 
 interface Rule {
   id: number
@@ -29,37 +25,6 @@ interface Rule {
   created_at: string
   updated_at: string
 }
-
-// CollapsibleSection component
-function CollapsibleSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-  return (
-    <div className="border rounded-md">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 text-left"
-      >
-        <span className="font-medium text-gray-700">{title}</span>
-        <span className="text-gray-500">{isOpen ? '▼' : '▶'}</span>
-      </button>
-      {isOpen && <div className="p-4">{children}</div>}
-    </div>
-  )
-}
-
-// 去重/聚合可用字段
-const DEDUP_AGG_FIELDS = [
-  { value: 'alert_key', label: '告警Key' },
-  { value: 'source', label: '告警来源' },
-  { value: 'severity', label: '严重级别' },
-  { value: 'namespace', label: '命名空间' },
-  { value: 'instance_id', label: '实例ID' },
-  { value: 'metric_name', label: '指标' },
-  { value: 'title', label: '标题' },
-  { value: 'content', label: '内容' },
-  { value: 'labels', label: '标签' },
-]
 
 export function RulesPage() {
   const queryClient = useQueryClient()
@@ -97,46 +62,52 @@ export function RulesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <RulesLayout>
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">规则管理</h1>
-          <p className="text-gray-600">配置告警路由规则和条件</p>
-        </div>
+        <p className="text-sm text-gray-500">
+          路由规则决定告警匹配后发送到哪些通知渠道
+        </p>
         <button
           onClick={handleCreate}
-          className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
         >
-          创建规则
+          创建路由规则
         </button>
       </div>
 
       <div className="flex gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-3 py-1 rounded ${filter === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-        >
-          全部 ({rules.length})
-        </button>
-        <button
-          onClick={() => setFilter('active')}
-          className={`px-3 py-1 rounded ${filter === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}
-        >
-          启用中
-        </button>
-        <button
-          onClick={() => setFilter('inactive')}
-          className={`px-3 py-1 rounded ${filter === 'inactive' ? 'bg-red-100 text-red-700' : 'bg-gray-100'}`}
-        >
-          停用中
-        </button>
+        {[
+          { key: 'all' as const, label: '全部', count: rules.length },
+          { key: 'active' as const, label: '启用中' },
+          { key: 'inactive' as const, label: '停用中' },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => setFilter(item.key)}
+            className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+              filter === item.key
+                ? 'bg-blue-100 text-blue-700 font-medium'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {item.label}{item.count !== undefined && ` (${item.count})`}
+          </button>
+        ))}
       </div>
 
       <div className="bg-white rounded-lg shadow">
         {isLoading ? (
-          <div className="p-8 text-center">加载中...</div>
+          <div className="p-8 text-center text-gray-500">加载中...</div>
         ) : rules.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">暂无规则</div>
+          <div className="p-12 text-center">
+            <div className="text-4xl mb-3 text-blue-200">
+              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div className="text-gray-500 font-medium">暂无路由规则</div>
+            <div className="text-sm text-gray-400 mt-1">创建路由规则将告警发送到指定通知渠道</div>
+          </div>
         ) : (
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -161,11 +132,14 @@ export function RulesPage() {
                       {rule.conditions.length} 个条件 ({rule.condition_mode})
                     </div>
                     <div className="text-xs text-gray-400">
-                      {rule.conditions.slice(0, 2).map((c, i) => (
-                        <span key={i} className="mr-1">
-                          {c.field} {OPERATORS.find(o => o.value === c.operator)?.label || c.operator} {String(c.value)}
-                        </span>
-                      ))}
+                      {rule.conditions.slice(0, 2).map((c, i) => {
+                        const fc = FIELD_CONFIGS.find(f => f.value === c.field)
+                        return (
+                          <span key={i} className="mr-1">
+                            {fc?.label || c.field} {c.operator} {String(c.value)}
+                          </span>
+                        )
+                      })}
                       {rule.conditions.length > 2 && '...'}
                     </div>
                   </td>
@@ -225,23 +199,14 @@ export function RulesPage() {
             setShowModal(false)
             queryClient.invalidateQueries({ queryKey: ['rules'] })
           }}
-          showModal={showModal}
+          initialConditions={[]}
         />
       )}
-    </div>
+    </RulesLayout>
   )
 }
 
-export function RuleModal({ rule, onClose, onSuccess, initialConditions, showModal }: { rule: Rule | null; onClose: () => void; onSuccess: () => void; initialConditions?: Condition[]; showModal?: boolean }) {
-  // ▼ 下拉相关状态
-  const [openFieldKey, setOpenFieldKey] = useState<string>('')
-  const dropdownRef = useRef<HTMLDivElement | null>(null)
-  const fieldValuesCache = useRef<Record<string, { data: { value: string; count: number }[]; timestamp: number }>>({})
-  const [fieldValuesData, setFieldValuesData] = useState<{ value: string; count: number }[]>([])
-  const [isLoadingFieldValues, setIsLoadingFieldValues] = useState(false)
-
-  // 当 initialConditions prop 更新时，同步更新 formData.conditions
-  // 解决 useState 初始化时机早于 props 更新的问题
+export function RuleModal({ rule, onClose, onSuccess, initialConditions, showModal: _showModal }: { rule: Rule | null; onClose: () => void; onSuccess: () => void; initialConditions?: Condition[]; showModal?: boolean }) {
   const [formData, setFormData] = useState({
     name: rule?.name || '',
     code: rule?.code || '',
@@ -252,295 +217,16 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     selected_channels: (rule?.actions || []).filter((a: any) => typeof a === 'number').map((a: any) => Number(a)) || [],
   })
 
-  // Deduplication config state
-  const [deduplicationConfig, setDeduplicationConfig] = useState({
-    enabled: rule?.deduplication_config?.enabled ?? false,
-    mode: (rule?.deduplication_config?.mode ?? 'fingerprint') as 'fingerprint' | 'condition',
-    fingerprint_fields: rule?.deduplication_config?.fingerprint_fields ?? ['alert_key'],
-    window_seconds: rule?.deduplication_config?.window_seconds ?? 300,
-    dimensions: rule?.deduplication_config?.dimensions ?? { by_severity: false, by_source: false },
-    strategy: (rule?.deduplication_config?.strategy ?? 'first') as 'first' | 'last',
-    condition_mode: rule?.deduplication_config?.condition_mode ?? 'and',
-    conditions: rule?.deduplication_config?.conditions ?? [],
-  })
-
-  // Aggregation config state
-  const [aggregationConfig, setAggregationConfig] = useState({
-    enabled: rule?.aggregate_config?.enabled ?? false,
-    mode: (rule?.aggregate_config?.mode ?? 'group_by') as 'group_by' | 'condition',
-    window_seconds: rule?.aggregate_config?.window_seconds ?? 300,
-    group_by: rule?.aggregate_config?.group_by ?? [],
-    max_count: rule?.aggregate_config?.max_count ?? 10,
-    store_original_alerts: rule?.aggregate_config?.store_original_alerts ?? false,
-    condition_mode: rule?.aggregate_config?.condition_mode ?? 'and',
-    conditions: rule?.aggregate_config?.conditions ?? [],
-  })
-
-  // dedup labels key 派生（与主规则条件相同的模式）
-  const dedupLabelsKey = useMemo(() => {
-    const result: Record<number, string> = {}
-    deduplicationConfig.conditions.forEach((cond: any, idx: number) => {
-      if (cond.field === 'labels' && cond.key) {
-        result[idx] = cond.key
-      }
-    })
-    return result
-  }, [deduplicationConfig.conditions])
-
-  // agg labels key 派生
-  const aggLabelsKey = useMemo(() => {
-    const result: Record<number, string> = {}
-    aggregationConfig.conditions.forEach((cond: any, idx: number) => {
-      if (cond.field === 'labels' && cond.key) {
-        result[idx] = cond.key
-      }
-    })
-    return result
-  }, [aggregationConfig.conditions])
-
-  // 匹配告警的 labels（用于去重/聚合的 labels 下拉智能过滤）
-  const [matchingAlertsLabels, setMatchingAlertsLabels] = useState<{
-    keys: string[]
-    valuesByKey: Record<string, string[]>
-  }>({ keys: [], valuesByKey: {} })
-
-  // 主规则已选的普通字段（排除 labels，labels 单独处理）
-  const selectedFieldsInMain = useMemo(() => {
-    return new Set(
-      formData.conditions
-        .map(c => c.field.split('.')[0])
-        .filter(f => f !== 'labels')
-    )
-  }, [formData.conditions])
-
-  // 去重条件可用字段（排除主规则已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
-  const dedupAvailableFields = useMemo(() => {
-    // 排除主规则已选的非 labels 字段
-    const excluded = new Set([...selectedFieldsInMain])
-    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
-    return DEDUP_AGG_FIELDS.filter(f => !excluded.has(f.value))
-  }, [selectedFieldsInMain])
-
-  // 聚合条件可用字段（排除主规则已选 + 去重已选；labels 始终可用，key 过滤在 labelsKeyOptions 中处理）
-  const aggAvailableFields = useMemo(() => {
-    const dedupSelectedFields = new Set(
-      deduplicationConfig.conditions
-        .map((c: any) => c.field.split('.')[0])
-        .filter((f: string) => f !== 'labels')
-    )
-    const excluded = new Set([...selectedFieldsInMain, ...dedupSelectedFields])
-    // 注意：labels 始终可用，labels.{key} 的 key 过滤在 labelsKeyOptions 中处理
-    return DEDUP_AGG_FIELDS.filter(
-      f => !excluded.has(f.value)
-    )
-  }, [selectedFieldsInMain, deduplicationConfig.conditions])
-
-  // 获取匹配主规则条件的告警 labels
-  const fetchMatchingAlertsLabels = useCallback(async () => {
-    try {
-      const result = await apiClient.post<{ alerts: any[]; total: number }>(
-        '/rules/preview-dedup',
-        {
-          conditions: formData.conditions,
-          condition_mode: formData.condition_mode,
-          page: 1,
-          page_size: 100,
-        }
-      )
-
-      const allLabels: Record<string, Set<string>> = {}
-      result.alerts?.forEach((alert: any) => {
-        if (alert.labels) {
-          Object.entries(alert.labels).forEach(([key, value]) => {
-            if (!allLabels[key]) allLabels[key] = new Set()
-            allLabels[key].add(value as string)
-          })
-        }
-      })
-
-      // 过滤掉主规则已选的 labels key
-      const mainLabelsKeys = new Set(
-        formData.conditions
-          .filter(c => c.field.startsWith('labels.'))
-          .map(c => c.field.split('.')[1])
-      )
-
-      setMatchingAlertsLabels({
-        keys: Object.keys(allLabels).filter(k => !mainLabelsKeys.has(k)),
-        valuesByKey: Object.fromEntries(
-          Object.entries(allLabels).map(([k, v]) => [k, Array.from(v)])
-        )
-      })
-    } catch (err) {
-      console.error('Failed to fetch matching alerts labels:', err)
-    }
-  }, [formData.conditions, formData.condition_mode])
-
-  // 预览弹窗状态
-  const [previewModal, setPreviewModal] = useState<{
-    open: boolean
-    type: 'dedup' | 'aggregate'
-    title: string
-  }>({ open: false, type: 'dedup', title: '' })
-  const [previewData, setPreviewData] = useState<any[]>([])
-  const [previewTotal, setPreviewTotal] = useState(0)
-  const [previewPage, setPreviewPage] = useState(1)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const previewPageSize = 10
-
-  const fetchPreview = async (type: 'dedup' | 'aggregate', page: number) => {
-    setPreviewLoading(true)
-    setPreviewPage(page)
-    try {
-      const payload = type === 'dedup' ? {
-        conditions: formData.conditions,
-        condition_mode: formData.condition_mode,
-        deduplication_config: deduplicationConfig.enabled ? {
-          dedup_type: deduplicationConfig.mode,
-          window_seconds: deduplicationConfig.window_seconds,
-          fingerprint_fields: deduplicationConfig.fingerprint_fields,
-          dimensions: deduplicationConfig.dimensions,
-          strategy: deduplicationConfig.strategy,
-          condition_mode: deduplicationConfig.condition_mode,
-          conditions: deduplicationConfig.conditions,
-        } : null,
-      } : {
-        conditions: formData.conditions,
-        condition_mode: formData.condition_mode,
-        aggregate_config: aggregationConfig.enabled ? {
-          mode: aggregationConfig.mode,
-          window_seconds: aggregationConfig.window_seconds,
-          group_by: aggregationConfig.group_by,
-          max_count: aggregationConfig.max_count,
-          store_original_alerts: aggregationConfig.store_original_alerts,
-          condition_mode: aggregationConfig.condition_mode,
-          conditions: aggregationConfig.conditions,
-        } : null,
-      }
-      const result = await apiClient.post<{ items: any[]; total: number }>(
-        type === 'dedup' ? '/rules/preview-dedup' : '/rules/preview-aggregate',
-        { ...payload, page, page_size: previewPageSize }
-      )
-      setPreviewData(result.items || [])
-      setPreviewTotal(result.total || 0)
-    } catch (err) {
-      console.error('Preview failed:', err)
-      setPreviewData([])
-      setPreviewTotal(0)
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  // Suppression config state
-  const [suppressionConfig, setSuppressionConfig] = useState({
-    enabled: rule?.suppress_config?.enabled ?? false,
-    type: (rule?.suppress_config?.type ?? 'maintenance_window') as 'maintenance_window' | 'rule_based',
-    duration_minutes: rule?.suppress_config?.maintenance_window?.duration_minutes ?? 60,
-    rule_conditions: (rule?.suppress_config?.rule_based?.conditions ?? []) as Condition[],
-  })
-
-  // labels 字段当前选中的 key（用于 Key+Value 下拉框）
-  // 使用 useMemo 从 formData.conditions 派生，确保始终同步
-  const labelsKey = useMemo(() => {
-    const result: Record<number, string> = {}
-    formData.conditions.forEach((cond: any, idx: number) => {
-      if (cond.field === 'labels' && cond.key) {
-        result[idx] = cond.key
-      }
-    })
-    return result
-  }, [formData.conditions])
-
-  // 预加载字段值（modal 打开时自动加载）
+  // 监听 initialConditions 变化
   useEffect(() => {
-    if (showModal) {
-      ;['namespace', 'instance_id', 'instance_name', 'metric_name', 'alert_key', 'labels'].forEach(field => {
-        fetchFieldValues(field)
-      })
-      // 为 initialConditions 中已有的 labels.{key} 预加载值
-      if (initialConditions && initialConditions.length > 0) {
-        initialConditions.forEach((cond: any) => {
-          if (cond.field === 'labels' && cond.key) {
-            fetchFieldValues(`labels.${cond.key}`)
-          }
-        })
-      }
+    if (initialConditions && initialConditions.length > 0 && !rule) {
+      setFormData(prev => ({ ...prev, conditions: initialConditions }))
     }
-  }, [showModal, initialConditions])
-
-  // 预加载匹配告警的 labels（用于去重/聚合的 labels 下拉）
-  useEffect(() => {
-    if (showModal && formData.conditions.length > 0) {
-      fetchMatchingAlertsLabels()
-    }
-  }, [showModal, formData.conditions, fetchMatchingAlertsLabels])
-
-  // 点击外部关闭下拉
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenFieldKey('')
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const fetchFieldValues = async (field: string) => {
-    const now = Date.now()
-    const cached = fieldValuesCache.current[field]
-    if (cached && now - cached.timestamp < 60000) {
-      setFieldValuesData(cached.data)
-      return
-    }
-    setIsLoadingFieldValues(true)
-    try {
-      const result = await apiClient.getRuleFieldValues({ field, limit: 50 })
-      fieldValuesCache.current[field] = { data: result.values, timestamp: now }
-      setFieldValuesData(result.values)
-    } finally {
-      setIsLoadingFieldValues(false)
-    }
-  }
-
-  const toggleFieldValuesDropdown = (index: number, field: string) => {
-    const key = `${index}-${field}`
-    if (openFieldKey === key) {
-      setOpenFieldKey('')
-    } else {
-      setOpenFieldKey(key)
-      fetchFieldValues(field)
-    }
-  }
-
-  // 监听 initialConditions 变化：当从空变为有值时，同步更新 formData.conditions
-  // labelsKey 通过 useMemo 从 formData.conditions 派生，无需单独同步
-  const prevConditionsJsonRef = useRef<string>('')
-  useEffect(() => {
-    const json = JSON.stringify(initialConditions)
-    if (json !== prevConditionsJsonRef.current && initialConditions && initialConditions.length > 0) {
-      prevConditionsJsonRef.current = json
-      setFormData((prev) => ({
-        ...prev,
-        conditions: initialConditions,
-      }))
-    }
-  }, [initialConditions])
+  }, [initialConditions, rule])
 
   const { data: channels = [] } = useQuery<any[]>({
     queryKey: ['channels'],
     queryFn: () => apiClient.get('/channels', { is_active: true }),
-  })
-
-  const { data: sources = [] } = useQuery<any[]>({
-    queryKey: ['alert-sources'],
-    queryFn: () => apiClient.get('/sources'),
-  })
-
-  const { data: users = [] } = useQuery<any[]>({
-    queryKey: ['users'],
-    queryFn: () => apiClient.get('/users'),
   })
 
   const createMutation = useMutation({
@@ -555,11 +241,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // 将选中的渠道转换为actions格式
-    const actions = formData.selected_channels.map(channelId => ({
-      type: 'notify',
-      channels: [channelId]
-    }))
+    const actions = formData.selected_channels.map(String)
     const payload = {
       name: formData.name,
       code: rule ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
@@ -568,42 +250,9 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
       condition_mode: formData.condition_mode,
       priority: formData.priority,
       actions,
-      deduplication_config: deduplicationConfig.enabled ? {
-        enabled: true,
-        dedup_type: deduplicationConfig.mode,
-        window_seconds: deduplicationConfig.window_seconds,
-        fingerprint_fields: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.fingerprint_fields : undefined,
-        dimensions: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.dimensions : undefined,
-        strategy: deduplicationConfig.mode === 'fingerprint' ? deduplicationConfig.strategy : undefined,
-        condition_mode: deduplicationConfig.mode === 'condition' ? deduplicationConfig.condition_mode : undefined,
-        conditions: deduplicationConfig.mode === 'condition' ? deduplicationConfig.conditions : undefined,
-      } : null,
-      aggregate_config: aggregationConfig.enabled ? {
-        enabled: true,
-        mode: aggregationConfig.mode,
-        window_seconds: aggregationConfig.window_seconds,
-        group_by: aggregationConfig.mode === 'group_by' ? aggregationConfig.group_by : undefined,
-        max_count: aggregationConfig.max_count,
-        store_original_alerts: aggregationConfig.store_original_alerts,
-        condition_mode: aggregationConfig.mode === 'condition' ? aggregationConfig.condition_mode : undefined,
-        conditions: aggregationConfig.mode === 'condition' ? aggregationConfig.conditions : undefined,
-      } : null,
-      suppress_config: suppressionConfig.enabled ? {
-        enabled: true,
-        type: suppressionConfig.type,
-        maintenance_window: suppressionConfig.type === 'maintenance_window' ? {
-          duration_minutes: suppressionConfig.duration_minutes,
-          cluster_labels: [],
-        } : undefined,
-        rule_based: suppressionConfig.type === 'rule_based' ? {
-          conditions: suppressionConfig.rule_conditions.map(c => ({
-            field: c.field,
-            operator: c.operator,
-            value: c.value,
-          })),
-          delay_seconds: 0,
-        } : undefined,
-      } : null,
+      deduplication_config: null,
+      aggregate_config: null,
+      suppress_config: null,
     }
     if (rule) {
       updateMutation.mutate(payload)
@@ -612,31 +261,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     }
   }
 
-  const addCondition = () => {
-    setFormData({
-      ...formData,
-      conditions: [...formData.conditions, { field: 'severity', operator: 'in', value: ['critical'] }],
-    })
-  }
-
-  const removeCondition = (index: number) => {
-    setFormData({
-      ...formData,
-      conditions: formData.conditions.filter((_, i) => i !== index),
-    })
-  }
-
-  const updateCondition = (index: number, field: string, value: any) => {
-    const newConditions = [...formData.conditions]
-    newConditions[index] = { ...newConditions[index], [field]: value }
-    setFormData({ ...formData, conditions: newConditions })
-  }
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">{rule ? '编辑规则' : initialConditions ? '快捷创建规则' : '创建规则'}</h2>
+        <div className="p-6 border-b border-blue-100 bg-blue-50/50">
+          <h2 className="text-xl font-bold text-blue-900">{rule ? '编辑路由规则' : initialConditions?.length ? '快捷创建路由规则' : '创建路由规则'}</h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
@@ -686,922 +315,13 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">条件</label>
-              <button type="button" onClick={addCondition} className="text-sm text-blue-600 hover:text-blue-800">
-                + 添加条件
-              </button>
-            </div>
-            <div className="space-y-2">
-              {formData.conditions.map((condition, index) => (
-                <div key={index} className="flex gap-2 items-center">
-                  <select
-                    value={condition.field}
-                    onChange={(e) => {
-                      const newField = e.target.value
-                      setFormData((prev) => {
-                        const conditions = prev.conditions.map((c, i) => {
-                          if (i !== index) return c
-                          // 如果之前是 labels.xxx，现在变成其他，重置 condition.key
-                          if (c.field.startsWith('labels.') && !newField.startsWith('labels.')) {
-                            const { key, ...rest } = c
-                            return { ...rest, field: newField, value: '' }
-                          }
-                          return { ...c, field: newField, value: '' }
-                        })
-                        return { ...prev, conditions }
-                      })
-                    }}
-                    className="px-2 py-1 border rounded text-sm"
-                  >
-                    <option value="severity">严重级别</option>
-                    <option value="source">告警来源</option>
-                    <option value="namespace">命名空间</option>
-                    <option value="instance_id">实例ID</option>
-                    <option value="instance_name">实例名称</option>
-                    <option value="status">状态</option>
-                    <option value="fire_count">触发次数</option>
-                    <option value="repeat_count">重复次数</option>
-                    <option value="escalation_count">升级次数</option>
-                    <option value="assignee">处理人</option>
-                    <option value="labels">标签</option>
-                    <option value="metric_name">指标</option>
-                    <option value="title">标题</option>
-                    <option value="content">内容</option>
-                  </select>
-                  <select
-                    value={condition.operator}
-                    onChange={(e) => {
-                      const newOperator = e.target.value
-                      setFormData((prev) => {
-                        const conditions = prev.conditions.map((c, i) => {
-                          if (i !== index) return c
-                          let newValue: string | string[] = ''
-                          if (['in', 'not_in'].includes(newOperator)) {
-                            // 切换到数组操作符：字符串转数组
-                            if (typeof c.value === 'string' && c.value) {
-                              newValue = c.value.split(',').map(v => v.trim()).filter(v => v)
-                            } else if (Array.isArray(c.value)) {
-                              newValue = c.value
-                            } else {
-                              newValue = []
-                            }
-                          } else if (['exists', 'is_empty'].includes(newOperator)) {
-                            newValue = ''
-                          } else {
-                            // 切换到字符串操作符：数组转字符串
-                            if (Array.isArray(c.value) && c.value.length > 0) {
-                              newValue = c.value[0] || ''
-                            } else if (Array.isArray(c.value)) {
-                              newValue = ''
-                            } else {
-                              newValue = c.value || ''
-                            }
-                          }
-                          return { ...c, operator: newOperator, value: newValue }
-                        })
-                        return { ...prev, conditions }
-                      })
-                    }}
-                    className="px-2 py-1 border rounded text-sm"
-                  >
-                    {OPERATORS.map((op) => (
-                      <option key={op.value} value={op.value}>{op.label}</option>
-                    ))}
-                  </select>
-                  {['exists', 'is_empty'].includes(condition.operator) ? (
-                    <span className="text-gray-400 text-sm flex-1 px-2 py-1">无需输入值</span>
-                  ) : ['in', 'not_in'].includes(condition.operator) ? (
-                    condition.field === 'severity' ? (
-                      <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
-                        {SEVERITY_OPTIONS.map((s) => {
-                          const checked = Array.isArray(condition.value) ? condition.value.includes(s) : condition.value === s
-                          return (
-                            <label key={s} className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const current = Array.isArray(condition.value) ? condition.value : []
-                                  if (checked) {
-                                    updateCondition(index, 'value', current.filter((v: string) => v !== s))
-                                  } else {
-                                    updateCondition(index, 'value', [...current, s])
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm">{s.toUpperCase()}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : condition.field === 'source' ? (
-                      <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
-                        {sources.map((s: any) => {
-                          const checked = Array.isArray(condition.value)
-                            ? condition.value.includes(s.source_type)
-                            : condition.value === s.source_type
-                          return (
-                            <label key={s.id} className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const current = Array.isArray(condition.value) ? condition.value : []
-                                  if (checked) {
-                                    updateCondition(index, 'value', current.filter((v: string) => v !== s.source_type))
-                                  } else {
-                                    updateCondition(index, 'value', [...current, s.source_type])
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm">{s.name}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : condition.field === 'status' ? (
-                      <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
-                        {['firing', 'resolved', 'suppressed', 'acknowledged'].map((s) => {
-                          const checked = Array.isArray(condition.value)
-                            ? condition.value.includes(s)
-                            : condition.value === s
-                          return (
-                            <label key={s} className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const current = Array.isArray(condition.value) ? condition.value : []
-                                  if (checked) {
-                                    updateCondition(index, 'value', current.filter((v: string) => v !== s))
-                                  } else {
-                                    updateCondition(index, 'value', [...current, s])
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm">{s === 'firing' ? '触发中' : s === 'resolved' ? '已恢复' : s === 'suppressed' ? '已抑制' : '已确认'}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : condition.field === 'assignee' ? (
-                      <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
-                        {users.map((u: any) => {
-                          const checked = Array.isArray(condition.value)
-                            ? condition.value.includes(String(u.id))
-                            : condition.value === String(u.id)
-                          return (
-                            <label key={u.id} className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const current = Array.isArray(condition.value) ? condition.value : []
-                                  if (checked) {
-                                    updateCondition(index, 'value', current.filter((v: string) => v !== String(u.id)))
-                                  } else {
-                                    updateCondition(index, 'value', [...current, String(u.id)])
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm">{u.username}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : ['namespace', 'instance_id', 'instance_name', 'metric_name'].includes(condition.field) ? (
-                      <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
-                        {(() => {
-                          // 获取该字段的缓存数据
-                          const cached = fieldValuesCache.current[condition.field]
-                          if (!cached || cached.data.length === 0) {
-                            // 缓存为空，显示加载中
-                            return (
-                              <span className="text-sm text-gray-500">加载中...</span>
-                            )
-                          }
-                          return cached.data.map((item) => {
-                            const checked = Array.isArray(condition.value) ? condition.value.includes(item.value) : condition.value === item.value
-                            return (
-                              <label key={item.value} className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => {
-                                    const current = Array.isArray(condition.value) ? condition.value : []
-                                    if (checked) {
-                                      updateCondition(index, 'value', current.filter((v: string) => v !== item.value))
-                                    } else {
-                                      updateCondition(index, 'value', [...current, item.value])
-                                    }
-                                  }}
-                                  className="w-4 h-4"
-                                />
-                                <span className="text-sm">{item.value}</span>
-                              </label>
-                            )
-                          })
-                        })()}
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={Array.isArray(condition.value) ? condition.value.join(',') : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        placeholder="多个值用逗号分隔"
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      />
-                    )
-                  ) : ['eq', 'ne'].includes(condition.operator) ? (
-                    condition.field === 'severity' ? (
-                      <select
-                        value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">全部</option>
-                        {SEVERITY_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{s.toUpperCase()}</option>
-                        ))}
-                      </select>
-                    ) : condition.field === 'source' ? (
-                      <select
-                        value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">全部</option>
-                        {sources.map((s: any) => (
-                          <option key={s.id} value={s.source_type}>{s.name}</option>
-                        ))}
-                      </select>
-                    ) : condition.field === 'status' ? (
-                      <select
-                        value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">全部</option>
-                        <option value="firing">触发中</option>
-                        <option value="resolved">已恢复</option>
-                        <option value="suppressed">已抑制</option>
-                        <option value="acknowledged">已确认</option>
-                      </select>
-                    ) : condition.field === 'assignee' ? (
-                      <select
-                        value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      >
-                        <option value="">全部</option>
-                        {users.map((u: any) => (
-                          <option key={u.id} value={String(u.id)}>{u.username}</option>
-                        ))}
-                      </select>
-                    ) : condition.field === 'labels' && !['exists', 'is_empty'].includes(condition.operator) ? (
-                      <div className="relative flex-1 flex gap-1 items-center">
-                        {/* Key 下拉框 */}
-                        <select
-                          value={labelsKey[index] || ''}
-                          onChange={(e) => {
-                            const key = e.target.value
-                            // 设置 condition.key 以同步 labelsKey (useMemo)
-                            updateCondition(index, 'key', key)
-                            // 选择 key 后更新 field 为 labels.{key}，并加载对应的 values
-                            updateCondition(index, 'field', key ? `labels.${key}` : 'labels')
-                            updateCondition(index, 'value', '')
-                            if (key) {
-                              fetchFieldValues(`labels.${key}`)
-                            }
-                          }}
-                          className="px-2 py-1 border rounded text-sm w-28"
-                        >
-                          <option value="">选择标签键</option>
-                          {(() => {
-                            const cached = fieldValuesCache.current['labels']
-                            if (!cached?.data?.length) {
-                              return <option disabled>加载中...</option>
-                            }
-                            return cached.data.map((item: any) => (
-                              <option key={item.value} value={item.value}>{item.value}</option>
-                            ))
-                          })()}
-                        </select>
-
-                        {/* Value 下拉框（根据 selected key 动态加载） */}
-                        <select
-                          value={condition.value}
-                          onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                          disabled={!labelsKey[index]}
-                          className="px-2 py-1 border rounded text-sm flex-1"
-                        >
-                          <option value="">选择标签值</option>
-                          {labelsKey[index] && (() => {
-                            const cached = fieldValuesCache.current[`labels.${labelsKey[index]}`]
-                            if (!cached?.data?.length) {
-                              return <option disabled>加载中...</option>
-                            }
-                            return cached.data.map((item: any) => (
-                              <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                            ))
-                          })()}
-                        </select>
-                      </div>
-                    ) : ['namespace', 'instance_id', 'instance_name', 'metric_name'].includes(condition.field) ? (
-                      <div className="relative flex-1 flex gap-1" ref={dropdownRef}>
-                        <input
-                          type="text"
-                          value={Array.isArray(condition.value) ? condition.value.join(',') : condition.value}
-                          onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                          placeholder="输入值"
-                          className="px-2 py-1 border rounded text-sm flex-1"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleFieldValuesDropdown(index, condition.field)}
-                          className="px-1.5 border rounded text-gray-500 hover:bg-gray-50 text-sm"
-                          title="获取可选值"
-                        >
-                          ▼
-                        </button>
-                        {openFieldKey === `${index}-${condition.field}` && (
-                          <div className="absolute z-10 top-full left-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
-                            {isLoadingFieldValues ? (
-                              <div className="px-3 py-2 text-sm text-gray-500">加载中...</div>
-                            ) : fieldValuesData.length === 0 ? (
-                              <div className="px-3 py-2 text-sm text-gray-500">无可选值</div>
-                            ) : (
-                              fieldValuesData.map((item) => (
-                                <button
-                                  key={item.value}
-                                  type="button"
-                                  onClick={() => {
-                                    updateCondition(index, 'value', item.value)
-                                    setOpenFieldKey('')
-                                  }}
-                                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 truncate"
-                                >
-                                  {item.value} <span className="text-gray-400 text-xs">({item.count})</span>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={Array.isArray(condition.value) ? condition.value.join(',') : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        placeholder="输入值"
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      />
-                    )
-                  ) : ['namespace', 'instance_id', 'instance_name', 'metric_name'].includes(condition.field) ? (
-                    <div className="relative flex-1 flex gap-1" ref={dropdownRef}>
-                      <input
-                        type="text"
-                        value={Array.isArray(condition.value) ? condition.value.join(',') : condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        placeholder="输入值"
-                        className="px-2 py-1 border rounded text-sm flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleFieldValuesDropdown(index, condition.field)}
-                        className="px-1.5 border rounded text-gray-500 hover:bg-gray-50 text-sm"
-                        title="获取可选值"
-                      >
-                        ▼
-                      </button>
-                      {openFieldKey === `${index}-${condition.field}` && (
-                        <div className="absolute z-10 top-full left-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
-                          {isLoadingFieldValues ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">加载中...</div>
-                          ) : fieldValuesData.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">无可选值</div>
-                          ) : (
-                            fieldValuesData.map((item) => (
-                              <button
-                                key={item.value}
-                                type="button"
-                                onClick={() => {
-                                  updateCondition(index, 'value', item.value)
-                                  setOpenFieldKey('')
-                                }}
-                                className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 truncate"
-                              >
-                                {item.value} <span className="text-gray-400 text-xs">({item.count})</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <input
-                      type="text"
-                      value={Array.isArray(condition.value) ? condition.value.join(',') : condition.value}
-                      onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                      placeholder="输入值"
-                      className="px-2 py-1 border rounded text-sm flex-1"
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeCondition(index)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">条件</label>
+            <ConditionEditor
+              conditions={formData.conditions}
+              onChange={(conditions) => setFormData({ ...formData, conditions })}
+              fields={FIELD_CONFIGS}
+            />
           </div>
-
-          {/* Deduplication Config */}
-          <CollapsibleSection title="去重配置" defaultOpen={false}>
-            <div className="space-y-3">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={deduplicationConfig.enabled}
-                  onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, enabled: e.target.checked })}
-                  className="rounded"
-                />
-                <span>启用去重</span>
-              </label>
-              {deduplicationConfig.enabled && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600 w-20">窗口时间:</span>
-                    <input
-                      type="number"
-                      value={deduplicationConfig.window_seconds}
-                      onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, window_seconds: parseInt(e.target.value) || 0 })}
-                      className="px-2 py-1 border rounded text-sm w-24"
-                    />
-                    <span className="text-sm text-gray-500">秒</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="dedup-mode"
-                        checked={deduplicationConfig.mode === 'fingerprint'}
-                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'fingerprint' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">指纹模式</span>
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="dedup-mode"
-                        checked={deduplicationConfig.mode === 'condition'}
-                        onChange={() => setDeduplicationConfig({ ...deduplicationConfig, mode: 'condition' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">条件模式</span>
-                    </label>
-                  </div>
-
-                  {deduplicationConfig.mode === 'fingerprint' && (
-                    <>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-gray-600 w-20">指纹字段:</span>
-                        {['alert_key', 'source', 'namespace', 'severity', 'instance_id', 'metric_name'].map((field) => (
-                          <label key={field} className="flex items-center gap-1">
-                            <input
-                              type="checkbox"
-                              checked={deduplicationConfig.fingerprint_fields.includes(field)}
-                              onChange={(e) => {
-                                const fields = deduplicationConfig.fingerprint_fields
-                                if (e.target.checked) {
-                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: [...fields, field] })
-                                } else {
-                                  setDeduplicationConfig({ ...deduplicationConfig, fingerprint_fields: fields.filter((f: string) => f !== field) })
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm">{field}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-gray-600 w-20">维度细分:</span>
-                        <label className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={deduplicationConfig.dimensions.by_severity}
-                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_severity: e.target.checked } })}
-                            className="rounded"
-                          />
-                          <span className="text-sm">按 severity</span>
-                        </label>
-                        <label className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={deduplicationConfig.dimensions.by_source}
-                            onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, dimensions: { ...deduplicationConfig.dimensions, by_source: e.target.checked } })}
-                            className="rounded"
-                          />
-                          <span className="text-sm">按 source</span>
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 w-20">策略:</span>
-                        <label className="flex items-center gap-1">
-                          <input
-                            type="radio"
-                            name="dedup-strategy"
-                            checked={deduplicationConfig.strategy === 'first'}
-                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'first' })}
-                            className="rounded"
-                          />
-                          <span className="text-sm">首次</span>
-                        </label>
-                        <label className="flex items-center gap-1">
-                          <input
-                            type="radio"
-                            name="dedup-strategy"
-                            checked={deduplicationConfig.strategy === 'last'}
-                            onChange={() => setDeduplicationConfig({ ...deduplicationConfig, strategy: 'last' })}
-                            className="rounded"
-                          />
-                          <span className="text-sm">最后</span>
-                        </label>
-                      </div>
-                    </>
-                  )}
-
-                  {deduplicationConfig.mode === 'condition' && (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
-                        <select
-                          value={deduplicationConfig.condition_mode}
-                          onChange={(e) => setDeduplicationConfig({ ...deduplicationConfig, condition_mode: e.target.value })}
-                          className="px-2 py-1 border rounded text-sm"
-                        >
-                          <option value="and">AND (全部满足)</option>
-                          <option value="or">OR (任一满足)</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        {deduplicationConfig.conditions.map((cond: any, idx: number) => (
-                          <ConditionRow
-                            key={idx}
-                            condition={cond}
-                            availableFields={dedupAvailableFields}
-                            showLabelsDropdown={true}
-                            labelsKey={dedupLabelsKey[idx]}
-                            labelsKeyOptions={matchingAlertsLabels.keys}
-                            labelsValueOptions={matchingAlertsLabels.valuesByKey[dedupLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
-                            sources={sources}
-                            fieldValuesCache={fieldValuesCache.current}
-                            onFetchFieldValues={fetchFieldValues}
-                            onLabelsKeyChange={(key) => {
-                              const conditions = [...deduplicationConfig.conditions]
-                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
-                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                            }}
-                            onChange={(field, value) => {
-                              const conditions = [...deduplicationConfig.conditions]
-                              conditions[idx] = { ...conditions[idx], [field]: value }
-                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                            }}
-                            onRemove={() => {
-                              const conditions = deduplicationConfig.conditions.filter((_: any, i: number) => i !== idx)
-                              setDeduplicationConfig({ ...deduplicationConfig, conditions })
-                            }}
-                          />
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setDeduplicationConfig({
-                            ...deduplicationConfig,
-                            conditions: [...deduplicationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
-                          })}
-                          className="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          + 添加条件
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="pt-2 border-t">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPreviewModal({ open: true, type: 'dedup', title: '去重预览' })
-                        fetchPreview('dedup', 1)
-                      }}
-                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
-                    >
-                      预览匹配告警
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </CollapsibleSection>
-
-          {/* Aggregation Config */}
-          <CollapsibleSection title="聚合配置" defaultOpen={false}>
-            <div className="space-y-3">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={aggregationConfig.enabled}
-                  onChange={(e) => setAggregationConfig({ ...aggregationConfig, enabled: e.target.checked })}
-                  className="rounded"
-                />
-                <span>启用聚合</span>
-              </label>
-              {aggregationConfig.enabled && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600 w-20">窗口时间:</span>
-                    <input
-                      type="number"
-                      value={aggregationConfig.window_seconds}
-                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, window_seconds: parseInt(e.target.value) || 0 })}
-                      className="px-2 py-1 border rounded text-sm w-24"
-                    />
-                    <span className="text-sm text-gray-500">秒</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 w-20">匹配模式:</span>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="agg-mode"
-                        checked={aggregationConfig.mode === 'group_by'}
-                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'group_by' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">分组模式</span>
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="agg-mode"
-                        checked={aggregationConfig.mode === 'condition'}
-                        onChange={() => setAggregationConfig({ ...aggregationConfig, mode: 'condition' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">条件模式</span>
-                    </label>
-                  </div>
-
-                  {aggregationConfig.mode === 'group_by' && (
-                    <>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-gray-600 w-20">分组字段:</span>
-                        {['source', 'alert_key', 'severity', 'namespace', 'instance_id', 'metric_name'].map((field) => (
-                          <label key={field} className="flex items-center gap-1">
-                            <input
-                              type="checkbox"
-                              checked={aggregationConfig.group_by.includes(field)}
-                              onChange={(e) => {
-                                const group_by = aggregationConfig.group_by
-                                if (e.target.checked) {
-                                  setAggregationConfig({ ...aggregationConfig, group_by: [...group_by, field] })
-                                } else {
-                                  setAggregationConfig({ ...aggregationConfig, group_by: group_by.filter((f: string) => f !== field) })
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm">{field}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {aggregationConfig.mode === 'condition' && (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 w-20">组合方式:</span>
-                        <select
-                          value={aggregationConfig.condition_mode}
-                          onChange={(e) => setAggregationConfig({ ...aggregationConfig, condition_mode: e.target.value })}
-                          className="px-2 py-1 border rounded text-sm"
-                        >
-                          <option value="and">AND (全部满足)</option>
-                          <option value="or">OR (任一满足)</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        {aggregationConfig.conditions.map((cond: any, idx: number) => (
-                          <ConditionRow
-                            key={idx}
-                            condition={cond}
-                            availableFields={aggAvailableFields}
-                            showLabelsDropdown={true}
-                            labelsKey={aggLabelsKey[idx]}
-                            labelsKeyOptions={matchingAlertsLabels.keys}
-                            labelsValueOptions={matchingAlertsLabels.valuesByKey[aggLabelsKey[idx] || '']?.map(v => ({ value: v, count: 0 })) || []}
-                            sources={sources}
-                            fieldValuesCache={fieldValuesCache.current}
-                            onFetchFieldValues={fetchFieldValues}
-                            onLabelsKeyChange={(key) => {
-                              const conditions = [...aggregationConfig.conditions]
-                              conditions[idx] = { ...conditions[idx], key, field: key ? `labels.${key}` : 'labels', value: '' }
-                              setAggregationConfig({ ...aggregationConfig, conditions })
-                            }}
-                            onChange={(field, value) => {
-                              const conditions = [...aggregationConfig.conditions]
-                              conditions[idx] = { ...conditions[idx], [field]: value }
-                              setAggregationConfig({ ...aggregationConfig, conditions })
-                            }}
-                            onRemove={() => {
-                              const conditions = aggregationConfig.conditions.filter((_: any, i: number) => i !== idx)
-                              setAggregationConfig({ ...aggregationConfig, conditions })
-                            }}
-                          />
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setAggregationConfig({
-                            ...aggregationConfig,
-                            conditions: [...aggregationConfig.conditions, { field: 'source', operator: 'eq', value: '' }]
-                          })}
-                          className="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          + 添加条件
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600 w-20">最大数量:</span>
-                    <input
-                      type="number"
-                      value={aggregationConfig.max_count}
-                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, max_count: parseInt(e.target.value) || 0 })}
-                      className="px-2 py-1 border rounded text-sm w-24"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={aggregationConfig.store_original_alerts}
-                      onChange={(e) => setAggregationConfig({ ...aggregationConfig, store_original_alerts: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">保留原始告警</span>
-                  </label>
-
-                  <div className="pt-2 border-t">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPreviewModal({ open: true, type: 'aggregate', title: '聚合预览' })
-                        fetchPreview('aggregate', 1)
-                      }}
-                      className="px-3 py-1 text-sm border border-blue-500 text-blue-600 rounded hover:bg-blue-50"
-                    >
-                      预览匹配告警
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </CollapsibleSection>
-
-          {/* Suppression Config */}
-          <CollapsibleSection title="抑制配置" defaultOpen={false}>
-            <div className="space-y-3">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={suppressionConfig.enabled}
-                  onChange={(e) => setSuppressionConfig({ ...suppressionConfig, enabled: e.target.checked })}
-                  className="rounded"
-                />
-                <span>启用抑制</span>
-              </label>
-              {suppressionConfig.enabled && (
-                <>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600">类型:</span>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="suppress-type"
-                        checked={suppressionConfig.type === 'maintenance_window'}
-                        onChange={() => setSuppressionConfig({ ...suppressionConfig, type: 'maintenance_window' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">维护窗口</span>
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="radio"
-                        name="suppress-type"
-                        checked={suppressionConfig.type === 'rule_based'}
-                        onChange={() => setSuppressionConfig({ ...suppressionConfig, type: 'rule_based' })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">规则匹配</span>
-                    </label>
-                  </div>
-                  {suppressionConfig.type === 'maintenance_window' && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600">持续时间:</span>
-                      <input
-                        type="number"
-                        value={suppressionConfig.duration_minutes}
-                        onChange={(e) => setSuppressionConfig({ ...suppressionConfig, duration_minutes: parseInt(e.target.value) || 0 })}
-                        className="px-2 py-1 border rounded text-sm w-24"
-                      />
-                      <span className="text-sm text-gray-500">分钟</span>
-                    </div>
-                  )}
-                  {suppressionConfig.type === 'rule_based' && (
-                    <div className="space-y-2">
-                      <div className="text-sm text-gray-600">抑制条件</div>
-                      {suppressionConfig.rule_conditions.map((cond, idx) => (
-                        <div key={idx} className="flex gap-2 items-center">
-                          <select
-                            value={cond.field}
-                            onChange={(e) => {
-                              const rule_conditions = [...suppressionConfig.rule_conditions]
-                              rule_conditions[idx] = { ...rule_conditions[idx], field: e.target.value }
-                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
-                            }}
-                            className="px-2 py-1 border rounded text-sm"
-                          >
-                            <option value="source">告警来源</option>
-                            <option value="severity">严重级别</option>
-                            <option value="namespace">命名空间</option>
-                            <option value="instance_id">实例ID</option>
-                            <option value="labels">标签</option>
-                          </select>
-                          <select
-                            value={cond.operator}
-                            onChange={(e) => {
-                              const rule_conditions = [...suppressionConfig.rule_conditions]
-                              rule_conditions[idx] = { ...rule_conditions[idx], operator: e.target.value }
-                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
-                            }}
-                            className="px-2 py-1 border rounded text-sm"
-                          >
-                            {OPERATORS.filter(op => !['exists', 'is_empty'].includes(op.value)).map((op) => (
-                              <option key={op.value} value={op.value}>{op.label}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={cond.value}
-                            onChange={(e) => {
-                              const rule_conditions = [...suppressionConfig.rule_conditions]
-                              rule_conditions[idx] = { ...rule_conditions[idx], value: e.target.value }
-                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
-                            }}
-                            className="px-2 py-1 border rounded text-sm flex-1"
-                            placeholder="输入值"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const rule_conditions = suppressionConfig.rule_conditions.filter((_, i) => i !== idx)
-                              setSuppressionConfig({ ...suppressionConfig, rule_conditions })
-                            }}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setSuppressionConfig({
-                          ...suppressionConfig,
-                          rule_conditions: [...suppressionConfig.rule_conditions, { field: 'source', operator: 'eq', value: '' }]
-                        })}
-                        className="text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        + 添加条件
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </CollapsibleSection>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">通知渠道</label>
@@ -1644,91 +364,12 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
             <button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
               {rule ? '保存' : '创建'}
             </button>
           </div>
         </form>
-
-        {/* Preview Modal */}
-        {previewModal.open && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h3 className="text-lg font-bold">{previewModal.title}</h3>
-                <button
-                  onClick={() => setPreviewModal({ ...previewModal, open: false })}
-                  className="text-gray-500 hover:text-gray-700 text-xl"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="p-4 overflow-auto flex-1">
-                {previewLoading ? (
-                  <div className="text-center py-8 text-gray-500">加载中...</div>
-                ) : previewData.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">暂无匹配的告警</div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="text-sm text-gray-500 mb-2">共 {previewTotal} 条匹配告警</div>
-                    {previewData.map((alert: any) => (
-                      <div key={alert.id} className="border rounded p-3 hover:bg-gray-50">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-1.5 py-0.5 text-xs rounded ${
-                              alert.severity === 'critical' ? 'bg-red-100 text-red-800' :
-                              alert.severity === 'high' ? 'bg-orange-100 text-orange-800' :
-                              alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              alert.severity === 'low' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {alert.severity?.toUpperCase()}
-                            </span>
-                            <span className="font-medium text-sm">{alert.title || alert.alert_key}</span>
-                          </div>
-                          <span className={`px-1.5 py-0.5 text-xs rounded ${
-                            alert.status === 'firing' ? 'bg-red-50 text-red-600' :
-                            alert.status === 'resolved' ? 'bg-green-50 text-green-600' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>
-                            {alert.status === 'firing' ? '触发中' : alert.status === 'resolved' ? '已恢复' : alert.status}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500 space-x-4">
-                          <span>来源: {alert.source || '-'}</span>
-                          <span>告警Key: {alert.alert_key || '-'}</span>
-                          <span>触发: {new Date(alert.fired_at).toLocaleString('zh-CN')}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {!previewLoading && previewTotal > previewPageSize && (
-                <div className="p-4 border-t flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => fetchPreview(previewModal.type, previewPage - 1)}
-                    disabled={previewPage <= 1}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
-                  >
-                    上一页
-                  </button>
-                  <span className="text-sm text-gray-600">
-                    第 {previewPage} / {Math.ceil(previewTotal / previewPageSize)} 页
-                  </span>
-                  <button
-                    onClick={() => fetchPreview(previewModal.type, previewPage + 1)}
-                    disabled={previewPage >= Math.ceil(previewTotal / previewPageSize)}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
-                  >
-                    下一页
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

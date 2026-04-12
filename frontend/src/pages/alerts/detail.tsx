@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { RuleModal } from '../rules'
 import type { Condition } from '../rules'
+import { DedupRuleModal } from '../rules/dedup'
+import { SuppressRuleModal } from '../rules/suppress'
+import { AggregateRuleModal } from '../rules/aggregate'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
@@ -15,20 +18,34 @@ export function AlertDetailPage() {
   const queryClient = useQueryClient()
   const [showAllLabels, setShowAllLabels] = useState(false)
   const [showAllAnnotations, setShowAllAnnotations] = useState(false)
-  const [showRuleModal, setShowRuleModal] = useState(false)
+  const [showRuleModal, setShowRuleModal] = useState<null | 'route' | 'dedup' | 'suppress' | 'aggregate'>(null)
   const [ruleInitialConditions, setRuleInitialConditions] = useState<Condition[]>([])
+  const [showCreateRuleMenu, setShowCreateRuleMenu] = useState(false)
+  const createRuleMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (createRuleMenuRef.current && !createRuleMenuRef.current.contains(e.target as Node)) {
+        setShowCreateRuleMenu(false)
+      }
+    }
+    if (showCreateRuleMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showCreateRuleMenu])
 
   function generateInitialConditions(alertData: AlertResponse): Condition[] {
     const conditions: Condition[] = []
 
-    // 预填充 labels，key 为第一个 label 的 key
+    // 预填充 labels，field 设为 labels.{key} 格式以匹配渲染逻辑
     if (alertData.labels && Object.keys(alertData.labels).length > 0) {
       const firstKey = Object.keys(alertData.labels)[0]
       conditions.push({
-        field: 'labels',
+        field: `labels.${firstKey}`,
         operator: 'eq',
         value: alertData.labels[firstKey],
-        key: firstKey,  // 传递 key 给 RuleModal 用于初始化 labelsKey
+        key: firstKey,
       })
     }
 
@@ -52,11 +69,12 @@ export function AlertDetailPage() {
     return conditions.slice(0, 5)
   }
 
-  const handleCreateRule = () => {
+  const handleCreateRule = (type: 'route' | 'dedup' | 'suppress' | 'aggregate') => {
     if (alert) {
       const conditions = generateInitialConditions(alert)
       setRuleInitialConditions(conditions)
-      setShowRuleModal(true)
+      setShowRuleModal(type)
+      setShowCreateRuleMenu(false)
     }
   }
 
@@ -222,12 +240,22 @@ export function AlertDetailPage() {
               诊断
             </button>
           )}
-          <button
-            onClick={handleCreateRule}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50"
-          >
-            创建规则
-          </button>
+          <div className="relative" ref={createRuleMenuRef}>
+            <button
+              onClick={() => setShowCreateRuleMenu(!showCreateRuleMenu)}
+              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
+            >
+              创建规则 <ChevronDown className="w-4 h-4" />
+            </button>
+            {showCreateRuleMenu && (
+              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border z-10">
+                <button onClick={() => handleCreateRule('route')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-t-lg">路由规则</button>
+                <button onClick={() => handleCreateRule('dedup')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">去重规则</button>
+                <button onClick={() => handleCreateRule('suppress')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">抑制规则</button>
+                <button onClick={() => handleCreateRule('aggregate')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-b-lg">聚合规则</button>
+              </div>
+            )}
+          </div>
           <div className="relative group">
             <button
               className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
@@ -634,15 +662,47 @@ export function AlertDetailPage() {
         </div>
       )}
 
-      {showRuleModal && (
+      {showRuleModal === 'route' && (
         <RuleModal
           rule={null}
           initialConditions={ruleInitialConditions}
-          showModal={showRuleModal}
-          onClose={() => setShowRuleModal(false)}
+          onClose={() => setShowRuleModal(null)}
           onSuccess={() => {
-            setShowRuleModal(false)
+            setShowRuleModal(null)
             queryClient.invalidateQueries({ queryKey: ['rules'] })
+          }}
+        />
+      )}
+      {showRuleModal === 'dedup' && (
+        <DedupRuleModal
+          rule={null}
+          initialConditions={ruleInitialConditions}
+          onClose={() => setShowRuleModal(null)}
+          onSuccess={() => {
+            setShowRuleModal(null)
+            queryClient.invalidateQueries({ queryKey: ['dedup-rules'] })
+          }}
+        />
+      )}
+      {showRuleModal === 'suppress' && (
+        <SuppressRuleModal
+          rule={null}
+          initialConditions={ruleInitialConditions}
+          onClose={() => setShowRuleModal(null)}
+          onSuccess={() => {
+            setShowRuleModal(null)
+            queryClient.invalidateQueries({ queryKey: ['suppress-rules'] })
+          }}
+        />
+      )}
+      {showRuleModal === 'aggregate' && (
+        <AggregateRuleModal
+          rule={null}
+          initialConditions={ruleInitialConditions}
+          onClose={() => setShowRuleModal(null)}
+          onSuccess={() => {
+            setShowRuleModal(null)
+            queryClient.invalidateQueries({ queryKey: ['aggregate-rules'] })
           }}
         />
       )}

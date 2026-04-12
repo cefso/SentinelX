@@ -1280,6 +1280,7 @@ def _get_step_title(step_type: str) -> str:
         "aggregate_check": "聚合检查",
         "aggregate_result": "聚合结果",
         "rule_match": "规则匹配",
+        "rule_match_result": "规则匹配结果",
         "route_result": "路由结果",
         "notification_queued": "进入发送队列",
         "notification_sent": "发送成功",
