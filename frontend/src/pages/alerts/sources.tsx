@@ -3,6 +3,7 @@ import { Cloud, Box, Zap, Code, Server, BarChart3, CloudCog, Copy, ToggleLeft, T
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
+import { generateCode } from '@/utils/code'
 import { toast } from '@/stores/toast-store'
 
 interface AlertSourceConfig {
@@ -483,7 +484,7 @@ function SourceModal({
     e.preventDefault()
     setError('')
     const isActive = formData.is_active ? 'active' : 'inactive'
-    const code = source ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const code = source ? formData.code : generateCode(formData.name)
     if (source) {
       updateMutation.mutate({
         name: formData.name,

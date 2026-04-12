@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
+import { generateCode } from '@/utils/code'
 import { RulesLayout } from '@/components/rules/RulesLayout'
 
 export type { Condition }
@@ -244,7 +245,7 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     const actions = formData.selected_channels.map(String)
     const payload = {
       name: formData.name,
-      code: rule ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      code: rule ? formData.code : generateCode(formData.name),
       description: formData.description,
       conditions: formData.conditions,
       condition_mode: formData.condition_mode,

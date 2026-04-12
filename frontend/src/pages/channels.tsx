@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { generateCode } from '@/utils/code'
 
 interface Channel {
   id: number
@@ -494,7 +495,7 @@ function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel | null
     e.preventDefault()
     const data = {
       ...formData,
-      code: channel ? formData.code : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      code: channel ? formData.code : generateCode(formData.name),
     }
     if (channel) {
       updateMutation.mutate(data)

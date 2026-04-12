@@ -234,7 +234,11 @@ def _slugify(name: str) -> str:
     """将名称转换为 slug"""
     # 简单的 slug 生成：小写 + 去特殊字符
     slug = _re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
-    return slug[:40] if slug else 'rule'
+    if slug:
+        return slug[:40]
+    # 兜底：中文/纯特殊字符名称时使用时间戳
+    from datetime import datetime
+    return datetime.now().strftime('%Y%m%d%H%M%S')
 
 
 def _build_strategy_crud(prefix: str, config_field: str):
