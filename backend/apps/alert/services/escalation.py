@@ -225,6 +225,7 @@ class EscalationWorker:
 
         backoff = 1  # 指数退避起始值（秒）
         max_backoff = 30  # 最大退避时间
+        msg = None
 
         while True:
             try:
