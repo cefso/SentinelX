@@ -78,8 +78,8 @@ class MessageQueue:
         await self.mq.delete(queue, message_id)
 
     async def nack(self, queue: str, message_id: int, vt: int = 300):
-        """未确认，延迟重试"""
-        await self.mq.read(queue, vt=vt)
+        """未确认，延迟重试：将消息重新放回队列，等待 vt 秒后再次可见"""
+        await self.mq.set_vt(queue, message_id, vt)
 
     async def purge(self, queue: str):
         """清空队列"""

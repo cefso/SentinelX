@@ -263,12 +263,13 @@ class AlertDispatcher:
 
     async def start_consumer(self, mq):
         """启动告警消费 Consumer（替代 BackgroundTasks）"""
+        msg = None
         while True:
             try:
                 msg = await mq.receive("alerts_raw", count=1, vt=60)
                 if not msg:
                     continue
-                # msg 是 pgmq 的 Message 对象，有 message_id 和 message 属性
+                # msg 是 pgmq 的 Message 对象，有 msg_id 和 message 属性
                 message = msg.message
                 alert_id = message.get("alert_id")
                 trace_id = message.get("trace_id")
@@ -292,6 +293,6 @@ class AlertDispatcher:
                     await mq.ack("alerts_raw", msg.msg_id)
             except Exception as e:
                 logger.error("alert_consumer_error", error=str(e))
-                if 'msg' in dir() and msg:
+                if msg:
                     await mq.nack("alerts_raw", msg.msg_id, vt=60)
                 await asyncio.sleep(1)
