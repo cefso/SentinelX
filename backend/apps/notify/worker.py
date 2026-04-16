@@ -64,6 +64,12 @@ class NotificationWorker:
 
     async def send_notification(self, notification: Dict[str, Any]):
         """发送单个通知"""
+        is_test = notification.get("is_test", False)
+
+        if is_test:
+            await self._send_test_notification(notification)
+            return
+
         alert_id = notification.get("alert_id")
         channel_ids = notification.get("channels", [])
         trace_id = notification.get("trace_id")
@@ -106,6 +112,69 @@ class NotificationWorker:
                         error=error,
                         trace_id=trace_id
                     )
+
+    async def _send_test_notification(self, notification: Dict[str, Any]):
+        """发送测试通知（不走数据库查告警）"""
+        record_id = notification.get("record_id")
+        channel_type = notification.get("channel_type")
+        channel_config = notification.get("channel_config")
+        content = notification.get("content", "")
+        title = notification.get("title", "[测试消息]")
+        template_content = notification.get("template_content")
+
+        from apps.rule.models import NotificationRecord as RecordModel
+
+        async with async_session_factory() as db:
+            from datetime import datetime, timezone
+            from apps.notify.channels import ChannelFactory
+
+            # 构建测试用Alert对象（内存中，不存数据库）
+            test_alert = Alert(
+                tenant_id=notification.get("tenant_id", 0),
+                alert_key=f"test-record-{record_id}",
+                fingerprint=f"test-fp-{record_id}",
+                source="test",
+                title=title,
+                content=content,
+                severity="info",
+                status="firing",
+                labels={},
+                annotations={},
+            )
+            test_alert.fire_count = 1
+            test_alert.id = 0  # 标记为测试
+
+            # 发送通知
+            success, error = await ChannelFactory.send_alert(
+                channel_type,
+                channel_config,
+                test_alert,
+                template_content,
+            )
+
+            # 更新记录状态
+            if record_id:
+                result = await db.execute(select(RecordModel).where(RecordModel.id == record_id))
+                record = result.scalar_one_or_none()
+                if record:
+                    record.status = "success" if success else "failed"
+                    record.error_message = error
+                    record.sent_at = datetime.utcnow()
+                    record.response_data = {
+                        "success": success,
+                        "error": error,
+                        "channel_type": channel_type,
+                        "is_test": True,
+                    }
+                    await db.commit()
+
+            logger.info(
+                "test_notification_result",
+                record_id=record_id,
+                channel_type=channel_type,
+                success=success,
+                error=error
+            )
 
 
 async def run_worker():
