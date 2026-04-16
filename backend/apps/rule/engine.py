@@ -71,7 +71,7 @@ class RuleEngine:
             conditions = rule.conditions or []
             condition_mode = rule.condition_mode or "and"
 
-            is_match, reason = self.evaluate_conditions(
+            is_match, reason, _ = self.evaluate_conditions(
                 conditions,
                 condition_mode,
                 alert_data
