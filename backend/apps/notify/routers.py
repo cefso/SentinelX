@@ -212,7 +212,9 @@ async def test_channel(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """测试发送通知到指定渠道"""
+    """测试发送通知到指定渠道（走MQ队列）"""
+    from apps.core.mq import get_mq_async
+
     # 获取渠道配置
     result = await db.execute(
         select(NotificationChannel).where(
@@ -226,22 +228,6 @@ async def test_channel(
 
     if not channel.is_active:
         return ChannelTestResponse(success=False, error="Channel is inactive")
-
-    # 创建模拟告警用于测试
-    test_alert = Alert(
-        tenant_id=tenant_id,
-        alert_key=f"test-channel-{channel_id}",
-        fingerprint=f"test-fp-{channel_id}",
-        source="test",
-        title=request.content or f"[测试消息] {channel.name}",
-        content=request.content or f"这是一条来自 {channel.name} 渠道的测试消息",
-        severity="info",
-        status="firing",
-        labels={},
-        annotations={},
-    )
-    # 设置fire_count等属性以满足格式要求
-    test_alert.fire_count = 1
 
     # 获取模板
     from sqlalchemy import or_
@@ -258,18 +244,43 @@ async def test_channel(
     template = template_result.scalar_one_or_none()
     template_content = template.content if template else None
 
-    # 发送测试通知
-    success, error = await ChannelFactory.send_alert(
-        channel.channel_type,
-        channel.config,
-        test_alert,
-        template_content,
+    # 创建测试通知记录
+    record = NotificationRecord(
+        tenant_id=str(tenant_id),
+        alert_id=0,  # 测试消息没有真实alert_id
+        channel_id=channel_id,
+        channel_type=channel.channel_type,
+        status="pending",
+        request_data={
+            "is_test": True,
+            "content": request.content or f"这是一条来自 {channel.name} 渠道的测试消息",
+            "title": request.content or f"[测试消息] {channel.name}",
+            "channel_config": channel.config,
+            "template_content": template_content,
+        },
     )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+
+    # 发送测试消息到MQ
+    mq = await get_mq_async()
+    await mq.send("alerts_notify", {
+        "record_id": record.id,
+        "is_test": True,
+        "tenant_id": tenant_id,
+        "channel_id": channel_id,
+        "channel_type": channel.channel_type,
+        "channel_config": channel.config,
+        "content": request.content or f"这是一条来自 {channel.name} 渠道的测试消息",
+        "title": request.content or f"[测试消息] {channel.name}",
+        "template_content": template_content,
+    })
 
     return ChannelTestResponse(
-        success=success,
-        error=error,
-        response_data={"channel_type": channel.channel_type, "channel_name": channel.name},
+        success=True,
+        error=None,
+        response_data={"channel_type": channel.channel_type, "channel_name": channel.name, "queued": True, "record_id": record.id},
     )
 
 
