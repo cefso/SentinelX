@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
+import { useUIStore } from '@/stores/ui-store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3 } from 'lucide-react'
@@ -25,7 +26,7 @@ export function Layout() {
   const [showTenantMenu, setShowTenantMenu] = useState(false)
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false)
   const [switching, setSwitching] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
   const menuRef = useRef<HTMLDivElement>(null)
   const tenantMenuRef = useRef<HTMLDivElement>(null)
 
@@ -222,7 +223,7 @@ export function Layout() {
         </header>
         {/* 内容区域 */}
         <div className="flex-1 p-6 overflow-auto">
-          <Outlet />
+          <Outlet key={location.pathname} />
         </div>
 
         {/* 创建租户 Modal */}
