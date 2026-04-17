@@ -140,7 +140,7 @@ export function Layout() {
             </button>
 
             {showUserMenu && (
-              <div className={`absolute bottom-full mb-1 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 ${sidebarCollapsed ? 'left-0 w-48' : 'left-0 right-0'}`}>
+              <div className={`absolute bottom-full mb-1 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-50 ${sidebarCollapsed ? 'left-0 w-48' : 'left-0 right-0'}`}>
                 <Link
                   to="/settings"
                   onClick={() => setShowUserMenu(false)}
