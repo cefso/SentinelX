@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 
-// 硬编码的内联版本信息（构建时通过打包工具注入）
-const BUILD_INFO = __BUILD_INFO__
+const BUILD_INFO = JSON.parse(import.meta.env.VITE_BUILD_INFO || '{}')
 
 interface BuildState {
   frontendBuildId: string | null
