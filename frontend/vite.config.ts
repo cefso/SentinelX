@@ -23,8 +23,7 @@ try {
 export default defineConfig({
   plugins: [react()],
   define: {
-    // 注入构建信息，前端代码通过 __BUILD_INFO__ 访问
-    '__BUILD_INFO__': JSON.stringify(buildInfo),
+    'import.meta.env.VITE_BUILD_INFO': JSON.stringify(JSON.stringify(buildInfo)),
   },
   resolve: {
     alias: {
