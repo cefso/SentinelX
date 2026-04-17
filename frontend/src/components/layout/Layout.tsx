@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, createPortal } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useUIStore } from '@/stores/ui-store'
@@ -30,6 +30,7 @@ export function Layout() {
   const menuRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const tenantMenuRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null)
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -126,7 +127,13 @@ export function Layout() {
           {/* 用户信息区域 */}
           <div ref={menuRef}>
             <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
+              onClick={() => {
+                if (!showUserMenu && menuRef.current) {
+                  const rect = menuRef.current.getBoundingClientRect()
+                  setDropdownStyle({ top: rect.top, left: rect.left, width: rect.width })
+                }
+                setShowUserMenu(!showUserMenu)
+              }}
               className={`w-full hover:bg-gray-800 transition-colors flex items-center ${sidebarCollapsed ? 'justify-center p-3' : 'p-4 justify-between'}`}
             >
               <div className="flex items-center gap-3">
@@ -145,9 +152,19 @@ export function Layout() {
         </div>
       </aside>
 
-      {/* 用户菜单 Dropdown - 放在 aside 和 main 之外，避免被遮挡 */}
-      {showUserMenu && (
-        <div ref={dropdownRef} className={`fixed z-50 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 ${sidebarCollapsed ? 'bottom-0 left-0 w-48' : 'bottom-0 left-0 w-64'}`}>
+      {/* 用户菜单 Dropdown - 使用 Portal 定位在头像上方 */}
+      {showUserMenu && dropdownStyle && createPortal(
+        <div
+          ref={dropdownRef}
+          className={`fixed z-50 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 ${sidebarCollapsed ? 'w-48' : 'w-64'}`}
+          style={{
+            top: dropdownStyle.top,
+            left: dropdownStyle.left,
+            width: dropdownStyle.width,
+            transform: 'translateY(-100%)',
+            marginBottom: '4px',
+          }}
+        >
           <Link
             to="/settings"
             onClick={() => setShowUserMenu(false)}
@@ -166,7 +183,8 @@ export function Layout() {
             <LogOut className="w-4 h-4" />
             退出
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       <main className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
