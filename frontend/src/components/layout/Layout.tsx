@@ -28,12 +28,15 @@ export function Layout() {
   const [switching, setSwitching] = useState(false)
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
   const menuRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const tenantMenuRef = useRef<HTMLDivElement>(null)
 
   // 点击外部关闭菜单
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (menuRef.current && dropdownRef.current &&
+          !menuRef.current.contains(event.target as Node) &&
+          !dropdownRef.current.contains(event.target as Node)) {
         setShowUserMenu(false)
       }
       if (tenantMenuRef.current && !tenantMenuRef.current.contains(event.target as Node)) {
@@ -66,7 +69,7 @@ export function Layout() {
 
   return (
     <div className="h-screen flex overflow-hidden">
-      <aside className={`bg-gray-900 text-white flex flex-col overflow-y-auto shrink-0 transition-all duration-200 z-10 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`bg-gray-900 text-white flex flex-col overflow-y-auto shrink-0 transition-all duration-200 relative z-10 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
         <div className="h-16 flex items-center border-b border-gray-800 shrink-0">
           {!sidebarCollapsed && (
             <h1 className="text-xl font-bold px-6">SentinelX</h1>
@@ -121,7 +124,7 @@ export function Layout() {
           </nav>
 
           {/* 用户信息区域 */}
-          <div className="relative" ref={menuRef}>
+          <div ref={menuRef}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className={`w-full hover:bg-gray-800 transition-colors flex items-center ${sidebarCollapsed ? 'justify-center p-3' : 'p-4 justify-between'}`}
@@ -138,32 +141,34 @@ export function Layout() {
                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
               )}
             </button>
-
-            {showUserMenu && (
-              <div className={`absolute bottom-full mb-1 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-50 ${sidebarCollapsed ? 'left-0 w-48' : 'left-0 right-0'}`}>
-                <Link
-                  to="/settings"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
-                >
-                  <Settings className="w-4 h-4" />
-                  设置
-                </Link>
-                <button
-                  onClick={() => {
-                    setShowUserMenu(false)
-                    logout()
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
-                >
-                  <LogOut className="w-4 h-4" />
-                  退出
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </aside>
+
+      {/* 用户菜单 Dropdown - 放在 aside 和 main 之外，避免被遮挡 */}
+      {showUserMenu && (
+        <div ref={dropdownRef} className={`fixed z-50 py-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 ${sidebarCollapsed ? 'bottom-0 left-0 w-48' : 'bottom-0 left-0 w-64'}`}>
+          <Link
+            to="/settings"
+            onClick={() => setShowUserMenu(false)}
+            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+          >
+            <Settings className="w-4 h-4" />
+            设置
+          </Link>
+          <button
+            onClick={() => {
+              setShowUserMenu(false)
+              logout()
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+          >
+            <LogOut className="w-4 h-4" />
+            退出
+          </button>
+        </div>
+      )}
+
       <main className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
         {/* 顶部导航栏 */}
         <header className="h-14 bg-white border-b border-gray-200 px-6 flex items-center justify-end gap-4 shrink-0">
