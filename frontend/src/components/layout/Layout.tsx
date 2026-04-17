@@ -66,7 +66,7 @@ export function Layout() {
 
   return (
     <div className="h-screen flex overflow-hidden">
-      <aside className={`bg-gray-900 text-white flex flex-col overflow-y-auto shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`bg-gray-900 text-white flex flex-col overflow-y-auto shrink-0 transition-all duration-200 z-10 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
         <div className="h-16 flex items-center border-b border-gray-800 shrink-0">
           {!sidebarCollapsed && (
             <h1 className="text-xl font-bold px-6">SentinelX</h1>
