@@ -1,13 +1,5 @@
 /// <reference types="vite/client" />
 
-interface BuildInfo {
-  git_commit: string
-  build_id: string
-  build_time: string
-}
-
-declare const __BUILD_INFO__: BuildInfo
-
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string
   readonly VITE_API_PROXY_TARGET: string
@@ -16,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_DEBUG: string
   readonly VITE_LOG_LEVEL: string
   readonly VITE_ENABLE_LOGGING: string
+  readonly VITE_BUILD_INFO: string
 }
 
 interface ImportMeta {
