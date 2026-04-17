@@ -35,3 +35,8 @@ htmlcov/
 node_modules/
 dist/
 .vite/
+
+# Build info (auto-generated during Docker builds)
+.dockerignore
+backend/build-info.json
+frontend/public/build-info.json
