@@ -108,7 +108,7 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           file: ./docker/Dockerfile
           push: false
           tags: sentinelx/backend:test
@@ -118,7 +118,7 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: .
           file: ./docker/Dockerfile.frontend
           push: false
           tags: sentinelx/frontend:test

@@ -1,9 +1,26 @@
 """
 SentinelX - 综合告警平台配置管理
 """
+import json
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
+
+
+def _load_build_info() -> dict:
+    """从版本文件加载构建信息"""
+    try:
+        path = Path(__file__).parent.parent.parent / "build-info.json"
+        if path.exists():
+            with open(path) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"git_commit": "unknown", "build_id": "unknown", "build_time": ""}
+
+
+BUILD_INFO = _load_build_info()
 
 
 class Settings(BaseSettings):
@@ -14,6 +31,11 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
+
+    # 构建信息
+    GIT_COMMIT: str = BUILD_INFO.get("git_commit", "unknown")
+    BUILD_ID: str = BUILD_INFO.get("build_id", "unknown")
+    BUILD_TIME: str = BUILD_INFO.get("build_time", "")
 
     # 数据库配置
     DB_HOST: str = "localhost"
