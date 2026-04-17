@@ -345,7 +345,7 @@ export function AlertsPage() {
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
                       {item.latest.fired_at ? formatLocalDateTime(item.latest.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2"><StatusBadge status={item.latest.status} /></td>
+                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
                   </tr>
                 ))
               ) : (
@@ -371,7 +371,7 @@ export function AlertsPage() {
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
                       {alert.fired_at ? formatLocalDateTime(alert.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2"><StatusBadge status={alert.status} /></td>
+                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={alert.status} /></td>
                   </tr>
                 ))
               )}
@@ -494,7 +494,7 @@ function StatusBadge({ status }: { status: string }) {
   }
 
   return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded ${styles[status] || styles.firing}`}>
+    <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${styles[status] || styles.firing}`}>
       {labels[status] || status}
     </span>
   )
