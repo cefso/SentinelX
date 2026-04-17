@@ -249,6 +249,19 @@ async def liveness_check():
     return {"status": "alive"}
 
 
+@app.get("/health/build")
+async def build_info():
+    """
+    构建信息接口 - 返回版本和 git commit 信息
+    """
+    return {
+        "version": settings.APP_VERSION,
+        "git_commit": settings.GIT_COMMIT,
+        "build_id": settings.BUILD_ID,
+        "build_time": settings.BUILD_TIME,
+    }
+
+
 # 根路径
 @app.get("/")
 async def root():

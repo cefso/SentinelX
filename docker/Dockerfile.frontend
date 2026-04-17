@@ -1,29 +1,46 @@
-# Stage 1: Build
+# =============================================================================
+# Stage 1: 生成版本文件
+# =============================================================================
+FROM alpine:3.19 AS builder-info
+
+WORKDIR /app
+
+# 复制 .git 用于获取 commit hash
+COPY .git ./.git
+
+# 生成版本文件到 public 目录
+RUN apk add --no-cache bash coreutils git && \
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) && \
+    GIT_SHORT=${GIT_COMMIT:0:7} && \
+    BUILD_ID="${GIT_SHORT}-$(date +%Y%m%d-%H%M%S)" && \
+    BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
+    mkdir -p public && \
+    echo "{\"git_commit\": \"$GIT_SHORT\", \"build_id\": \"$BUILD_ID\", \"build_time\": \"$BUILD_TIME\"}" > public/build-info.json && \
+    cat public/build-info.json
+
+# =============================================================================
+# Stage 2: 构建前端
+# =============================================================================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 复制依赖文件
-COPY package*.json ./
-
-# 安装依赖
+COPY frontend/package*.json ./
 RUN npm ci
 
-# 复制源码
-COPY . .
+COPY frontend/ .
 
-# 构建生产版本
+# 复制版本文件（从 builder-info）
+COPY --from=builder-info /app/public/build-info.json ./public/
+
 RUN npm run build
 
-# Stage 2: Serve with nginx
+# =============================================================================
+# Stage 3: 运行 nginx
+# =============================================================================
 FROM nginx:alpine
 
-# 复制自定义 nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# 复制构建产物
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
-
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
