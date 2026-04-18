@@ -169,20 +169,20 @@ export function Layout() {
           <Link
             to="/settings"
             onClick={() => setShowUserMenu(false)}
-            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+            className={`flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white ${sidebarCollapsed ? 'justify-center' : ''}`}
           >
             <Settings className="w-4 h-4" />
-            设置
+            {!sidebarCollapsed && '设置'}
           </Link>
           <button
             onClick={() => {
               setShowUserMenu(false)
               logout()
             }}
-            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+            className={`w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white ${sidebarCollapsed ? 'justify-center' : ''}`}
           >
             <LogOut className="w-4 h-4" />
-            退出
+            {!sidebarCollapsed && '退出'}
           </button>
         </div>,
         document.body
