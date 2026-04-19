@@ -7,8 +7,10 @@ from typing import List, Dict, Any
 import structlog
 
 from apps.core.database import AsyncSessionLocal as async_session_factory
+from sqlalchemy import select
 from apps.core.mq import get_mq_async
 from apps.notify.services.sender import NotificationService
+from apps.alert.models import Alert
 
 logger = structlog.get_logger()
 
@@ -72,6 +74,7 @@ class NotificationWorker:
 
         alert_id = notification.get("alert_id")
         channel_ids = notification.get("channels", [])
+        template_map = notification.get("template_map", {})
         trace_id = notification.get("trace_id")
 
         if not alert_id or not channel_ids:
@@ -83,7 +86,6 @@ class NotificationWorker:
 
             # 获取告警
             from sqlalchemy import select
-            from apps.alert.models import Alert
 
             result = await db.execute(select(Alert).where(Alert.id == alert_id))
             alert = result.scalar_one_or_none()
@@ -93,7 +95,7 @@ class NotificationWorker:
                 return
 
             # 发送通知
-            results = await service.send_alert_notifications(alert, channel_ids, trace_id)
+            results = await service.send_alert_notifications(alert, channel_ids, template_map, trace_id)
 
             # 记录结果
             for channel_id, (success, error) in results.items():
