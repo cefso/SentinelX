@@ -210,7 +210,7 @@ class AlertAggregateMembersResponse(BaseModel):
     """聚合告警组成员响应"""
     items: List[AlertAggregateMemberItem] = Field(default_factory=list, description="成员列表")
     total: int = Field(..., description="总数")
-    group_key: str = Field(..., description="聚合组Key")
+    group_key: Optional[str] = Field(None, description="聚合组Key")
     alert_count: int = Field(..., description="组内告警数")
     page: int = Field(..., description="当前页")
     page_size: int = Field(..., description="每页数量")

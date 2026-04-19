@@ -1,8 +1,11 @@
 """
 SentinelX - 通知路由
 """
+import re
+import secrets
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -324,6 +327,87 @@ async def list_notifications(
 
 # ============ 通知模板管理 ============
 
+# ============ 模板变量说明 ============
+
+class TemplateVariable(BaseModel):
+    """模板变量"""
+    name: str = Field(..., description="变量名（不含 {{ }}）")
+    description: str = Field(..., description="变量说明")
+    example: Optional[str] = Field(None, description="使用示例")
+    category: str = Field(..., description="分类: common/metric/raw_data/channel")
+
+
+class TemplateVariablesResponse(BaseModel):
+    """模板变量说明响应"""
+    channel_type: str
+    variables: List[TemplateVariable]
+
+
+# 通用变量（所有渠道）
+COMMON_VARIABLES = [
+    TemplateVariable(name="alert.title", description="告警标题", category="common"),
+    TemplateVariable(name="alert.content", description="告警内容", category="common"),
+    TemplateVariable(name="alert.severity", description="严重级别 (critical/high/medium/low/info)", category="common"),
+    TemplateVariable(name="alert.status", description="告警状态 (firing/resolved)", category="common"),
+    TemplateVariable(name="alert.source", description="告警来源", category="common"),
+    TemplateVariable(name="alert.fired_at", description="触发时间 (ISO格式)", category="common"),
+    TemplateVariable(name="alert.fire_count", description="触发次数", category="common"),
+    TemplateVariable(name="alert.labels.xxx", description="提取标签字段 (如 alert.labels.env)", category="common"),
+    TemplateVariable(name="alert.annotations.xxx", description="提取注解字段 (如 alert.annotations.runbook)", category="common"),
+    TemplateVariable(name="alert_key", description="告警唯一标识", category="common"),
+    TemplateVariable(name="alert_id", description="告警ID", category="common"),
+]
+
+# 指标类变量
+METRIC_VARIABLES = [
+    TemplateVariable(name="alert.namespace", description="命名空间/云产品", category="metric"),
+    TemplateVariable(name="alert.instance_name", description="实例名称", category="metric"),
+    TemplateVariable(name="alert.instance_id", description="实例ID", category="metric"),
+    TemplateVariable(name="alert.metric_name", description="指标名称", category="metric"),
+    TemplateVariable(name="alert.metric_value", description="指标值", category="metric"),
+]
+
+# 原始数据变量
+RAW_DATA_VARIABLES = [
+    TemplateVariable(name="alert.raw_data", description="原始告警数据（dict）", category="raw_data"),
+    TemplateVariable(name="alert.raw_data.xxx", description="提取原始数据中的任意字段", category="raw_data", example="{{ alert.raw_data.cpu }}"),
+    TemplateVariable(name="alert.extra_data", description="扩展数据（dict）", category="raw_data"),
+    TemplateVariable(name="alert.extra_data.xxx", description="提取扩展数据中的任意字段", category="raw_data"),
+]
+
+# 特殊渠道变量
+CHANNEL_VARIABLES = [
+    TemplateVariable(name="alert.fingerprint", description="告警指纹（钉钉/飞书/企微等渠道适用）", category="channel"),
+]
+
+
+@router.get("/templates/variables/{channel_type}", response_model=TemplateVariablesResponse)
+async def get_template_variables(channel_type: str):
+    """获取指定渠道类型的模板可用变量说明"""
+    if channel_type not in ["dingtalk", "feishu", "wecom", "email", "webhook", "slack"]:
+        raise HTTPException(status_code=400, detail=f"Unsupported channel type: {channel_type}")
+
+    variables = list(COMMON_VARIABLES)
+    variables.extend(METRIC_VARIABLES)
+    variables.extend(RAW_DATA_VARIABLES)
+    variables.extend(CHANNEL_VARIABLES)
+
+    return TemplateVariablesResponse(channel_type=channel_type, variables=variables)
+
+
+@router.get("/templates/variables", response_model=List[TemplateVariablesResponse])
+async def list_all_template_variables():
+    """获取所有渠道类型的模板变量说明"""
+    all_types = ["dingtalk", "feishu", "wecom", "email", "webhook", "slack"]
+    return [
+        TemplateVariablesResponse(
+            channel_type=ct,
+            variables=list(COMMON_VARIABLES) + list(METRIC_VARIABLES) + list(RAW_DATA_VARIABLES) + list(CHANNEL_VARIABLES),
+        )
+        for ct in all_types
+    ]
+
+
 @router.get("/templates", response_model=List[TemplateResponse])
 async def list_templates(
     channel_type: Optional[str] = None,
@@ -345,20 +429,33 @@ async def create_template(
     db: AsyncSession = Depends(get_db),
 ):
     """创建通知模板"""
+    # 自动生成 code（如果未提供）
+    import re
+    import secrets
+    code = request.code
+    if not code:
+        # 判断 name 是否含中文字符
+        if re.search(r'[\u4e00-\u9fff]', request.name):
+            # 中文名：用随机短码
+            code = f"tmpl_{secrets.token_hex(4)}"
+        else:
+            # 英文名：slugify
+            slug = re.sub(r'[^a-zA-Z0-9]', '_', request.name).lower()
+            code = f"tmpl_{slug}"
     # 检查 code 是否重复
     existing = await db.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.tenant_id == str(tenant_id),
-            NotificationTemplate.code == request.code,
+            NotificationTemplate.code == code,
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=f"模板代码 '{request.code}' 已存在")
+        raise HTTPException(status_code=400, detail=f"模板代码 '{code}' 已存在")
 
     template = NotificationTemplate(
-        tenant_id=tenant_id,
+        tenant_id=str(tenant_id),
         name=request.name,
-        code=request.code,
+        code=code,
         channel_type=request.channel_type,
         content=request.content,
         variables=request.variables,

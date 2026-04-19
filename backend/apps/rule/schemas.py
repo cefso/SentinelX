@@ -10,6 +10,19 @@ from apps.alert.schemas import AlertResponse
 
 # ============ 规则条件Schema ============
 
+class RuleAction(BaseModel):
+    """规则动作 - 支持新旧两种格式
+
+    新格式: {"channel_id": 1, "template_id": 5}
+    channel_id: 必填，渠道ID
+    template_id: 可选，不填则使用渠道默认模板
+
+    兼容旧格式: 字符串 "1"（纯渠道ID）
+    """
+    channel_id: int = Field(..., description="通知渠道ID")
+    template_id: Optional[int] = Field(None, description="通知模板ID，不填则使用渠道默认模板")
+
+
 class Condition(BaseModel):
     """规则条件
 
@@ -39,7 +52,7 @@ class RuleBase(BaseModel):
     description: Optional[str] = None
     conditions: List[Condition] = []
     condition_mode: str = Field("and", pattern="^(and|or)$")
-    actions: List[str] = []  # 动作，如通知渠道ID列表
+    actions: List[RuleAction | str] = []  # 动作，如通知渠道ID列表; 支持新旧格式
     priority: int = Field(0, ge=0, le=1000)
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
@@ -131,7 +144,7 @@ class RuleUpdate(BaseModel):
     description: Optional[str] = None
     conditions: Optional[List[Condition]] = None
     condition_mode: Optional[str] = None
-    actions: Optional[List[str]] = None
+    actions: Optional[List[RuleAction | str]] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
     suppress_config: Optional[Dict[str, Any]] = None
@@ -150,6 +163,24 @@ class RuleResponse(RuleBase):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        # 规范化 actions 字段：兼容旧格式 ["1", "2"]
+        if isinstance(obj, dict) and "actions" in obj:
+            actions = obj["actions"]
+            if actions:
+                normalized = []
+                for a in actions:
+                    if isinstance(a, str):
+                        normalized.append(RuleAction(channel_id=int(a)))
+                    elif isinstance(a, dict):
+                        normalized.append(RuleAction(**a))
+                    else:
+                        normalized.append(a)
+                obj = dict(obj)
+                obj["actions"] = normalized
+        return super().model_validate(obj, **kwargs)
 
 
 class RuleTestRequest(BaseModel):
@@ -205,7 +236,7 @@ class ChannelResponse(ChannelBase):
 
 class TemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
-    code: str = Field(..., min_length=1, max_length=64)
+    code: Optional[str] = Field(None, min_length=1, max_length=64)
     channel_type: str = Field(..., min_length=1, max_length=32)
     content: str = Field(..., min_length=1)
     variables: List[str] = []

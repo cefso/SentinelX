@@ -64,7 +64,7 @@ class AlertDispatcher:
             await self._finalize_alert(alert, result.matched_rules, result.channel_ids, result.aggregated_info, trace_id)
 
             # 进入通知队列
-            await self._queue_notification(alert, result.matched_rules, result.channel_ids, trace_id)
+            await self._queue_notification(alert, result.matched_rules, result.channel_ids, result.template_map, trace_id)
 
             # 发送升级检查消息
             try:
@@ -88,18 +88,18 @@ class AlertDispatcher:
         """初始化追踪记录"""
         trace_key = f"trace:{trace_id}"
         trace_data = {
-            "trace_id": trace_id,
+            "trace_id": str(trace_id),
             "alert_id": str(alert.id),
-            "tenant_id": alert.tenant_id,
-            "start_time": datetime.now(timezone.utc).isoformat(),
+            "tenant_id": str(alert.tenant_id),
+            "start_time": str(datetime.now(timezone.utc).isoformat()),
             "final_status": "processing",
         }
         await self.redis.hset(trace_key, mapping=trace_data)
         await self.redis.expire(trace_key, 86400 * 7)  # 7天
         await self._add_trace_step(trace_id, "received", "告警接入", "success", {
-            "source": alert.source,
-            "severity": alert.severity,
-            "alert_key": alert.alert_key,
+            "source": str(alert.source),
+            "severity": str(alert.severity),
+            "alert_key": str(alert.alert_key),
         })
 
     async def _handle_suppressed(self, alert: Alert, trace_id: str, reason: str):
@@ -156,6 +156,7 @@ class AlertDispatcher:
         alert: Alert,
         matched_rules: List[AlertRule],
         channel_ids: List[int],
+        template_map: Dict[int, int | None],
         trace_id: str
     ):
         """进入通知队列"""
@@ -193,24 +194,29 @@ class AlertDispatcher:
 
         already_notified = await self.redis.get(notify_dedup_key)
         if already_notified:
+            # redis.get returns bytes in some cases, decode to string
+            previous_id = already_notified.decode() if isinstance(already_notified, bytes) else str(already_notified)
             await self._add_trace_step(trace_id, "notification_queued", "通知队列", "dedup_skipped", {
                 "description": f"去重跳过，{notify_window_seconds}秒内已通知",
-                "fingerprint": alert.fingerprint,
-                "previous_alert_id": already_notified,
+                "fingerprint": str(alert.fingerprint),
+                "previous_alert_id": previous_id,
             })
             await self._finish_trace(trace_id, "dedup_skipped")
             return
 
         # 构建通知消息
+        # Convert template_map keys to strings for JSON serialization
+        template_map_str_keys = {str(k): v for k, v in template_map.items()} if template_map else {}
         notification_msg = {
-            "alert_id": alert.id,
-            "trace_id": trace_id,
-            "tenant_id": alert.tenant_id,
-            "title": alert.title,
-            "content": alert.content,
-            "severity": alert.severity,
-            "channels": channel_ids,
-            "labels": alert.labels,
+            "alert_id": int(alert.id),
+            "trace_id": str(trace_id),
+            "tenant_id": str(alert.tenant_id),
+            "title": str(alert.title) if alert.title else "",
+            "content": str(alert.content) if alert.content else "",
+            "severity": str(alert.severity),
+            "channels": [int(c) for c in channel_ids],
+            "template_map": template_map_str_keys,
+            "labels": alert.labels or {},
             "fired_at": alert.fired_at.isoformat() if alert.fired_at else None,
         }
 
@@ -238,8 +244,9 @@ class AlertDispatcher:
     async def _finish_trace(self, trace_id: str, status: str, **kwargs):
         """完成追踪"""
         trace_key = f"trace:{trace_id}"
-        update_data = {"final_status": status}
-        update_data.update(kwargs)
+        update_data = {"final_status": str(status)}
+        for k, v in kwargs.items():
+            update_data[str(k)] = str(v) if v is not None else ""
         await self.redis.hset(trace_key, mapping=update_data)
 
     async def _add_trace_step(
@@ -252,11 +259,20 @@ class AlertDispatcher:
     ):
         """添加追踪步骤"""
         trace_key = f"trace:{trace_id}"
+        # Ensure all data values are JSON serializable (strings)
+        serializable_data = {}
+        for k, v in data.items():
+            if isinstance(v, (int, float, bool, type(None))):
+                serializable_data[str(k)] = str(v)
+            elif isinstance(v, bytes):
+                serializable_data[str(k)] = v.decode()
+            else:
+                serializable_data[str(k)] = str(v)
         step = {
-            "type": step_type,
-            "title": title,
-            "status": status,
-            "data": data,
+            "type": str(step_type),
+            "title": str(title),
+            "status": str(status),
+            "data": serializable_data,
             "time": datetime.now(timezone.utc).isoformat(),
         }
         await self.redis.rpush(f"{trace_key}:steps", json.dumps(step))

@@ -22,6 +22,7 @@ from apps.rule.schemas import (
     PreviewDedupRequest, PreviewAggregateRequest,
     PreviewDedupResponse, PreviewAggregateResponse, AlertGroupItem,
     StrategyRuleCreate, StrategyRuleUpdate, StrategyRuleResponse,
+    RuleAction,
 )
 
 router = APIRouter()
@@ -35,6 +36,72 @@ SUPPORTED_SIMPLE_FIELDS = {
     "instance_name",
     "status",
 }
+
+
+async def _validate_template_ids(
+    db: AsyncSession,
+    tenant_id: int,
+    actions: list,
+) -> None:
+    """验证 actions 中的 template_id 属于同一 tenant 且 channel_type 匹配"""
+    if not actions:
+        return
+
+    from apps.rule.models import NotificationTemplate, NotificationChannel
+
+    for action in actions:
+        template_id = None
+        channel_id = None
+
+        if isinstance(action, str):
+            # 旧格式: "1" -> 纯渠道ID，无需验证
+            continue
+        elif isinstance(action, dict):
+            # 新格式: {"channel_id": 1, "template_id": 5}
+            channel_id = action.get("channel_id")
+            template_id = action.get("template_id")
+        elif hasattr(action, "channel_id"):
+            channel_id = action.channel_id
+            template_id = getattr(action, "template_id", None)
+
+        if template_id is None:
+            continue
+
+        # 查询模板
+        result = await db.execute(
+            select(NotificationTemplate).where(
+                NotificationTemplate.id == template_id,
+                NotificationTemplate.tenant_id == str(tenant_id),
+                NotificationTemplate.is_active == True,
+            )
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template {template_id} not found or not accessible"
+            )
+
+        # 查询渠道
+        if channel_id:
+            channel_result = await db.execute(
+                select(NotificationChannel).where(
+                    NotificationChannel.id == channel_id,
+                    NotificationChannel.tenant_id == str(tenant_id),
+                )
+            )
+            channel = channel_result.scalar_one_or_none()
+            if not channel:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Channel {channel_id} not found"
+                )
+            # 验证 channel_type 匹配
+            if template.channel_type != channel.channel_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Template {template_id} (type: {template.channel_type}) does not match channel {channel_id} (type: {channel.channel_type})"
+                )
 
 
 # ============ 规则管理 ============
@@ -67,6 +134,9 @@ async def create_rule(
     db: AsyncSession = Depends(get_db),
 ):
     """创建规则"""
+    # 验证 actions 中的 template_id
+    await _validate_template_ids(db, tenant_id, request.actions)
+
     rule = AlertRule(
         tenant_id=str(tenant_id),
         name=request.name,
@@ -167,6 +237,10 @@ async def update_rule(
     db: AsyncSession = Depends(get_db),
 ):
     """更新规则"""
+    # 验证 actions 中的 template_id
+    if request.actions is not None:
+        await _validate_template_ids(db, tenant_id, request.actions)
+
     result = await db.execute(
         select(AlertRule).where(
             AlertRule.id == rule_id,
