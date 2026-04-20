@@ -93,7 +93,7 @@ class AlertResponse(AlertBase):
     silenced_until: Optional[datetime] = Field(None, description="静默截止时间")
     escalation_count: int = Field(..., description="升级次数")
     matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则列表")
-    notification_channels: List[str] = Field(default_factory=list, description="通知渠道列表")
+    notification_channels: List[Any] = Field(default_factory=list, description="通知渠道列表")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
 
