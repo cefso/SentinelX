@@ -729,8 +729,12 @@ class RuleEngine:
             for action in actions:
                 if isinstance(action, int):
                     channel_ids.append(action)
-                elif isinstance(action, dict) and action.get("type") == "notify":
-                    channel_ids.extend(action.get("channels", []))
+                elif isinstance(action, dict):
+                    if action.get("type") == "notify":
+                        channel_ids.extend(action.get("channels", []))
+                    elif action.get("channel_id"):
+                        # 新格式: {"channel_id": 1, "template_id": 5}
+                        channel_ids.append(action.get("channel_id"))
 
         logger.info("rule_matched", alert_id=alert.id, trace_id=trace_id, matched_count=len(matched_rules), channel_ids=channel_ids)
 
