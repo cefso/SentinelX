@@ -65,7 +65,7 @@ export const FIELD_CONFIGS: FieldConfig[] = [
     fixedLabels: Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s.label])),
   },
   {
-    value: 'source',
+    value: 'source_id',
     label: '告警来源',
     type: 'enum',
     operators: ENUM_OPERATORS,

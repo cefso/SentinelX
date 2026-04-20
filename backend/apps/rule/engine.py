@@ -109,6 +109,10 @@ class RuleEngine:
             # 获取字段值
             actual_value = self._get_field_value(alert_data, field)
 
+            # 类型处理：source_id 字段需要字符串转整数比较
+            if field == "source_id" and isinstance(expected_value, str) and expected_value.isdigit():
+                expected_value = int(expected_value)
+
             # 执行比较
             evaluator = self.OPERATORS.get(operator)
             if not evaluator:
