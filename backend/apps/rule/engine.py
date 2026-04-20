@@ -730,27 +730,16 @@ class RuleEngine:
         for rule in matched_rules:
             actions = rule.actions or []
             for action in actions:
-                if isinstance(action, str):
-                    # 旧格式: "1" -> 纯渠道ID，无 template_id
-                    ch_id = int(action)
-                    if ch_id not in channel_ids:
-                        channel_ids.append(ch_id)
-                    if ch_id not in template_map:
-                        template_map[ch_id] = None
+                if isinstance(action, int):
+                    channel_ids.append(action)
                 elif isinstance(action, dict):
-                    ch_id = action.get("channel_id")
-                    tmpl_id = action.get("template_id")
-                    if ch_id is not None and ch_id not in channel_ids:
-                        channel_ids.append(ch_id)
-                    if ch_id is not None:
-                        template_map[ch_id] = tmpl_id
-                elif isinstance(action, int):
-                    if action not in channel_ids:
-                        channel_ids.append(action)
-                    if action not in template_map:
-                        template_map[action] = None
+                    if action.get("type") == "notify":
+                        channel_ids.extend(action.get("channels", []))
+                    elif action.get("channel_id"):
+                        # 新格式: {"channel_id": 1, "template_id": 5}
+                        channel_ids.append(action.get("channel_id"))
 
-        logger.info("rule_matched", alert_id=alert.id, trace_id=trace_id, matched_count=len(matched_rules), channel_ids=channel_ids, template_map=template_map)
+        logger.info("rule_matched", alert_id=alert.id, trace_id=trace_id, matched_count=len(matched_rules), channel_ids=channel_ids)
 
         matched_rules_info = [{"id": r.id, "name": r.name, "priority": r.priority} for r in matched_rules]
         await _add_step("rule_match_result", "规则匹配", "success", {

@@ -2,10 +2,25 @@
 SentinelX - 规则Schema
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 from pydantic import BaseModel, Field
 
 from apps.alert.schemas import AlertResponse
+
+
+# ============ 规则动作Schema ============
+
+class RuleAction(BaseModel):
+    """规则动作
+
+    新格式: {"channel_id": 1, "template_id": 5}
+    channel_id: 必填，渠道ID
+    template_id: 可选，不填则使用渠道默认模板
+
+    兼容旧格式: 字符串 "1"（纯渠道ID）
+    """
+    channel_id: int = Field(..., description="通知渠道ID")
+    template_id: Optional[int] = Field(None, description="通知模板ID，不填则使用渠道默认模板")
 
 
 # ============ 规则条件Schema ============
@@ -52,7 +67,7 @@ class RuleBase(BaseModel):
     description: Optional[str] = None
     conditions: List[Condition] = []
     condition_mode: str = Field("and", pattern="^(and|or)$")
-    actions: List[RuleAction | str] = []  # 动作，如通知渠道ID列表; 支持新旧格式
+    actions: List[Union[str, Dict[str, Any]]] = []  # 动作，支持旧格式 "1" 和新格式 {"channel_id": 1, "template_id": 5}
     priority: int = Field(0, ge=0, le=1000)
     suppress_config: Optional[Dict[str, Any]] = None
     aggregate_config: Optional[Dict[str, Any]] = None
@@ -271,6 +286,7 @@ class TemplateResponse(TemplateBase):
 class FieldValueItem(BaseModel):
     """字段值项"""
     value: str = Field(..., description="字段值")
+    name: Optional[str] = Field(None, description="显示名称")
     count: int = Field(..., description="出现次数")
 
 
