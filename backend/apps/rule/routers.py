@@ -821,24 +821,25 @@ async def _get_source_field_values(
     limit: int,
     offset: int,
 ) -> FieldValuesResponse:
-    """从 alert_sources 表获取 source 字段值"""
+    """从 alert_sources 表获取 source 字段值（按 AlertSource.id 分组）"""
     tenant_str = str(tenant_id)
 
-    # 构建查询
+    # 构建查询 - 使用 id 作为 value（对应 Alert.source_id）
     query = (
         select(
-            AlertSource.code.label("value"),
+            AlertSource.id.label("value"),
+            AlertSource.name.label("name"),
             func.count(AlertSource.id).label("count"),
         )
         .where(AlertSource.tenant_id == tenant_str)
     )
 
     if search:
-        query = query.where(AlertSource.code.ilike(f"%{search}%"))
+        query = query.where(AlertSource.name.ilike(f"%{search}%"))
 
     query = (
         query
-        .group_by(AlertSource.code)
+        .group_by(AlertSource.id, AlertSource.name)
         .order_by(func.count(AlertSource.id).desc())
     )
 
@@ -852,7 +853,7 @@ async def _get_source_field_values(
     result = await db.execute(query)
     rows = result.all()
 
-    values = [FieldValueItem(value=row.value, count=row.count) for row in rows]
+    values = [FieldValueItem(value=str(row.value), name=row.name, count=row.count) for row in rows]
     return FieldValuesResponse(field="source", values=values, total=total, limit=limit, offset=offset)
 
 

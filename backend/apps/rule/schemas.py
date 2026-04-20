@@ -240,6 +240,7 @@ class TemplateResponse(TemplateBase):
 class FieldValueItem(BaseModel):
     """字段值项"""
     value: str = Field(..., description="字段值")
+    name: Optional[str] = Field(None, description="显示名称")
     count: int = Field(..., description="出现次数")
 
 

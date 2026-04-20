@@ -20,6 +20,7 @@ def alert_to_dict(alert: "Alert") -> dict:
         "severity": alert.severity,
         "status": alert.status,
         "source": alert.source,
+        "source_id": alert.source_id,
         # 云产品字段
         "namespace": alert.namespace,
         "instance_id": alert.instance_id,

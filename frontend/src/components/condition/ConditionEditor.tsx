@@ -358,8 +358,8 @@ export function ConditionEditor({
           <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
             {sources.map((s: any) => {
               const checked = Array.isArray(condition.value)
-                ? condition.value.includes(s.source_type)
-                : condition.value === s.source_type
+                ? condition.value.includes(String(s.id))
+                : condition.value === String(s.id)
               return (
                 <label key={s.id} className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -368,9 +368,9 @@ export function ConditionEditor({
                     onChange={() => {
                       const current = Array.isArray(condition.value) ? condition.value : []
                       if (checked) {
-                        updateCondition(index, 'value', current.filter((v: string) => v !== s.source_type))
+                        updateCondition(index, 'value', current.filter((v: string) => v !== String(s.id)))
                       } else {
-                        updateCondition(index, 'value', [...current, s.source_type])
+                        updateCondition(index, 'value', [...current, String(s.id)])
                       }
                     }}
                     className="w-4 h-4"
@@ -499,7 +499,7 @@ export function ConditionEditor({
           >
             <option value="">全部</option>
             {sources.map((s: any) => (
-              <option key={s.id} value={s.source_type}>{s.name}</option>
+              <option key={s.id} value={String(s.id)}>{s.name}</option>
             ))}
           </select>
         )
