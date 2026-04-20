@@ -5,6 +5,8 @@ import { ConditionEditor, Condition } from '@/components/condition/ConditionEdit
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { generateCode } from '@/utils/code'
 import { RulesLayout } from '@/components/rules/RulesLayout'
+import { HelpCircle } from 'lucide-react'
+import { NotificationTemplate } from './templates'
 
 export type { Condition }
 
@@ -15,7 +17,7 @@ interface Rule {
   description?: string
   conditions: Condition[]
   condition_mode: string
-  actions: string[]
+  actions: (string | { channel_id: number; template_id?: number })[]
   priority: number
   is_active: boolean
   suppress_config?: any
@@ -208,6 +210,19 @@ export function RulesPage() {
 }
 
 export function RuleModal({ rule, onClose, onSuccess, initialConditions, showModal: _showModal }: { rule: Rule | null; onClose: () => void; onSuccess: () => void; initialConditions?: Condition[]; showModal?: boolean }) {
+  // Channel -> template mapping: { channelId: templateId | null }
+  const [channelTemplateMap, setChannelTemplateMap] = useState<Record<number, number | null>>(() => {
+    // Initialize from existing rule actions (new format)
+    const map: Record<number, number | null> = {}
+    const actions = rule?.actions || []
+    for (const action of actions) {
+      if (typeof action === 'object' && action !== null) {
+        map[action.channel_id] = action.template_id ?? null
+      }
+    }
+    return map
+  })
+
   const [formData, setFormData] = useState({
     name: rule?.name || '',
     code: rule?.code || '',
@@ -215,7 +230,18 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     condition_mode: rule?.condition_mode || 'and',
     priority: rule?.priority || 0,
     conditions: rule?.conditions || initialConditions || [{ field: 'severity', operator: 'in', value: ['critical'] }],
-    selected_channels: (rule?.actions || []).filter((a: any) => typeof a === 'number').map((a: any) => Number(a)) || [],
+    selected_channels: (() => {
+      const channels: number[] = []
+      const actions = rule?.actions || []
+      for (const action of actions) {
+        if (typeof action === 'object' && action !== null) {
+          channels.push(action.channel_id)
+        } else if (typeof action === 'string' || typeof action === 'number') {
+          channels.push(Number(action))
+        }
+      }
+      return channels
+    })(),
   })
 
   // 监听 initialConditions 变化
@@ -230,6 +256,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
     queryFn: () => apiClient.get('/channels', { is_active: true }),
   })
 
+  const { data: templates = [] } = useQuery<NotificationTemplate[]>({
+    queryKey: ['templates'],
+    queryFn: () => apiClient.get('/templates'),
+  })
+
   const createMutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/rules', data),
     onSuccess,
@@ -242,7 +273,11 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const actions = formData.selected_channels.map(String)
+    // New action format with channel->template mapping
+    const actions = formData.selected_channels.map((channelId: number) => ({
+      channel_id: channelId,
+      template_id: channelTemplateMap[channelId] ?? undefined,
+    }))
     const payload = {
       name: formData.name,
       code: rule ? formData.code : generateCode(formData.name),
@@ -330,30 +365,73 @@ export function RuleModal({ rule, onClose, onSuccess, initialConditions, showMod
               {channels.length === 0 ? (
                 <div className="text-sm text-gray-500">暂无可用渠道，请先创建通知渠道</div>
               ) : (
-                channels.map((channel: any) => (
-                  <label key={channel.id} className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.selected_channels.includes(channel.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({
-                            ...formData,
-                            selected_channels: [...formData.selected_channels, channel.id]
-                          })
-                        } else {
-                          setFormData({
-                            ...formData,
-                            selected_channels: formData.selected_channels.filter((id: number) => id !== channel.id)
-                          })
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <span className="font-medium">{channel.name}</span>
-                    <span className="text-sm text-gray-500">({channel.channel_type})</span>
-                  </label>
-                ))
+                channels.map((channel: any) => {
+                  const isSelected = formData.selected_channels.includes(channel.id)
+                  const channelTemplates = (templates as NotificationTemplate[]).filter(
+                    (t: NotificationTemplate) => t.channel_type === channel.channel_type
+                  )
+                  const selectedTemplateId = channelTemplateMap[channel.id] ?? null
+
+                  return (
+                    <div key={channel.id} className="p-2 border rounded hover:bg-gray-50 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({
+                                ...formData,
+                                selected_channels: [...formData.selected_channels, channel.id],
+                              })
+                            } else {
+                              setFormData({
+                                ...formData,
+                                selected_channels: formData.selected_channels.filter((id: number) => id !== channel.id),
+                              })
+                              const newMap = { ...channelTemplateMap }
+                              delete newMap[channel.id]
+                              setChannelTemplateMap(newMap)
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="font-medium">{channel.name}</span>
+                        <span className="text-sm text-gray-500">({channel.channel_type})</span>
+                      </div>
+
+                      {isSelected && channelTemplates.length > 0 && (
+                        <div className="ml-6 flex items-center gap-2">
+                          <span className="text-xs text-gray-500">模板:</span>
+                          <select
+                            value={selectedTemplateId ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setChannelTemplateMap({
+                                ...channelTemplateMap,
+                                [channel.id]: val ? Number(val) : null,
+                              })
+                            }}
+                            className="text-sm px-2 py-1 border rounded"
+                          >
+                            <option value="">使用渠道默认</option>
+                            {channelTemplates.map((t: NotificationTemplate) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}{t.is_default ? ' (默认)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {!selectedTemplateId && (
+                            <span className="text-xs text-gray-400 flex items-center gap-0.5" title="未选择模板时使用渠道的默认模板">
+                              <HelpCircle className="w-3 h-3" />
+                              将使用渠道默认模板
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>

@@ -29,6 +29,7 @@ class AlertProcessResult:
     aggregated_info: Optional[Dict[str, Any]] = None
     matched_rules: List[AlertRule] = field(default_factory=list)
     channel_ids: List[int] = field(default_factory=list)
+    template_map: Dict[int, int | None] = field(default_factory=dict)  # channel_id -> template_id
     trace_steps: List[Dict] = field(default_factory=list)
 
 
@@ -202,9 +203,10 @@ class RuleEngine:
         result.aggregated_info = aggregated_info
 
         # 4. 规则匹配（获取通知渠道）
-        matched_rules, channel_ids, match_result = await self._match_rules(db, alert, trace_id, add_trace_step)
+        matched_rules, channel_ids, template_map, match_result = await self._match_rules(db, alert, trace_id, add_trace_step)
         result.matched_rules = matched_rules
         result.channel_ids = channel_ids
+        result.template_map = template_map
 
         # 合并所有 trace_steps
         result.trace_steps = dedup_result + suppress_result + agg_result + match_result
@@ -697,9 +699,9 @@ class RuleEngine:
         alert: Alert,
         trace_id: str,
         add_trace_step: Callable = None
-    ) -> tuple[List[AlertRule], List[int], List[Dict]]:
+    ) -> tuple[List[AlertRule], List[int], Dict[int, int | None], List[Dict]]:
         """规则匹配
-        返回: (匹配的规则列表, 通知渠道ID列表, trace步骤)
+        返回: (匹配的规则列表, 通知渠道ID列表, {channel_id: template_id}, trace步骤)
         """
         trace_steps = []
 
@@ -722,8 +724,9 @@ class RuleEngine:
         # 使用规则引擎匹配
         matched_rules = await self.match_rules(db, alert.tenant_id, alert_data)
 
-        # 从匹配的规则中提取通知渠道ID
+        # 从匹配的规则中提取通知渠道ID 和 template_map
         channel_ids = []
+        template_map: Dict[int, int | None] = {}
         for rule in matched_rules:
             actions = rule.actions or []
             for action in actions:
@@ -743,6 +746,7 @@ class RuleEngine:
             "description": f"匹配到 {len(matched_rules)} 条规则",
             "matched_rules": matched_rules_info,
             "channel_ids": channel_ids,
+            "template_map": template_map,
         })
 
-        return matched_rules, channel_ids, trace_steps
+        return matched_rules, channel_ids, template_map, trace_steps

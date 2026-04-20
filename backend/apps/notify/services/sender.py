@@ -26,17 +26,21 @@ class NotificationService:
         self,
         alert: Alert,
         channel_ids: List[int],
+        template_map: Dict[int, int | None] = None,
         trace_id: str = None
     ) -> Dict[int, tuple[bool, Optional[str]]]:
         """
         发送告警通知
         返回: {channel_id: (是否成功, 错误信息)}
         """
+        if template_map is None:
+            template_map = {}
         results = {}
 
         # 获取配置的渠道
         for channel_id in channel_ids:
-            result = await self._send_to_channel(alert, channel_id, trace_id)
+            template_id = template_map.get(channel_id)
+            result = await self._send_to_channel(alert, channel_id, template_id, trace_id)
             results[channel_id] = result
 
         return results
@@ -45,6 +49,7 @@ class NotificationService:
         self,
         alert: Alert,
         channel_id: int,
+        template_id: int | None = None,
         trace_id: str = None
     ) -> tuple[bool, Optional[str]]:
         """发送到单个渠道"""
@@ -61,18 +66,32 @@ class NotificationService:
             return False, f"Channel {channel_id} is inactive"
 
         # 获取模板
-        template_result = await self.db.execute(
-            select(NotificationTemplate).where(
-                NotificationTemplate.channel_type == channel.channel_type,
-                NotificationTemplate.is_active == True,
-                or_(
-                    NotificationTemplate.tenant_id == str(alert.tenant_id),
-                    NotificationTemplate.is_default == True
+        template_content = None
+        if template_id is not None:
+            # 指定了 template_id，直接查询该模板
+            template_result = await self.db.execute(
+                select(NotificationTemplate).where(
+                    NotificationTemplate.id == template_id,
+                    NotificationTemplate.is_active == True,
                 )
-            ).order_by(NotificationTemplate.is_default.desc())
-        )
-        template = template_result.scalar_one_or_none()
-        template_content = template.content if template else None
+            )
+            template = template_result.scalar_one_or_none()
+            if template:
+                template_content = template.content
+        else:
+            # 未指定 template_id，使用渠道默认模板
+            template_result = await self.db.execute(
+                select(NotificationTemplate).where(
+                    NotificationTemplate.channel_type == channel.channel_type,
+                    NotificationTemplate.is_active == True,
+                    or_(
+                        NotificationTemplate.tenant_id == str(alert.tenant_id),
+                        NotificationTemplate.is_default == True
+                    )
+                ).order_by(NotificationTemplate.is_default.desc())
+            )
+            template = template_result.scalar_one_or_none()
+            template_content = template.content if template else None
 
         # 记录
         record = NotificationRecord(

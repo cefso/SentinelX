@@ -204,7 +204,7 @@ class NotificationListResponse(BaseModel):
 
 class TemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
-    code: str = Field(..., min_length=1, max_length=64)
+    code: Optional[str] = Field(None, min_length=1, max_length=64)
     channel_type: str = Field(..., description="适用渠道类型")
     content: str = Field(..., min_length=1, description="模板内容 (支持 Jinja2 变量)")
     variables: List[str] = Field(default_factory=list, description="变量列表")

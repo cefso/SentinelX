@@ -93,7 +93,7 @@ class AlertResponse(AlertBase):
     silenced_until: Optional[datetime] = Field(None, description="静默截止时间")
     escalation_count: int = Field(..., description="升级次数")
     matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则列表")
-    notification_channels: List[str] = Field(default_factory=list, description="通知渠道列表")
+    notification_channels: List[Any] = Field(default_factory=list, description="通知渠道列表")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
 
@@ -210,7 +210,7 @@ class AlertAggregateMembersResponse(BaseModel):
     """聚合告警组成员响应"""
     items: List[AlertAggregateMemberItem] = Field(default_factory=list, description="成员列表")
     total: int = Field(..., description="总数")
-    group_key: str = Field(..., description="聚合组Key")
+    group_key: Optional[str] = Field(None, description="聚合组Key")
     alert_count: int = Field(..., description="组内告警数")
     page: int = Field(..., description="当前页")
     page_size: int = Field(..., description="每页数量")
