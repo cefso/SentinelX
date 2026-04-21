@@ -36,11 +36,17 @@ class DingTalkChannel(NotificationChannel):
             # 格式化消息
             content = self.format_message(alert, template)
 
-            # 构建消息
+            # 构建 markdown 消息
+            # 解析 content，格式：标题\n---\n内容
+            parts = content.split("\n---\n", 1)
+            title = parts[0] if parts else "告警通知"
+            text = parts[1] if len(parts) > 1 else content
+
             message = {
-                "msgtype": "text",
-                "text": {
-                    "content": content,
+                "msgtype": "markdown",
+                "markdown": {
+                    "title": title,
+                    "text": text,
                 },
             }
 
@@ -79,15 +85,10 @@ class DingTalkChannel(NotificationChannel):
         return timestamp, sign
 
     def get_default_template(self) -> str:
-        return """【{{severity.upper()}}】{{title}}
+        return """### 【{{severity.upper()}}】{{title}}
+---
+> 来源: **{{source}}** | 时间: **{{fired_at}}** | ID: **{{alert_id}}** | 触发: **{{fire_count}}次**
 
-🔔 告警详情
-━━━━━━━━━━━━━━━━━
-📌 来源: {{source}}
-⏰ 时间: {{fired_at}}
-🔢 告警ID: {{alert_id}}
-🔥 触发次数: {{fire_count}}
-
-📝 内容:
+**内容:**
 {{content}}
 """
