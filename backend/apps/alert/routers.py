@@ -1045,14 +1045,22 @@ async def diagnose_alert(
     # 构建响应
     flow_steps = []
     for i, step in enumerate(steps):
+        step_data = step.get("data", {})
+        # details 可能是 JSON 字符串，需要解析
+        details = step_data.get("details")
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except (json.JSONDecodeError, TypeError):
+                details = None
         flow_steps.append(TraceStep(
             step=i + 1,
             type=step.get("type", ""),
             title=_get_step_title(step.get("type", "")),
-            description=step.get("data", {}).get("description", ""),
+            description=step_data.get("description", ""),
             status=step.get("status", "success"),
-            details=step.get("data", {}).get("details"),
-            reason=step.get("data", {}).get("reason"),
+            details=details,
+            reason=step_data.get("reason"),
             time=step.get("time"),
         ))
 
