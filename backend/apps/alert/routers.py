@@ -1005,6 +1005,20 @@ async def update_alert(
 
 # ============ 告警诊断 ============
 
+def _decode_redis_value(val):
+    """将 Redis 返回的 bytes 值转换为字符串"""
+    if isinstance(val, bytes):
+        return val.decode("utf-8")
+    return val
+
+
+def _decode_redis_dict(d: dict) -> dict:
+    """将 Redis 返回的 dict 中的 bytes 值转换为字符串"""
+    return {k.decode("utf-8") if isinstance(k, bytes) else k:
+            v.decode("utf-8") if isinstance(v, bytes) else v
+            for k, v in d.items()}
+
+
 @router.get("/alerts/diagnose/{trace_id}", response_model=DiagnosisResponse)
 async def diagnose_alert(
     trace_id: str,
@@ -1013,17 +1027,20 @@ async def diagnose_alert(
 ):
     """诊断模式 - 根据Trace ID查看告警处理流程"""
     trace_key = f"trace:{trace_id}"
-    trace_data = await redis.hgetall(trace_key)
+    trace_data_raw = await redis.hgetall(trace_key)
 
-    if not trace_data:
+    if not trace_data_raw:
         raise HTTPException(status_code=404, detail="Trace not found")
+
+    # 转换 bytes 为字符串
+    trace_data = _decode_redis_dict(trace_data_raw)
 
     if trace_data.get("tenant_id") != str(tenant_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 获取步骤
     steps_raw = await redis.lrange(f"{trace_key}:steps", 0, -1)
-    steps = [json.loads(s) for s in steps_raw]
+    steps = [json.loads(_decode_redis_value(s)) for s in steps_raw]
 
     # 构建响应
     flow_steps = []
