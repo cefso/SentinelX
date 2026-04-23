@@ -11,6 +11,36 @@
 - [x] Phase 5: 运维闭环与Agent (完成)
 - [x] Phase 6: 优化与上线 (完成)
 
+## 最近改进
+
+### 代码质量优化 (2026-04)
+
+**安全修复**:
+- 修复 callback/router.py 缺失 import 导致的 NameError
+- 修复 Jinja2 模板语法错误 (`{{severity.upper()}}`)
+- 修复 rule/engine.py 引用不存在的 AlertAggregateGroup 字段
+- 为 Redis/MQ 单例添加 asyncio.Lock 防止竞态条件
+- 改进 AES 加密盐值 (SHA-256 派生)
+- 管理员密码改为环境变量配置 (`DEFAULT_ADMIN_PASSWORD`)
+
+**前端重构**:
+- 修复 Token 刷新竞态条件 (refreshQueue 模式)
+- 修复 SystemAdminRoute 重定向竞态
+- 修复 switchTenant 使用原生 fetch() 绕过 API 拦截器
+
+**文件拆分**:
+| 原始文件 | 行数 | 拆分后 |
+|---------|------|--------|
+| `settings.tsx` | ~1500 | 8 个 Tab 组件 (Profile/Security/Tenant/ApiKeys/Users/Ai/About) |
+| `alerts/detail.tsx` | ~750 | Timeline/Labels/AIActions 子组件 |
+| `channels.tsx` | ~730 | ChannelList + ChannelModal |
+| `ConditionEditor.tsx` | ~689 | 提取 ValueInput 组件 |
+| `templates.tsx` | ~600 | 提取共享常量 |
+
+**共享组件**:
+- `components/common/Badges.tsx` - SeverityBadge/StatusBadge
+- `components/condition/ValueInput.tsx` - 条件值输入
+
 ## 特性
 
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
@@ -110,7 +140,7 @@ npm run dev
 |------|------|
 | 租户 Slug | `sentinelx` |
 | 用户名 | `admin` |
-| 密码 | `Admin@123456` |
+| 密码 | `Admin@123456` (可通过 `DEFAULT_ADMIN_PASSWORD` 环境变量修改) |
 
 > **注意**: 登录时使用 **用户名** `admin`，不是邮箱。
 
@@ -390,6 +420,7 @@ SentinelX 支持用户属于多个租户，通过 UserTenant 关联表实现 N:M
 # 应用配置
 APP_NAME=SentinelX
 DEBUG=true
+DEFAULT_ADMIN_PASSWORD=Admin@123456  # 默认管理员密码（首次启动时使用）
 
 # 数据库
 DB_HOST=localhost
