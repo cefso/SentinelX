@@ -3,6 +3,9 @@ SentinelX - 回调处理
 处理来自外部系统的告警回调
 """
 import secrets
+import hmac
+import hashlib
+import base64
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 

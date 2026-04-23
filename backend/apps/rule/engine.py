@@ -636,7 +636,6 @@ class RuleEngine:
                     # 更新聚合组计数
                     group.alert_count += 1
                     group.last_alert_at = datetime.now(timezone.utc)
-                    group.latest_alert_id = alert.id
                     await db.commit()
 
                     logger.info("aggregate_joined", alert_id=alert.id, trace_id=trace_id, group_key=group_key, parent_id=existing_id)
@@ -663,8 +662,6 @@ class RuleEngine:
                 alert_count=1,
                 fired_at=alert.fired_at,
                 last_alert_at=alert.fired_at,
-                first_alert_id=alert.id,
-                latest_alert_id=alert.id,
             )
             db.add(new_group)
             await db.flush()

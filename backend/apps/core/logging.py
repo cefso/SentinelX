@@ -89,9 +89,9 @@ def _configure_root_logger():
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(_get_log_level())
 
-    if settings.LOG_FORMAT == "console" or _is_debug():
+    if settings.LOG_FORMAT == "json" and not _is_debug():
         console_handler.setFormatter(logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","message":"%(message)s"}'
         ))
     else:
         console_handler.setFormatter(logging.Formatter(

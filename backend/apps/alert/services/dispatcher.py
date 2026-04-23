@@ -347,7 +347,7 @@ class AlertDispatcher:
                     await dispatcher.dispatch(alert, trace_id)
                     await mq.ack("alerts_raw", msg.msg_id)
             except Exception as e:
-                logger.error("alert_consumer_error", error=str(e))
+                logger.error("alert_consumer_error", error=str(e), exc_info=True)
                 if msg:
                     await mq.nack("alerts_raw", msg.msg_id, vt=60)
                 await asyncio.sleep(1)

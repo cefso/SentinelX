@@ -74,7 +74,7 @@ class NotificationChannel(ABC):
 
     def get_default_template(self) -> str:
         """获取默认模板"""
-        return """【{{severity.upper}}】{{title}}
+        return """【{{severity.upper()}}】{{title}}
 
 来源: {{source}}
 时间: {{fired_at}}

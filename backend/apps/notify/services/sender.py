@@ -157,28 +157,7 @@ class NotificationService:
 
             return False, str(e)
 
-    async def retry_failed_notifications(self, max_retries: int = 3) -> int:
-        """重试失败的通知"""
-        result = await self.db.execute(
-            select(NotificationRecord).where(
-                NotificationRecord.status == "failed",
-                NotificationRecord.retry_count < max_retries
-            )
-        )
-        records = result.scalars().all()
-
-        retried = 0
-        for record in records:
-            # 获取告警
-            alert_result = await self.db.execute(
-                select(Alert).where(Alert.id == record.alert_id)
-            )
-            alert = alert_result.scalar_one_or_none()
-            if not alert:
-                continue
-
-            success, _ = await self._send_to_channel(alert, record.channel_id)
-            if success:
-                retried += 1
-
-        return retried
+    # TODO: 此方法暂未被调用，待接入定时重试任务时启用
+    # async def retry_failed_notifications(self, max_retries: int = 3) -> int:
+    #     """重试失败的通知"""
+    #     ...
