@@ -2,6 +2,7 @@
 SentinelX - 消息队列管理
 支持 PGMQ (PostgreSQL原生消息队列)
 """
+import asyncio
 import json
 import logging
 from typing import Optional, Any, List, Dict
@@ -88,19 +89,22 @@ class MessageQueue:
 
 # 全局MQ实例
 _mq_instance: Optional[MessageQueue] = None
+_mq_lock: asyncio.Lock = asyncio.Lock()
 
 
-def get_mq() -> MessageQueue:
-    """获取MQ实例"""
+async def get_mq() -> MessageQueue:
+    """获取MQ实例（带锁保护）"""
     global _mq_instance
     if _mq_instance is None:
-        _mq_instance = MessageQueue(settings.SYNC_DATABASE_URL)
+        async with _mq_lock:
+            if _mq_instance is None:
+                _mq_instance = MessageQueue(settings.SYNC_DATABASE_URL)
     return _mq_instance
 
 
 async def get_mq_async() -> MessageQueue:
     """异步获取MQ实例"""
-    mq = get_mq()
+    mq = await get_mq()
     if not mq._queues_initialized:
         await mq.init_queues()
     return mq

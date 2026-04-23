@@ -18,6 +18,8 @@ const paramsSerializer = (params: Record<string, any>) => {
 
 class ApiClient {
   private client: AxiosInstance
+  private isRefreshing = false
+  private refreshQueue: Array<() => void> = []
 
   constructor() {
     this.client = axios.create({
@@ -59,22 +61,44 @@ class ApiClient {
         const originalRequest = error.config
 
         if (error.response?.status === 401 && originalRequest) {
+          // 如果已经在刷新中，将请求加入队列等待
+          if (this.isRefreshing) {
+            return new Promise((resolve) => {
+              this.refreshQueue.push(() => {
+                resolve(this.client(originalRequest))
+              })
+            })
+          }
+
+          this.isRefreshing = true
+
           const refreshToken = this.getRefreshToken()
           // 如果没有 refresh token，直接登出
           if (!refreshToken) {
+            this.isRefreshing = false
             useAuthStore.getState().logout()
             window.location.href = '/login'
             return Promise.reject(error)
           }
+
           try {
             const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
               refresh_token: refreshToken,
             })
             useAuthStore.getState().setTokens(response.data.access_token, response.data.refresh_token)
+
+            // 重试队列中的所有请求
+            this.refreshQueue.forEach(cb => cb())
+            this.refreshQueue = []
+
             return this.client(originalRequest)
           } catch {
+            // 刷新失败，清空队列并登出
+            this.refreshQueue = []
             useAuthStore.getState().logout()
             window.location.href = '/login'
+          } finally {
+            this.isRefreshing = false
           }
         }
 

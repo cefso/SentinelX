@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
 import { generateCode } from '@/utils/code'
 import { toast } from '@/stores/toast-store'
+import { Modal } from '@/components/common/Modal'
 
 interface AlertSourceConfig {
   id: string
@@ -513,12 +514,13 @@ function SourceModal({
     : `${webhookBaseUrl}/${formData.source_type}/${formData.client_id}`
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-auto">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">{source ? '编辑告警源' : '添加告警源'}</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title={source ? '编辑告警源' : '添加告警源'}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">名称</label>
             <input
@@ -617,7 +619,6 @@ function SourceModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

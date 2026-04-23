@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient, CloudMetricRecord, CloudProductMetricInput } from '@/services/api'
 import { EditModal } from './components/EditModal'
 import { Loader2, Plus, RefreshCw, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Modal } from '@/components/common/Modal'
 
 const PAGE_SIZE = 20
 
@@ -470,13 +471,13 @@ export function CloudMetricsPage() {
 
       {/* Batch Delete Confirmation */}
       {showBatchDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-md p-6">
-            <h3 className="text-lg font-bold mb-4">确认批量删除</h3>
-            <p className="text-gray-600 mb-6">
-              确定要删除选中的 {selectedIds.size} 条指标吗？此操作无法撤销。
-            </p>
-            <div className="flex justify-end gap-3">
+        <Modal
+          open={showBatchDeleteConfirm}
+          onOpenChange={setShowBatchDeleteConfirm}
+          title="确认批量删除"
+          size="sm"
+          footer={
+            <>
               <button
                 onClick={() => setShowBatchDeleteConfirm(false)}
                 className="px-4 py-2 border rounded-md hover:bg-gray-50"
@@ -491,9 +492,13 @@ export function CloudMetricsPage() {
                 {batchDeleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                 确认删除
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="text-gray-600">
+            确定要删除选中的 {selectedIds.size} 条指标吗？此操作无法撤销。
+          </p>
+        </Modal>
       )}
     </div>
   )

@@ -37,6 +37,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DEBUG: "true"
+      DEFAULT_ADMIN_PASSWORD: "Admin@123456"
     depends_on:
       postgres:
         condition: service_healthy

@@ -28,14 +28,6 @@ class EscalationService:
         3: 60,   # 第3级等待60分钟
     }
 
-    # 升级等待时间配置（秒）
-    ESCALATION_WAITS_S = {
-        0: 300,   # 第0级等待5分钟
-        1: 600,   # 第1级等待10分钟
-        2: 1800,  # 第2级等待30分钟
-        3: 3600,  # 第3级等待60分钟
-    }
-
     def __init__(self, db: AsyncSession):
         self.db = db
 

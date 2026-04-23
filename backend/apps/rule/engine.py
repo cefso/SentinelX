@@ -67,12 +67,14 @@ class RuleEngine:
         )
         rules = result.scalars().all()
 
+        logger.debug("rules_evaluating", tenant_id=tenant_id, total_rules=len(rules))
+
         matched = []
         for rule in rules:
             conditions = rule.conditions or []
             condition_mode = rule.condition_mode or "and"
 
-            is_match, reason, _ = self.evaluate_conditions(
+            is_match, reason, eval_details = self.evaluate_conditions(
                 conditions,
                 condition_mode,
                 alert_data
@@ -83,8 +85,11 @@ class RuleEngine:
                 rule.match_count += 1
                 matched.append(rule)
                 logger.info("rule_matched", rule_id=rule.id, rule_name=rule.name)
+            else:
+                logger.debug("rule_not_matched", rule_id=rule.id, rule_name=rule.name, reason=reason)
 
         await db.commit()
+        logger.debug("rules_evaluation_complete", tenant_id=tenant_id, matched_count=len(matched))
         return matched
 
     def evaluate_conditions(
@@ -185,6 +190,7 @@ class RuleEngine:
         """
         统一处理告警：去重、抑制、聚合、规则匹配
         """
+        logger.debug("process_alert_start", alert_id=alert.id, trace_id=trace_id, tenant_id=alert.tenant_id)
         result = AlertProcessResult()
 
         # 1. 去重检查
@@ -636,7 +642,6 @@ class RuleEngine:
                     # 更新聚合组计数
                     group.alert_count += 1
                     group.last_alert_at = datetime.now(timezone.utc)
-                    group.latest_alert_id = alert.id
                     await db.commit()
 
                     logger.info("aggregate_joined", alert_id=alert.id, trace_id=trace_id, group_key=group_key, parent_id=existing_id)
@@ -663,8 +668,6 @@ class RuleEngine:
                 alert_count=1,
                 fired_at=alert.fired_at,
                 last_alert_at=alert.fired_at,
-                first_alert_id=alert.id,
-                latest_alert_id=alert.id,
             )
             db.add(new_group)
             await db.flush()

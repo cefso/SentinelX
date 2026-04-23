@@ -79,20 +79,14 @@ export const useAuthStore = create<AuthState>()(
           throw new Error('Not authenticated')
         }
 
-        const response = await fetch('/api/v1/auth/switch-tenant', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({ tenant_id: tenantId })
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to switch tenant')
-        }
-
-        const data = await response.json()
+        // 使用动态 import 避免循环依赖
+        const { apiClient } = await import('@/services/api')
+        const data = await apiClient.post<{
+          access_token: string
+          refresh_token: string
+          user?: User
+          tenants?: Tenant[]
+        }>('/auth/switch-tenant', { tenant_id: tenantId })
 
         // 更新 tokens
         set({

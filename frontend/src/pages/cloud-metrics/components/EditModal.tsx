@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient, CloudMetricRecord, CloudProductMetricInput } from '@/services/api'
 import { Loader2 } from 'lucide-react'
+import { Modal } from '@/components/common/Modal'
 
 interface EditModalProps {
   metric: CloudMetricRecord | null
@@ -53,12 +54,13 @@ export function EditModal({ metric, onClose, onSuccess }: EditModalProps) {
   const isPending = createMutation.isPending || updateMutation.isPending
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-auto">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">{metric ? '编辑指标' : '创建指标'}</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title={metric ? '编辑指标' : '创建指标'}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">命名空间</label>
@@ -187,7 +189,6 @@ export function EditModal({ metric, onClose, onSuccess }: EditModalProps) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

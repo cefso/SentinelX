@@ -19,6 +19,7 @@ interface AlertSource {
   created_at: string
 }
 import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint } from 'lucide-react'
+import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 
 export function AlertsPage() {
   const navigate = useNavigate()
@@ -462,40 +463,3 @@ function StatCard({
   )
 }
 
-function SeverityBadge({ severity }: { severity: string }) {
-  const styles: Record<string, string> = {
-    critical: 'bg-red-100 text-red-800',
-    high: 'bg-orange-100 text-orange-800',
-    medium: 'bg-yellow-100 text-yellow-800',
-    low: 'bg-blue-100 text-blue-800',
-    info: 'bg-gray-100 text-gray-800',
-  }
-
-  return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded ${styles[severity] || styles.info}`}>
-      {severity.toUpperCase()}
-    </span>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    firing: 'bg-red-100 text-red-800',
-    resolved: 'bg-green-100 text-green-800',
-    suppressed: 'bg-gray-100 text-gray-800',
-    acknowledged: 'bg-blue-100 text-blue-800',
-  }
-
-  const labels: Record<string, string> = {
-    firing: '触发中',
-    resolved: '已恢复',
-    suppressed: '已抑制',
-    acknowledged: '已确认',
-  }
-
-  return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${styles[status] || styles.firing}`}>
-      {labels[status] || status}
-    </span>
-  )
-}

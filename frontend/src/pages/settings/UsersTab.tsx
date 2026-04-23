@@ -1,0 +1,756 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/stores/auth-store'
+import { Plus, Check, X } from 'lucide-react'
+import { Modal } from '@/components/common/Modal'
+
+interface Role {
+  id: number
+  name: string
+  code: string
+  tenant_id?: number
+  scope?: string
+}
+
+interface Tenant {
+  id: number
+  name: string
+  slug: string
+  max_alerts: number
+  max_users: number
+  max_rules: number
+  max_channels: number
+  alert_qps: number
+  is_active: boolean
+  config: Record<string, any>
+}
+
+interface UserItem {
+  id: number
+  username: string
+  email: string
+  phone?: string
+  is_superuser: boolean
+  is_active: boolean
+  is_approved: boolean
+  role_id?: number
+  created_at: string
+}
+
+export function UsersTab() {
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null)
+
+  // 租户管理员或系统管理员可以管理用户
+  const canManageUsers = user?.is_superuser === true || user?.is_system === true
+
+  const { data: users = [] } = useQuery<UserItem[]>({
+    queryKey: ['users'],
+    queryFn: () => apiClient.get('/users'),
+  })
+
+  const { data: roles = [] } = useQuery<Role[]>({
+    queryKey: ['roles'],
+    queryFn: () => apiClient.get('/roles'),
+  })
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
+      apiClient.post(`/users/${id}/activate?is_active=${is_active}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+
+  const removeUserMutation = useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-lg font-medium mb-1">用户管理</h3>
+            <p className="text-sm text-gray-500">管理租户内的用户账户</p>
+          </div>
+          {canManageUsers && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+              添加用户
+            </button>
+          )}
+        </div>
+
+        {users.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            暂无用户
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-gray-500 border-b">
+                <th className="pb-3 font-medium">用户名</th>
+                <th className="pb-3 font-medium">邮箱</th>
+                <th className="pb-3 font-medium">手机号</th>
+                <th className="pb-3 font-medium">角色</th>
+                <th className="pb-3 font-medium">状态</th>
+                {canManageUsers && <th className="pb-3 font-medium text-right">操作</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="py-3 font-medium">{u.username}</td>
+                  <td className="py-3 text-sm text-gray-500">{u.email}</td>
+                  <td className="py-3 text-sm text-gray-500">{u.phone || '-'}</td>
+                  <td className="py-3">
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      u.is_superuser ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {u.is_superuser ? '管理员' : '用户'}
+                    </span>
+                  </td>
+                  <td className="py-3">
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {u.is_active ? '活跃' : '禁用'}
+                    </span>
+                  </td>
+                  {canManageUsers && (
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={() => setEditingUser(u)}
+                        disabled={u.id === user?.id}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 mr-2 disabled:opacity-50"
+                      >
+                        调整权限
+                      </button>
+                      <button
+                        onClick={() => toggleActiveMutation.mutate({ id: u.id, is_active: !u.is_active })}
+                        disabled={toggleActiveMutation.isPending || u.id === user?.id}
+                        className={`px-2 py-1 text-xs rounded mr-2 ${
+                          u.is_active
+                            ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                            : 'bg-green-100 text-green-800 hover:bg-green-200'
+                        } disabled:opacity-50`}
+                      >
+                        {u.is_active ? '禁用' : '启用'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`确定要从本租户移除用户 ${u.username} 吗？`)) {
+                            removeUserMutation.mutate(u.id)
+                          }
+                        }}
+                        disabled={removeUserMutation.isPending || u.id === user?.id}
+                        className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200 disabled:opacity-50"
+                      >
+                        移除
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            setShowCreateModal(false)
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+          }}
+        />
+      )}
+
+      {editingUser && (
+        <EditUserRoleModal
+          user={editingUser}
+          roles={roles}
+          onClose={() => setEditingUser(null)}
+          onSuccess={() => {
+            setEditingUser(null)
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    phone: '',
+    password: '',
+    role_id: '' as number | '',
+  })
+  const [error, setError] = useState('')
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof formData) => apiClient.post('/users', {
+      username: data.username,
+      email: data.email,
+      phone: data.phone || undefined,
+      password: data.password,
+    }),
+    onSuccess: () => {
+      onSuccess()
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.detail || '创建失败')
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    createMutation.mutate(formData)
+  }
+
+  return (
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="添加用户"
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+            <input
+              type="text"
+              required
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入用户名"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入邮箱"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">手机号（可选）</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入手机号"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="请输入密码（至少8位）"
+            />
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {createMutation.isPending ? '创建中...' : '创建'}
+            </button>
+          </div>
+        </form>
+    </Modal>
+  )
+}
+
+function EditUserRoleModal({ user, roles, onClose, onSuccess }: { user: UserItem; roles: Role[]; onClose: () => void; onSuccess: () => void }) {
+  const queryClient = useQueryClient()
+  const { data: tenants = [] } = useQuery<Tenant[]>({
+    queryKey: ['all-tenants'],
+    queryFn: () => apiClient.get('/tenants/public'),
+  })
+  const [tenantSelections, setTenantSelections] = useState<{ tenantId: number; roleId: number | null }[]>([])
+  const [error, setError] = useState('')
+
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ userId, tenantRoles }: { userId: number; tenantRoles: { tenant_id: number; role_id: number }[] }) =>
+      apiClient.put(`/users/${userId}/role`, { tenant_roles: tenantRoles }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      onSuccess()
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.detail || '更新失败')
+    },
+  })
+
+  const handleTenantSelectionChange = (tenantId: number, checked: boolean) => {
+    if (checked) {
+      setTenantSelections([...tenantSelections, { tenantId, roleId: null }])
+    } else {
+      setTenantSelections(tenantSelections.filter(tr => tr.tenantId !== tenantId))
+    }
+  }
+
+  const handleTenantRoleChange = (tenantId: number, roleId: number) => {
+    setTenantSelections(tenantSelections.map(tr =>
+      tr.tenantId === tenantId ? { ...tr, roleId } : tr
+    ))
+  }
+
+  const tenantRoles = roles.filter(r => r.tenant_id != null)
+
+  const canSubmit = tenantSelections.length > 0 && tenantSelections.every(tr => tr.roleId !== null)
+
+  return (
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="调整用户权限"
+      size="lg"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => {
+              updateRoleMutation.mutate({
+                userId: user.id,
+                tenantRoles: tenantSelections.filter(tr => tr.roleId !== null).map(tr => ({
+                  tenant_id: tr.tenantId,
+                  role_id: tr.roleId as number,
+                })),
+              })
+            }}
+            disabled={!canSubmit || updateRoleMutation.isPending}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {updateRoleMutation.isPending ? '更新中...' : '确认'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="font-medium">{user.username}</div>
+            <div className="text-sm text-gray-500">{user.email}</div>
+          </div>
+
+          {/* 租户角色 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">分配租户角色</label>
+            {tenants.length === 0 ? (
+              <p className="text-sm text-gray-500">暂无可用租户</p>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600 w-10"></th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">租户</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">角色</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {tenants.map((tenant) => {
+                      const selection = tenantSelections.find(tr => tr.tenantId === tenant.id)
+                      const isSelected = !!selection
+                      const availableRoles = tenantRoles.filter(r => r.tenant_id === tenant.id)
+                      return (
+                        <tr key={tenant.id} className={isSelected ? 'bg-blue-50' : ''}>
+                          <td className="px-4 py-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => handleTenantSelectionChange(tenant.id, e.target.checked)}
+                              className="w-4 h-4 rounded border-gray-300"
+                            />
+                          </td>
+                          <td className="px-4 py-2 font-medium text-gray-900">{tenant.name}</td>
+                          <td className="px-4 py-2">
+                            <select
+                              value={selection?.roleId || ''}
+                              onChange={(e) => handleTenantRoleChange(tenant.id, Number(e.target.value))}
+                              disabled={!isSelected}
+                              className="w-full px-2 py-1 border rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                            >
+                              <option value="">先选择租户</option>
+                              {availableRoles.map((r) => (
+                                <option key={r.id} value={r.id}>{r.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-2">
+              勾选租户后选择对应的角色
+            </p>
+          </div>
+
+          {error && (
+            <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
+              {error}
+            </div>
+          )}
+        </div>
+    </Modal>
+  )
+}
+
+// ============ 待审批用户 Tab (系统管理员) ============
+interface PendingUser {
+  id: number
+  username: string
+  email: string
+  phone?: string
+  requested_tenant_id?: number
+  requested_tenant_name?: string
+  created_at: string
+}
+
+interface TenantRoleSelection {
+  tenantId: number
+  roleId: number | null
+}
+
+export function PendingUsersTab() {
+  const queryClient = useQueryClient()
+  const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
+  const [selectedSystemRole, setSelectedSystemRole] = useState<number | null>(null)
+  const [tenantSelections, setTenantSelections] = useState<TenantRoleSelection[]>([])
+
+  const { data: pendingUsers = [], isLoading } = useQuery<PendingUser[]>({
+    queryKey: ['admin', 'pending-users'],
+    queryFn: () => apiClient.get('/admin/users/pending'),
+  })
+
+  const { data: roles = [] } = useQuery<Role[]>({
+    queryKey: ['roles'],
+    queryFn: () => apiClient.get('/roles'),
+  })
+
+  const { data: tenants = [] } = useQuery<Tenant[]>({
+    queryKey: ['all-tenants'],
+    queryFn: () => apiClient.get('/tenants/public'),
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: ({ userId, systemRoleId, tenantRoles }: { userId: number; systemRoleId?: number; tenantRoles: TenantRoleSelection[] }) =>
+      apiClient.post(`/admin/users/${userId}/approve`, {
+        system_role_id: systemRoleId || undefined,
+        tenant_roles: tenantRoles.filter(tr => tr.roleId !== null).map(tr => ({
+          tenant_id: tr.tenantId,
+          role_id: tr.roleId,
+        })),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pending-users'] })
+      resetForm()
+    },
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: (userId: number) =>
+      apiClient.post(`/admin/users/${userId}/reject`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pending-users'] })
+    },
+  })
+
+  const resetForm = () => {
+    setSelectedUser(null)
+    setSelectedSystemRole(null)
+    setTenantSelections([])
+  }
+
+  const handleApprove = (user: PendingUser) => {
+    setSelectedUser(user)
+    setSelectedSystemRole(null)
+    // 预填充用户申请的租户
+    if (user.requested_tenant_id) {
+      setTenantSelections([{ tenantId: user.requested_tenant_id, roleId: null }])
+    } else {
+      setTenantSelections([])
+    }
+  }
+
+  const confirmApprove = () => {
+    if (!selectedUser) return
+    // 至少要选择一个系统角色或租户角色
+    if (!selectedSystemRole && tenantSelections.length === 0) return
+    // 租户角色必须都已选择角色
+    if (tenantSelections.some(tr => tr.roleId === null)) return
+
+    approveMutation.mutate({
+      userId: selectedUser.id,
+      systemRoleId: selectedSystemRole || undefined,
+      tenantRoles: tenantSelections,
+    })
+  }
+
+  const handleReject = (userId: number) => {
+    if (confirm('确定要拒绝该用户的注册申请吗？')) {
+      rejectMutation.mutate(userId)
+    }
+  }
+
+  const handleTenantSelectionChange = (tenantId: number, checked: boolean) => {
+    if (checked) {
+      setTenantSelections([...tenantSelections, { tenantId, roleId: null }])
+    } else {
+      setTenantSelections(tenantSelections.filter(tr => tr.tenantId !== tenantId))
+    }
+  }
+
+  const handleTenantRoleChange = (tenantId: number, roleId: number) => {
+    setTenantSelections(tenantSelections.map(tr =>
+      tr.tenantId === tenantId ? { ...tr, roleId } : tr
+    ))
+  }
+
+  const tenantRoles = roles.filter(r => r.tenant_id != null)
+  const systemRoles = roles.filter(r => r.tenant_id === null && r.scope === 'system')
+
+  const canApprove = (selectedSystemRole !== null) || (tenantSelections.length > 0 && tenantSelections.every(tr => tr.roleId !== null))
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium mb-1">待审批用户</h3>
+          <p className="text-sm text-gray-500">系统管理员 - 审批新用户注册申请</p>
+        </div>
+
+        {isLoading ? (
+          <div className="text-center py-8">加载中...</div>
+        ) : pendingUsers.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            暂无待审批用户
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-gray-500 border-b">
+                <th className="pb-3 font-medium">用户名</th>
+                <th className="pb-3 font-medium">邮箱</th>
+                <th className="pb-3 font-medium">手机号</th>
+                <th className="pb-3 font-medium">申请租户</th>
+                <th className="pb-3 font-medium">注册时间</th>
+                <th className="pb-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {pendingUsers.map((u) => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="py-3 font-medium">{u.username}</td>
+                  <td className="py-3 text-sm text-gray-500">{u.email}</td>
+                  <td className="py-3 text-sm text-gray-500">{u.phone || '-'}</td>
+                  <td className="py-3">
+                    {u.requested_tenant_name ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                        {u.requested_tenant_name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-sm">未指定</span>
+                    )}
+                  </td>
+                  <td className="py-3 text-sm text-gray-500">
+                    {new Date(u.created_at).toLocaleString('zh-CN')}
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      onClick={() => handleApprove(u)}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 mr-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      批准
+                    </button>
+                    <button
+                      onClick={() => handleReject(u.id)}
+                      disabled={rejectMutation.isPending}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" />
+                      拒绝
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* 审批 Modal */}
+      {selectedUser && (
+        <Modal
+          open={!!selectedUser}
+          onOpenChange={(open) => { if (!open) resetForm() }}
+          title="批准用户注册"
+          size="lg"
+          footer={
+            <>
+              <button
+                onClick={resetForm}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmApprove}
+                disabled={!canApprove || approveMutation.isPending}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {approveMutation.isPending ? '处理中...' : '确认批准'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="font-medium">{selectedUser.username}</div>
+                <div className="text-sm text-gray-500">{selectedUser.email}</div>
+                {selectedUser.requested_tenant_name && (
+                  <div className="text-sm text-green-600 mt-1">
+                    申请租户: {selectedUser.requested_tenant_name}
+                  </div>
+                )}
+              </div>
+
+              {/* 系统级角色 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">系统级角色（可选）</label>
+                <select
+                  value={selectedSystemRole || ''}
+                  onChange={(e) => {
+                    setSelectedSystemRole(e.target.value ? Number(e.target.value) : null)
+                    if (e.target.value) {
+                      setTenantSelections([])
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">不分配系统级角色</option>
+                  {systemRoles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                {selectedSystemRole && (
+                  <p className="text-xs text-green-600 mt-1">
+                    超级管理员拥有所有租户权限，无需单独分配租户角色
+                  </p>
+                )}
+              </div>
+
+              {/* 租户角色 */}
+              {!selectedSystemRole && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">分配租户角色</label>
+                  {tenants.length === 0 ? (
+                    <p className="text-sm text-gray-500">暂无可用租户</p>
+                  ) : (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600 w-10"></th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600">租户</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-600">角色</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {tenants.map((tenant) => {
+                            const selection = tenantSelections.find(tr => tr.tenantId === tenant.id)
+                            const isSelected = !!selection
+                            const availableRoles = tenantRoles.filter(r => r.tenant_id === tenant.id)
+                            return (
+                              <tr key={tenant.id} className={isSelected ? 'bg-blue-50' : ''}>
+                                <td className="px-4 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => handleTenantSelectionChange(tenant.id, e.target.checked)}
+                                    className="w-4 h-4 rounded border-gray-300"
+                                  />
+                                </td>
+                                <td className="px-4 py-2 font-medium text-gray-900">{tenant.name}</td>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={selection?.roleId || ''}
+                                    onChange={(e) => handleTenantRoleChange(tenant.id, Number(e.target.value))}
+                                    disabled={!isSelected}
+                                    className="w-full px-2 py-1 border rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                  >
+                                    <option value="">先选择租户</option>
+                                    {availableRoles.map((r) => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    勾选租户后选择对应的角色，至少选择一个租户及其角色
+                  </p>
+                </div>
+              )}
+
+              {approveMutation.error && (
+                <div className="text-red-600 text-sm bg-red-50 p-3 rounded">
+                  {approveMutation.error.message || '操作失败'}
+                </div>
+              )}
+            </div>
+        </Modal>
+      )}
+    </div>
+  )
+}

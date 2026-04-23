@@ -3,6 +3,8 @@ SentinelX - 初始数据种子脚本
 应用启动时自动创建默认租户和超级管理员
 """
 import asyncio
+import os
+import secrets
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +18,16 @@ logger = structlog.get_logger()
 DEFAULT_TENANT_SLUG = "sentinelx"
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_EMAIL = "admin@sentinelx.local"
-DEFAULT_ADMIN_PASSWORD = "Admin@123456"
+
+
+def _get_admin_password() -> str:
+    """获取管理员密码：优先环境变量，否则随机生成"""
+    password = os.getenv("DEFAULT_ADMIN_PASSWORD")
+    if password:
+        return password
+    password = secrets.token_urlsafe(16)
+    logger.warning("default_admin_password_generated", password=password)
+    return password
 
 
 async def seed_default_data():
@@ -120,11 +131,12 @@ async def seed_default_data():
             await session.flush()
 
             # 创建超级管理员用户 (系统管理员)
+            admin_password = _get_admin_password()
             admin_user = User(
                 username=DEFAULT_ADMIN_USERNAME,
                 email=DEFAULT_ADMIN_EMAIL,
                 phone="+86-13800138000",
-                password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
+                password_hash=hash_password(admin_password),
                 is_system=True,  # 系统管理员
                 is_superuser=False,  # 在多租户模型中，is_superuser由UserTenant关联决定
                 is_active=True,
@@ -156,7 +168,7 @@ async def seed_default_data():
                 tenant=DEFAULT_TENANT_SLUG,
                 admin=DEFAULT_ADMIN_EMAIL,
             )
-            logger.info("default_password", password=DEFAULT_ADMIN_PASSWORD)
+            logger.info("default_password", password=admin_password)
 
         except Exception as e:
             logger.error("seed_data_error", error=str(e))
