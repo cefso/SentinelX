@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { apiClient } from '@/services/api'
+import { registerSchema, type RegisterFormData } from '@/schemas'
 
 interface PublicTenant {
   id: number
@@ -9,43 +12,41 @@ interface PublicTenant {
 }
 
 export function RegisterPage() {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    phone: '',
-    tenant_id: '' as number | '',
-  })
   const [tenants, setTenants] = useState<PublicTenant[]>([])
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  // 获取公开租户列表
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      username: '',
+      email: '',
+      password: '',
+      phone: '',
+    },
+  })
+
   useEffect(() => {
     apiClient.get<{ tenants: PublicTenant[] }>('/tenants/public')
       .then(res => setTenants(res.tenants || []))
       .catch(() => setTenants([]))
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: RegisterFormData) => {
     setError('')
-    setLoading(true)
-
     try {
       await apiClient.post('/auth/register', {
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-        phone: formData.phone || undefined,
-        tenant_id: formData.tenant_id || undefined,
+        ...data,
+        phone: data.phone || undefined,
+        tenant_id: data.tenant_id || undefined,
       })
       setSuccess(true)
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -79,7 +80,7 @@ export function RegisterPage() {
           <h2 className="text-center text-3xl font-bold">注册账号</h2>
           <p className="mt-2 text-center text-gray-600">SentinelX 综合告警平台</p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           {error && (
             <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded">{error}</div>
           )}
@@ -89,13 +90,12 @@ export function RegisterPage() {
             </label>
             <input
               type="text"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              {...register('username')}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-              required
-              minLength={3}
-              maxLength={64}
             />
+            {errors.username && (
+              <p className="mt-1 text-sm text-red-500">{errors.username.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -103,11 +103,12 @@ export function RegisterPage() {
             </label>
             <input
               type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              {...register('email')}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-              required
             />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -115,12 +116,12 @@ export function RegisterPage() {
             </label>
             <input
               type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              {...register('password')}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-              required
-              minLength={8}
             />
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -128,8 +129,7 @@ export function RegisterPage() {
             </label>
             <input
               type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              {...register('phone')}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
@@ -139,8 +139,7 @@ export function RegisterPage() {
                 申请租户（可选）
               </label>
               <select
-                value={formData.tenant_id}
-                onChange={(e) => setFormData({ ...formData, tenant_id: e.target.value ? Number(e.target.value) : '' })}
+                {...register('tenant_id', { valueAsNumber: true })}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
               >
                 <option value="">不申请特定租户</option>
@@ -157,10 +156,10 @@ export function RegisterPage() {
           )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={isSubmitting}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
           >
-            {loading ? '提交中...' : '注册'}
+            {isSubmitting ? '提交中...' : '注册'}
           </button>
           <div className="text-center text-sm">
             <span className="text-gray-600">已有账号？</span>

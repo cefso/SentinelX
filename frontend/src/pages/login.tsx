@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuthStore } from '@/stores/auth-store'
 import { apiClient } from '@/services/api'
 import { toast } from '@/stores/toast-store'
 import { Eye, EyeOff } from 'lucide-react'
+import { loginSchema, type LoginFormData } from '@/schemas'
 
 interface LoginResponse {
   access_token: string
@@ -31,38 +34,34 @@ interface LoginResponse {
 }
 
 export function LoginPage() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { setTokens, setUser, setTenants } = useAuthStore()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: '',
+      password: '',
+    },
+  })
 
+  const onSubmit = async (data: LoginFormData) => {
     try {
-      const response = await apiClient.post<LoginResponse>('/auth/login', { username, password })
-
-      // 设置 tokens
+      const response = await apiClient.post<LoginResponse>('/auth/login', data)
       setTokens(response.access_token, response.refresh_token)
-
-      // 设置用户信息
       setUser(response.user)
-
-      // 设置租户列表
       setTenants(response.tenants)
-
       navigate('/')
     } catch (err: unknown) {
-      console.error('Login error:', err)
       const errorMessage =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         '登录失败，请检查用户名和密码'
       toast.error(errorMessage)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -73,18 +72,19 @@ export function LoginPage() {
           <h2 className="text-center text-3xl font-bold">SentinelX</h2>
           <p className="mt-2 text-center text-gray-600">综合告警平台</p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div>
             <label className="block text-sm font-medium text-gray-700">
               用户名
             </label>
             <input
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              {...register('username')}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-              required
             />
+            {errors.username && (
+              <p className="mt-1 text-sm text-red-500">{errors.username.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -93,10 +93,8 @@ export function LoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                {...register('password')}
                 className="mt-1 block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                required
               />
               <button
                 type="button"
@@ -106,13 +104,16 @@ export function LoginPage() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={isSubmitting}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
           >
-            {loading ? '登录中...' : '登录'}
+            {isSubmitting ? '登录中...' : '登录'}
           </button>
           <div className="text-center text-sm">
             <span className="text-gray-600">没有账户？</span>
