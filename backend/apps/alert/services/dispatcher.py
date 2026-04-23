@@ -4,7 +4,7 @@ SentinelX - 告警分发器
 """
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 import structlog
 
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from redis.asyncio import Redis
 
-from apps.alert.models import Alert, AlertHistory
+from apps.alert.models import Alert, AlertHistory, AlertTrace
 from apps.rule.models import AlertRule, NotificationChannel
 from apps.rule.engine import RuleEngine
 from apps.core.database import AsyncSessionLocal
@@ -242,8 +242,47 @@ class AlertDispatcher:
         await self._finish_trace(trace_id, "failed", error_reason=error)
 
     async def _finish_trace(self, trace_id: str, status: str, **kwargs):
-        """完成追踪"""
+        """完成追踪 - 持久化到 PG 并更新 Redis"""
         trace_key = f"trace:{trace_id}"
+
+        # 从 Redis 获取完整数据并持久化到 PostgreSQL
+        trace_data_raw = await self.redis.hgetall(trace_key)
+        if trace_data_raw:
+            trace_data = {
+                k.decode("utf-8") if isinstance(k, bytes) else k:
+                v.decode("utf-8") if isinstance(v, bytes) else v
+                for k, v in trace_data_raw.items()
+            }
+
+            # 获取步骤链
+            steps_raw = await self.redis.lrange(f"{trace_key}:steps", 0, -1)
+            steps = [
+                json.loads(s.decode("utf-8") if isinstance(s, bytes) else s)
+                for s in steps_raw
+            ]
+
+            # 持久化到 PostgreSQL
+            try:
+                alert_trace = AlertTrace(
+                    trace_id=trace_id,
+                    alert_id=trace_data.get("alert_id"),
+                    tenant_id=trace_data.get("tenant_id"),
+                    final_status=status,
+                    deduction_reason=kwargs.get("deduction_reason"),
+                    suppress_reason=kwargs.get("suppress_reason"),
+                    matched_rules=json.loads(trace_data.get("matched_rules", "[]")),
+                    notification_channels=json.loads(trace_data.get("notification_channels", "[]")),
+                    steps_chain=steps,
+                    expired_at=datetime.now(timezone.utc) + timedelta(days=7),
+                )
+                self.db.add(alert_trace)
+                await self.db.commit()
+                logger.info("trace_persisted_to_pg", trace_id=trace_id, status=status)
+            except Exception as e:
+                logger.error("trace_persist_failed", trace_id=trace_id, error=str(e))
+                await self.db.rollback()
+
+        # 更新 Redis 状态
         update_data = {"final_status": str(status)}
         for k, v in kwargs.items():
             update_data[str(k)] = str(v) if v is not None else ""
