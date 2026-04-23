@@ -5,6 +5,7 @@ import { ConditionEditor, Condition } from '@/components/condition/ConditionEdit
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
 import { SuppressConfigForm, suppressConfigToPayload, DEFAULT_SUPPRESS_CONFIG, SuppressConfig } from '@/components/strategy/SuppressConfigForm'
+import { Modal } from '@/components/common/Modal'
 
 interface StrategyRule {
   id: number
@@ -233,12 +234,13 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <div className="p-6 border-b border-rose-100 bg-rose-50/50">
-          <h2 className="text-xl font-bold text-rose-900">{rule ? '编辑抑制规则' : '创建抑制规则'}</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title={rule ? '编辑抑制规则' : '创建抑制规则'}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
             <input
@@ -312,7 +314,6 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

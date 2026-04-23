@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import { FileText, Plus, Edit2, Trash2, Eye, X } from 'lucide-react'
+import { FileText, Plus, Edit2, Trash2, Eye } from 'lucide-react'
 import { CHANNEL_TYPES, CHANNEL_TYPE_LABELS, VARIABLE_DOCS, EXAMPLE_ALERT, renderJinja2Preview } from './templates/constants'
+import { Modal } from '@/components/common/Modal'
 
 export interface NotificationTemplate {
   id: number
@@ -231,23 +232,33 @@ function TemplateModal({
   const varDocs = VARIABLE_DOCS[channelType] || VARIABLE_DOCS.dingtalk
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-blue-100 bg-blue-50/50 shrink-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-blue-900">
-              {template ? '编辑模板' : '创建模板'}
-            </h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X className="w-5 h-5" />
+    <>
+      <Modal
+        open={true}
+        onOpenChange={(open) => { if (!open) onClose() }}
+        title={template ? '编辑模板' : '创建模板'}
+        size="xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border rounded-md hover:bg-gray-50"
+            >
+              取消
             </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-auto">
-          <div className="p-6 space-y-4">
+            <button
+              type="submit"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              form="template-form"
+            >
+              {template ? '保存' : '创建'}
+            </button>
+          </>
+        }
+      >
+        <form id="template-form" onSubmit={handleSubmit} className="space-y-4">
             {/* Name and channel type */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -331,51 +342,29 @@ function TemplateModal({
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t flex justify-end gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {template ? '保存' : '创建'}
-            </button>
-          </div>
-        </form>
-      </div>
+          </form>
+      </Modal>
 
       {/* Preview modal */}
       {showPreview && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="font-bold">模板预览</h3>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 overflow-auto">
-              <div className="text-xs text-gray-400 mb-2">示例告警数据:</div>
-              <div className="bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 mb-4 overflow-x-auto whitespace-pre">
+        <Modal
+          open={showPreview}
+          onOpenChange={setShowPreview}
+          title="模板预览"
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="text-xs text-gray-400 mb-2">示例告警数据:</div>
+            <div className="bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 mb-4 overflow-x-auto whitespace-pre">
 {JSON.stringify(EXAMPLE_ALERT, null, 2)}
-              </div>
-              <div className="text-xs text-gray-400 mb-2">渲染结果:</div>
-              <pre className="bg-blue-50 rounded p-4 text-sm whitespace-pre-wrap break-all border border-blue-100">
-                {previewContent || '(空)'}
-              </pre>
             </div>
+            <div className="text-xs text-gray-400 mb-2">渲染结果:</div>
+            <pre className="bg-blue-50 rounded p-4 text-sm whitespace-pre-wrap break-all border border-blue-100">
+              {previewContent || '(空)'}
+            </pre>
           </div>
-        </div>
+        </Modal>
       )}
-    </div>
+    </>
   )
 }

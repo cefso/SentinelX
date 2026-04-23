@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { Plus, Check, X } from 'lucide-react'
+import { Modal } from '@/components/common/Modal'
 
 interface Role {
   id: number
@@ -223,12 +224,13 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-md">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">添加用户</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="添加用户"
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
             <input
@@ -291,8 +293,7 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -336,12 +337,38 @@ function EditUserRoleModal({ user, roles, onClose, onSuccess }: { user: UserItem
   const canSubmit = tenantSelections.length > 0 && tenantSelections.every(tr => tr.roleId !== null)
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b sticky top-0 bg-white">
-          <h2 className="text-xl font-bold">调整用户权限</h2>
-        </div>
-        <div className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="调整用户权限"
+      size="lg"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => {
+              updateRoleMutation.mutate({
+                userId: user.id,
+                tenantRoles: tenantSelections.filter(tr => tr.roleId !== null).map(tr => ({
+                  tenant_id: tr.tenantId,
+                  role_id: tr.roleId as number,
+                })),
+              })
+            }}
+            disabled={!canSubmit || updateRoleMutation.isPending}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {updateRoleMutation.isPending ? '更新中...' : '确认'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="font-medium">{user.username}</div>
             <div className="text-sm text-gray-500">{user.email}</div>
@@ -409,31 +436,7 @@ function EditUserRoleModal({ user, roles, onClose, onSuccess }: { user: UserItem
             </div>
           )}
         </div>
-        <div className="p-6 border-t flex justify-end gap-3 sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            取消
-          </button>
-          <button
-            onClick={() => {
-              updateRoleMutation.mutate({
-                userId: user.id,
-                tenantRoles: tenantSelections.filter(tr => tr.roleId !== null).map(tr => ({
-                  tenant_id: tr.tenantId,
-                  role_id: tr.roleId as number,
-                })),
-              })
-            }}
-            disabled={!canSubmit || updateRoleMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {updateRoleMutation.isPending ? '更新中...' : '确认'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -623,12 +626,30 @@ export function PendingUsersTab() {
 
       {/* 审批 Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white">
-              <h2 className="text-xl font-bold">批准用户注册</h2>
-            </div>
-            <div className="p-6 space-y-4">
+        <Modal
+          open={!!selectedUser}
+          onOpenChange={(open) => { if (!open) resetForm() }}
+          title="批准用户注册"
+          size="lg"
+          footer={
+            <>
+              <button
+                onClick={resetForm}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmApprove}
+                disabled={!canApprove || approveMutation.isPending}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {approveMutation.isPending ? '处理中...' : '确认批准'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-lg">
                 <div className="font-medium">{selectedUser.username}</div>
                 <div className="text-sm text-gray-500">{selectedUser.email}</div>
@@ -728,23 +749,7 @@ export function PendingUsersTab() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t flex justify-end gap-3 sticky bottom-0 bg-white">
-              <button
-                onClick={resetForm}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmApprove}
-                disabled={!canApprove || approveMutation.isPending}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {approveMutation.isPending ? '处理中...' : '确认批准'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

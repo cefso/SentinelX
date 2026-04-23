@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { toast } from '@/stores/toast-store'
+import { Modal } from '@/components/common/Modal'
 
 export function ApiKeysTab() {
   const queryClient = useQueryClient()
@@ -114,12 +115,28 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-md">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">创建 API Key</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="创建 API Key"
+      size="md"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={createMutation.isPending}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            form="create-api-key-form"
+          >
+            创建
+          </button>
+        </>
+      }
+    >
+      <form id="create-api-key-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">名称</label>
             <input
@@ -145,20 +162,7 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
               placeholder="留空表示永久有效"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              创建
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

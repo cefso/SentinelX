@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { generateCode } from '@/utils/code'
+import { Modal } from '@/components/common/Modal'
 
 interface Channel {
   id: number
@@ -68,12 +69,13 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-auto">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">{channel ? '编辑渠道' : '创建渠道'}</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title={channel ? '编辑渠道' : '创建渠道'}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">渠道名称</label>
             <input
@@ -280,7 +282,6 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { ChannelModal, CHANNEL_TYPES } from './ChannelModal'
+import { Modal } from '@/components/common/Modal'
 
 interface Channel {
   id: number
@@ -395,45 +396,21 @@ export function ChannelsPage() {
       )}
 
       {showTestModal && testChannel && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-md">
-            <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">测试发送 - {testChannel.name}</h2>
-              <p className="text-sm text-gray-500 mt-1">渠道类型: {testChannel.channel_type}</p>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  测试消息内容 (可选)
-                </label>
-                <textarea
-                  value={testContent}
-                  onChange={(e) => setTestContent(e.target.value)}
-                  placeholder="留空将使用默认测试内容"
-                  className="w-full px-3 py-2 border rounded-md text-sm"
-                  rows={3}
-                />
-              </div>
-
-              {testResult && (
-                <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
-                  <div className="flex items-center gap-2">
-                    {testResult.success ? (
-                      <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-600 shrink-0" />
-                    )}
-                    <span className={`font-medium ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
-                      {testResult.success ? '发送成功' : '发送失败'}
-                    </span>
-                  </div>
-                  {testResult.error && (
-                    <p className="text-sm text-red-600 mt-1 ml-7">{testResult.error}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+        <Modal
+          open={showTestModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowTestModal(false)
+              setTestChannel(null)
+              setTestContent('')
+              setTestResult(null)
+            }
+          }}
+          title={`测试发送 - ${testChannel.name}`}
+          description={`渠道类型: ${testChannel.channel_type}`}
+          size="md"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => {
@@ -454,9 +431,42 @@ export function ChannelsPage() {
                 {testMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                 {testMutation.isPending ? '发送中...' : '发送测试消息'}
               </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                测试消息内容 (可选)
+              </label>
+              <textarea
+                value={testContent}
+                onChange={(e) => setTestContent(e.target.value)}
+                placeholder="留空将使用默认测试内容"
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                rows={3}
+              />
             </div>
+
+            {testResult && (
+              <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className="flex items-center gap-2">
+                  {testResult.success ? (
+                    <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  )}
+                  <span className={`font-medium ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                    {testResult.success ? '发送成功' : '发送失败'}
+                  </span>
+                </div>
+                {testResult.error && (
+                  <p className="text-sm text-red-600 mt-1 ml-7">{testResult.error}</p>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

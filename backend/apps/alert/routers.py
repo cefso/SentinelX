@@ -10,11 +10,14 @@ from typing import Optional, List, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, cast, Date
+import structlog
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.mq import get_mq_async
 from apps.core.security import verify_password
+
+logger = structlog.get_logger()
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember
 from apps.tenant.models import Tenant
@@ -532,6 +535,8 @@ async def receive_webhook_by_source(
             raw_data[key] = value
     else:
         raw_data = await request.json()
+
+    logger.debug("webhook_received", tenant_slug=tenant_slug, source_type=source_type, identifier=identifier, content_type=content_type)
 
     # 5. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)

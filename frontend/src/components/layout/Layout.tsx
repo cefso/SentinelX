@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3, FileText } from 'lucide-react'
+import { Modal } from '@/components/common/Modal'
 
 const navigation = [
   { name: '告警', href: '/alerts', icon: Bell },
@@ -303,12 +304,13 @@ function CreateTenantModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-lg">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold">创建新租户</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      open={true}
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="创建新租户"
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">租户名称</label>
             <input
@@ -389,7 +391,6 @@ function CreateTenantModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
