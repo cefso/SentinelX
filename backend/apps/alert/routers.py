@@ -1023,9 +1023,60 @@ def _decode_redis_dict(d: dict) -> dict:
 async def diagnose_alert(
     trace_id: str,
     tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
     """诊断模式 - 根据Trace ID查看告警处理流程"""
+    # 1. 先查 PostgreSQL
+    result = await db.execute(
+        select(AlertTrace).where(
+            AlertTrace.trace_id == trace_id,
+            AlertTrace.tenant_id == str(tenant_id),
+        )
+    )
+    alert_trace = result.scalar_one_or_none()
+
+    if alert_trace:
+        # 从 PostgreSQL 构建响应
+        steps = alert_trace.steps_chain or []
+        flow_steps = []
+        for i, step in enumerate(steps):
+            step_data = step.get("data", {})
+            details = step_data.get("details")
+            if isinstance(details, str):
+                try:
+                    details = json.loads(details)
+                except (json.JSONDecodeError, TypeError):
+                    details = None
+            flow_steps.append(TraceStep(
+                step=i + 1,
+                type=step.get("type", ""),
+                title=_get_step_title(step.get("type", "")),
+                description=step_data.get("description", ""),
+                status=step.get("status", "success"),
+                details=details,
+                reason=step_data.get("reason"),
+                time=step.get("time"),
+            ))
+
+        timeline = [
+            {"time": s.get("time", ""), "event": _get_step_title(s.get("type", ""))}
+            for s in steps
+        ]
+
+        return DiagnosisResponse(
+            trace_id=trace_id,
+            summary={
+                "status": alert_trace.final_status,
+                "deduction_reason": alert_trace.deduction_reason,
+                "suppress_reason": alert_trace.suppress_reason,
+            },
+            matched_rules=alert_trace.matched_rules or [],
+            flow_steps=flow_steps,
+            timeline=timeline,
+        )
+
+    # 2. Fallback 到 Redis（处理中的 trace）
     trace_key = f"trace:{trace_id}"
     trace_data_raw = await redis.hgetall(trace_key)
 
