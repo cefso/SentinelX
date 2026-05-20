@@ -58,7 +58,7 @@ jobs:
       - name: Run tests
         run: |
           cd backend
-          pytest tests/ -v --tb=short
+          pytest tests/ -v --tb=short --cov=apps --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -88,10 +88,10 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npm run type-check || true
+        run: npm run type-check
 
       - name: Lint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Build
         run: npm run build
