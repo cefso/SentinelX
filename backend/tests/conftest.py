@@ -7,6 +7,16 @@ from typing import AsyncGenerator
 
 # 设置测试环境变量
 import os
+from pathlib import Path
+
+_env_test = Path(__file__).resolve().parent.parent / ".env.test"
+if _env_test.is_file():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_test)
+    except ImportError:
+        pass
+
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("DB_PORT", "5432")
