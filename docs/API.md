@@ -129,7 +129,9 @@ X-API-Key: <WEBHOOK_API_KEY>
 Content-Type: application/json
 ```
 
-**支持的 source_type**: `prometheus`, `alertmanager`, `aliyun`, `tencent`, `huawei`, `zabbix`, `grafana`, `custom`
+**支持的 source_type**: `prometheus`, `alertmanager`, `aliyun`, `aliyun_cms`, `aliyun_cms2`, `tencent`, `huawei`, `zabbix`, `grafana`, `custom`
+
+> `grafana` 使用 Prometheus 兼容解析；`huawei` 使用通用 Custom Webhook 解析（需按标准告警字段组织 payload）。
 
 **Prometheus Alertmanager 格式**:
 ```json

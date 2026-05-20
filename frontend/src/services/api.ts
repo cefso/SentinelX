@@ -137,10 +137,23 @@ class ApiClient {
   }
 
   async getCloudMetricsMap(): Promise<Record<string, CloudMetricRecord[]>> {
-    // Fetch all active metrics (page_size=1000 should cover most use cases)
-    const response = await this.get<CloudMetricsListResponse>('/cloud-metrics', { page: 1, page_size: 100, status: 'all' })
-    const metrics = response.items
-    // Group by namespace for easy lookup
+    // 与后端 page_size 上限对齐（main 为 100；PR-1 合并后可改为 1000）
+    const pageSize = 100
+    const metrics: CloudMetricRecord[] = []
+    let page = 1
+    let total = 0
+
+    do {
+      const response = await this.get<CloudMetricsListResponse>('/cloud-metrics', {
+        page,
+        page_size: pageSize,
+        status: 'all',
+      })
+      metrics.push(...response.items)
+      total = response.total
+      page += 1
+    } while (metrics.length < total)
+
     const map: Record<string, CloudMetricRecord[]> = {}
     for (const m of metrics) {
       if (!map[m.namespace]) map[m.namespace] = []

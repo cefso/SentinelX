@@ -872,7 +872,7 @@ GitHub Actions 自动处理:
 
 #### 2. 告警未收到通知
 - 检查通知渠道是否启用，是否设置为默认渠道（无规则时的兜底渠道）
-- 检查 Redis 通知队列是否积压: `redis-cli LLEN queue:notify:1`
+- 检查 PGMQ 通知队列是否积压（PostgreSQL）: `SELECT * FROM pgmq.metrics('alerts_notify');` 或查看 `alerts_notify` 队列深度
 - 检查通知发送记录: `GET /api/v1/notifications`（status=failed 时查看 error_message）
 - 检查 Trace 诊断页面，确认步骤是否走到 "通知队列" 且状态非 `dedup_skipped`
 - 查看后端日志: `docker compose -f docker/docker-compose.yml logs -f backend | grep notification`
