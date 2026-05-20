@@ -137,7 +137,8 @@ class ApiClient {
   }
 
   async getCloudMetricsMap(): Promise<Record<string, CloudMetricRecord[]>> {
-    const pageSize = 1000
+    // 与后端 page_size 上限对齐（main 为 100；PR-1 合并后可改为 1000）
+    const pageSize = 100
     const metrics: CloudMetricRecord[] = []
     let page = 1
     let total = 0
