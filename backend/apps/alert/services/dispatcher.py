@@ -316,7 +316,8 @@ class AlertDispatcher:
         }
         await self.redis.rpush(f"{trace_key}:steps", json.dumps(step))
 
-    async def start_consumer(self, mq):
+    @staticmethod
+    async def start_consumer(mq):
         """启动告警消费 Consumer（替代 BackgroundTasks）"""
         msg = None
         while True:

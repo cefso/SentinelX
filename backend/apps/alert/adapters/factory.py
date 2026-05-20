@@ -18,11 +18,13 @@ class AdapterFactory:
     _adapters = {
         "prometheus": PrometheusAdapter,
         "alertmanager": PrometheusAdapter,
+        "grafana": PrometheusAdapter,  # Grafana 统一告警兼容 Prometheus/Alertmanager 格式
         "zabbix": ZabbixAdapter,
         "aliyun": AlibabaCloudAdapter,
         "aliyun_cms": AliyunCmsAdapter,
         "aliyun_cms2": AliyunCms2Adapter,
         "tencent": TencentCloudAdapter,
+        "huawei": CustomWebhookAdapter,  # 暂用通用解析，见文档 webhook 字段约定
         "custom": CustomWebhookAdapter,
     }
 

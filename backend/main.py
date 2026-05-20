@@ -90,9 +90,8 @@ async def lifespan(app: FastAPI):
     # 启动告警消费 Consumer
     from apps.alert.services.dispatcher import AlertDispatcher
     from apps.core.mq import get_mq_async
-    alert_dispatcher = AlertDispatcher(None, None)
     alert_consumer_task = asyncio.create_task(
-        alert_dispatcher.start_consumer(await get_mq_async())
+        AlertDispatcher.start_consumer(await get_mq_async())
     )
     logger.info("alert_consumer_started")
 
