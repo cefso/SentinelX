@@ -1144,7 +1144,7 @@ async def diagnose_alert(
 @router.get("/cloud-metrics", response_model=CloudMetricsListResponse)
 async def list_cloud_metrics(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=1000),
     product: Optional[str] = None,
     namespace: Optional[str] = None,
     status: Optional[str] = Query("active", regex="^(all|active|inactive)$"),
@@ -1217,17 +1217,65 @@ async def batch_delete_cloud_metrics(
     return {"message": f"Deleted {len(metrics)} metrics"}
 
 
-@router.get("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
-async def get_cloud_metric(
-    metric_id: int,
+@router.get("/cloud-metrics/map")
+async def get_metrics_by_namespace(
+    namespace: str,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取单个云产品指标详情"""
-    metric = await db.get(CloudProductMetric, metric_id)
-    if not metric:
-        raise HTTPException(status_code=404, detail="CloudProductMetric not found")
-    return metric
+    """获取指定 namespace 下的所有指标"""
+    result = await db.execute(
+        select(CloudProductMetric).where(
+            and_(
+                CloudProductMetric.namespace == namespace,
+                CloudProductMetric.is_active == 1,
+            )
+        ).order_by(CloudProductMetric.metric_name)
+    )
+    metrics = result.scalars().all()
+    return {
+        "namespace": namespace,
+        "metrics": [
+            {
+                "metric_name": m.metric_name,
+                "metric_desc": m.metric_desc,
+                "unit": m.unit,
+                "dimensions": m.dimensions,
+            }
+            for m in metrics
+        ]
+    }
+
+
+@router.post("/cloud-metrics/sync")
+async def sync_cloud_metrics(
+    alert_ids: Optional[List[int]] = None,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    同步云产品指标（从告警中提取）
+    - 不传 alert_ids: 从最近的告警中同步
+    - 传 alert_ids: 从指定告警中同步
+    """
+    from apps.alert.services.cloud_metrics_sync import SyncService
+
+    sync_service = SyncService(db)
+    stats = await sync_service.sync_from_alerts(alert_ids=alert_ids, limit=1000)
+    return {"message": "Sync completed", "stats": stats}
+
+
+@router.post("/cloud-metrics/sync-all")
+async def sync_all_cloud_metrics(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """全量同步：从所有告警中提取云产品指标"""
+    from apps.alert.services.cloud_metrics_sync import SyncService
+
+    sync_service = SyncService(db)
+    stats = await sync_service.sync_all()
+    return {"message": "Full sync completed", "stats": stats}
 
 
 @router.post("/cloud-metrics", response_model=CloudProductMetricResponse)
@@ -1249,6 +1297,19 @@ async def create_cloud_metric(
     db.add(metric)
     await db.commit()
     await db.refresh(metric)
+    return metric
+
+
+@router.get("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
+async def get_cloud_metric(
+    metric_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取单个云产品指标详情"""
+    metric = await db.get(CloudProductMetric, metric_id)
+    if not metric:
+        raise HTTPException(status_code=404, detail="CloudProductMetric not found")
     return metric
 
 
@@ -1286,67 +1347,6 @@ async def delete_cloud_metric(
     metric.is_active = 0
     await db.commit()
     return {"message": "CloudProductMetric deleted"}
-
-
-@router.post("/cloud-metrics/sync")
-async def sync_cloud_metrics(
-    alert_ids: Optional[List[int]] = None,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    同步云产品指标（从告警中提取）
-    - 不传 alert_ids: 从最近的告警中同步
-    - 传 alert_ids: 从指定告警中同步
-    """
-    from apps.alert.services.cloud_metrics_sync import SyncService
-
-    sync_service = SyncService(db)
-    stats = await sync_service.sync_from_alerts(alert_ids=alert_ids, limit=1000)
-    return {"message": "Sync completed", "stats": stats}
-
-
-@router.post("/cloud-metrics/sync-all")
-async def sync_all_cloud_metrics(
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """全量同步：从所有告警中提取云产品指标"""
-    from apps.alert.services.cloud_metrics_sync import SyncService
-
-    sync_service = SyncService(db)
-    stats = await sync_service.sync_all()
-    return {"message": "Full sync completed", "stats": stats}
-
-
-@router.get("/cloud-metrics/map")
-async def get_metrics_by_namespace(
-    namespace: str,
-    tenant_id: int = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """获取指定 namespace 下的所有指标"""
-    result = await db.execute(
-        select(CloudProductMetric).where(
-            and_(
-                CloudProductMetric.namespace == namespace,
-                CloudProductMetric.is_active == 1,
-            )
-        ).order_by(CloudProductMetric.metric_name)
-    )
-    metrics = result.scalars().all()
-    return {
-        "namespace": namespace,
-        "metrics": [
-            {
-                "metric_name": m.metric_name,
-                "metric_desc": m.metric_desc,
-                "unit": m.unit,
-                "dimensions": m.dimensions,
-            }
-            for m in metrics
-        ]
-    }
 
 
 def _get_step_title(step_type: str) -> str:

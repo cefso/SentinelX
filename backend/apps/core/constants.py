@@ -73,6 +73,7 @@ class AlertSourceType:
     ALERTMANAGER = "alertmanager"
     ALIYUN = "aliyun"
     ALIYUN_CMS = "aliyun_cms"   # 阿里云云监控1.0
+    ALIYUN_CMS2 = "aliyun_cms2"  # 阿里云云监控2.0
     TENCENT = "tencent"
     HUAWEI = "huawei"
     ZABBIX = "zabbix"
@@ -85,6 +86,7 @@ class AlertSourceType:
         ALERTMANAGER,
         ALIYUN,
         ALIYUN_CMS,
+        ALIYUN_CMS2,
         TENCENT,
         HUAWEI,
         ZABBIX,
@@ -99,6 +101,7 @@ class AlertSourceType:
         ALERTMANAGER: "/api/v1/webhooks/{tenant}/alertmanager",
         ALIYUN: "/api/v1/webhooks/{tenant}/aliyun",
         ALIYUN_CMS: "/api/v1/webhooks/{tenant}/aliyun_cms",
+        ALIYUN_CMS2: "/api/v1/webhooks/{tenant}/aliyun_cms2",
         TENCENT: "/api/v1/webhooks/{tenant}/tencent",
         HUAWEI: "/api/v1/webhooks/{tenant}/huawei",
         ZABBIX: "/api/v1/webhooks/{tenant}/zabbix",
