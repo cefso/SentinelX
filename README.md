@@ -420,11 +420,10 @@ JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# AI (可选)
-OPENAI_API_KEY=sk-xxx
-ANTHROPIC_API_KEY=sk-ant-xxx
-DASHSCOPE_API_KEY=sk-xxx
-AI_MODEL=gpt-4
+# AI（推荐在「系统设置 → AI设置」按租户配置，加密存于 tenant.config）
+# 以下环境变量仅作遗留兼容，告警 AI 以租户配置为准
+OPENAI_API_KEY=
+AI_MODEL=gpt-4o
 AI_PROVIDER=openai
 
 # 日志配置

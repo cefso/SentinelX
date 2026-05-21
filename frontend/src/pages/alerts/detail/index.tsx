@@ -14,7 +14,7 @@ import { formatLocalDateTime } from '@/utils/datetime'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { buildTimeline, Timeline } from './Timeline'
 import { Labels } from './Labels'
-import { AIActions } from './AIActions'
+import { useAlertAI, AIActionsButton, AIAnalysisPanel } from './AIActions'
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -83,6 +83,8 @@ export function AlertDetailPage() {
     queryFn: () => apiClient.get(`/alerts/${id}`),
     enabled: !!id,
   })
+
+  const alertAI = useAlertAI(alert)
 
   const { data: fpAlerts } = useQuery<{ items: AlertResponse[]; total: number }>({
     queryKey: ['alertsByFp', alert?.fingerprint],
@@ -212,11 +214,20 @@ export function AlertDetailPage() {
               </div>
             )}
           </div>
-          <AIActions alert={alert} />
+          <AIActionsButton
+            aiLoading={alertAI.aiLoading}
+            onAction={alertAI.handleAIAction}
+          />
         </div>
       </div>
 
-      {/* AI分析结果 - AIActions 组件内部渲染 */}
+      <AIAnalysisPanel
+        aiLoading={alertAI.aiLoading}
+        aiLoadingHint={alertAI.aiLoadingHint}
+        aiError={alertAI.aiError}
+        aiAnalysis={alertAI.aiAnalysis}
+        onClose={alertAI.clearAiResult}
+      />
 
       {/* 主要内容区域 */}
       <div className="grid grid-cols-3 gap-6">
