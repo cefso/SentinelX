@@ -112,9 +112,40 @@ class ApiClient {
     return response.data
   }
 
-  async post<T>(url: string, data?: object): Promise<T> {
-    const response = await this.client.post<T>(url, data)
+  async post<T>(url: string, data?: object, options?: { timeout?: number }): Promise<T> {
+    const response = await this.client.post<T>(url, data, {
+      timeout: options?.timeout,
+    })
     return response.data
+  }
+
+  /** 提交告警 AI 异步任务（立即返回 202 + task_id） */
+  async submitAlertAiTask(url: string, data?: object): Promise<AITaskCreateResponse> {
+    return this.post<AITaskCreateResponse>(url, data, { timeout: 15_000 })
+  }
+
+  async getAiTask(taskId: string): Promise<AITaskStatusResponse> {
+    return this.get<AITaskStatusResponse>(`/ai/tasks/${taskId}`)
+  }
+
+  /** 轮询异步任务直至完成或失败 */
+  async pollAiTask(
+    taskId: string,
+    options?: { intervalMs?: number; maxAttempts?: number; onStatus?: (status: string) => void },
+  ): Promise<AITaskStatusResponse> {
+    const intervalMs = options?.intervalMs ?? 2000
+    const maxAttempts = options?.maxAttempts ?? 120
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const task = await this.getAiTask(taskId)
+      options?.onStatus?.(task.status)
+      if (task.status === 'completed') return task
+      if (task.status === 'failed') {
+        throw new Error(task.error || 'AI任务失败')
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    }
+    throw new Error('AI分析仍在进行，请稍后刷新页面重试')
   }
 
   async put<T>(url: string, data?: object): Promise<T> {
@@ -189,6 +220,22 @@ class ApiClient {
   async syncAllCloudMetrics(): Promise<{ message: string }> {
     return this.post('/cloud-metrics/sync-all', {})
   }
+
+  async getAiConfig(): Promise<AIConfigResponse> {
+    return this.get('/ai/config')
+  }
+
+  async updateAiConfig(data: AIConfigUpdate): Promise<AIConfigResponse> {
+    return this.put('/ai/config', data)
+  }
+
+  async listAiProviders(): Promise<AIProvidersListResponse> {
+    return this.get('/ai/providers')
+  }
+
+  async listAiModels(data: ListAiModelsRequest): Promise<ListAiModelsResponse> {
+    return this.post('/ai/models', data, { timeout: 60_000 })
+  }
 }
 
 export interface CloudMetricRecord {
@@ -220,6 +267,80 @@ export interface CloudMetricsListResponse {
   total: number
   page: number
   page_size: number
+}
+
+export interface AIModelInfo {
+  id: string
+  name?: string
+}
+
+export interface AIProviderMeta {
+  id: string
+  name: string
+  description?: string
+  default_base_url?: string
+  requires_base_url: boolean
+  openai_compatible: boolean
+}
+
+export interface AIPromptMeta {
+  key: string
+  title: string
+  description?: string
+}
+
+export interface AIConfigResponse {
+  provider_id: string
+  display_name: string
+  base_url?: string | null
+  model: string
+  api_key_set: boolean
+  enabled: boolean
+  prompts?: Record<string, string | null>
+  prompt_defaults?: Record<string, string>
+  prompt_meta?: AIPromptMeta[]
+}
+
+export interface AIConfigUpdate {
+  provider_id: string
+  display_name?: string
+  base_url?: string
+  model: string
+  api_key?: string
+  enabled: boolean
+  prompts?: Record<string, string | null>
+}
+
+export interface ListAiModelsRequest {
+  provider_id: string
+  api_key?: string
+  base_url?: string
+}
+
+export interface ListAiModelsResponse {
+  models: AIModelInfo[]
+}
+
+export interface AIProvidersListResponse {
+  providers: AIProviderMeta[]
+}
+
+export interface AITaskCreateResponse {
+  task_id: string
+  status: string
+  alert_id: number
+  action: string
+}
+
+export interface AITaskStatusResponse {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | string
+  alert_id: number
+  action: string
+  result?: Record<string, unknown>
+  error?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export const apiClient = new ApiClient()

@@ -308,32 +308,93 @@ Content-Type: application/json
 }
 ```
 
-## AI 接口 `/ai`
+## AI 接口
 
-### 根因分析
+AI 配置按**租户**存储在 `tenant.config.ai` 中（API Key AES 加密）。需在「系统设置 → AI设置」中配置并启用后，告警详情页的 AI 功能方可使用。
+
+### 租户 AI 配置（租户超管）
 
 ```
-POST /api/v1/ai/root-cause
+GET /api/v1/ai/config
+PUT /api/v1/ai/config
 Authorization: Bearer <TOKEN>
-Content-Type: application/json
+```
 
+PUT 请求体示例：
+
+```json
 {
-  "alert_id": 123
+  "provider_id": "openai",
+  "display_name": "OpenAI",
+  "base_url": null,
+  "model": "gpt-4o",
+  "api_key": "sk-...",
+  "enabled": true
 }
 ```
 
-### 内容润色
+- `api_key` 可选：留空则保留已保存的密钥
+- `provider_id`：`openai` | `deepseek` | `anthropic` | `qwen` | `custom`
+- `custom` 时 `base_url` 必填（OpenAI 兼容根路径，如 `https://api.deepseek.com/v1`）
+- `prompts`（可选）：各模块 System Prompt 自定义，键为 `analyze` | `polish` | `suggest_actions` | `predict_impact`；与内置默认相同则不存储
+- GET 响应含 `prompts`（当前生效文案）、`prompt_defaults`（内置默认）、`prompt_meta`（模块说明）
+
+润色提示词支持占位符 `{style_instruction}`（由系统按 formal/simple/friendly 注入）。
+
+### 提供商与模型列表
 
 ```
-POST /api/v1/ai/polish
+GET /api/v1/ai/providers
+POST /api/v1/ai/models
 Authorization: Bearer <TOKEN>
-Content-Type: application/json
+```
 
+`POST /ai/models` 请求体：
+
+```json
 {
-  "content": "原始告警内容",
-  "channel_type": "dingtalk"
+  "provider_id": "openai",
+  "api_key": "sk-...",
+  "base_url": null
 }
 ```
+
+- 未传 `api_key` 时使用租户已保存的密钥
+- 无效密钥返回 `401`；上游不可达返回 `502`；缺少 `base_url`（custom）返回 `400`
+
+### 告警 AI 功能（异步任务，需已启用租户 AI 配置）
+
+提交任务（立即返回 `202`）：
+
+```
+POST /api/v1/alerts/{alert_id}/analyze
+POST /api/v1/alerts/{alert_id}/polish?style=formal
+POST /api/v1/alerts/{alert_id}/suggest-actions
+POST /api/v1/alerts/{alert_id}/predict-impact
+Authorization: Bearer <TOKEN>
+```
+
+响应示例：
+
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "alert_id": 34,
+  "action": "analyze"
+}
+```
+
+轮询结果：
+
+```
+GET /api/v1/ai/tasks/{task_id}
+Authorization: Bearer <TOKEN>
+```
+
+`status`：`pending` → `running` → `completed` | `failed`。完成时 `result` 字段结构与原先同步接口一致（如 `analysis`、`polished_content`）。
+
+未配置或未启用时，提交接口返回 `400`，`detail` 为 `AI is not configured for this tenant`。
 
 ## 健康检查
 

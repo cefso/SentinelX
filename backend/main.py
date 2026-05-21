@@ -95,12 +95,20 @@ async def lifespan(app: FastAPI):
     )
     logger.info("alert_consumer_started")
 
+    # 启动 AI 异步任务 Worker
+    from apps.ai.worker import AIWorker
+    ai_worker = AIWorker()
+    ai_worker_task = asyncio.create_task(ai_worker.start())
+    logger.info("ai_worker_started")
+
     yield
 
     # 关闭时
     logger.info("sentinelx_shutting_down")
     alert_consumer_task.cancel()
     escalation_task.cancel()
+    await ai_worker.stop()
+    ai_worker_task.cancel()
     await notification_worker.stop()
     notification_task.cancel()
     await RedisClient.close()

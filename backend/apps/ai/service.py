@@ -4,48 +4,42 @@ SentinelX - AI服务
 """
 from typing import Optional, Dict, Any, List
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.ai.client import LLMFactory
+from apps.ai.client import ProviderRegistry
+from apps.ai.config import resolve_tenant_ai_config, TenantAIConfig
+from apps.ai.prompts import resolve_system_prompt, STYLE_INSTRUCTIONS
 from apps.alert.models import Alert
 
 logger = structlog.get_logger()
 
 
+async def build_ai_service(db: AsyncSession, tenant_id: int) -> "AIService":
+    """从租户配置构建 AI 服务"""
+    cfg = await resolve_tenant_ai_config(db, tenant_id)
+    return AIService.from_tenant_config(cfg)
+
+
 class AIService:
     """AI服务"""
 
-    def __init__(
-        self,
-        provider: str = "openai",
-        api_key: str = None,
-        model: str = None,
-    ):
-        self.client = LLMFactory.create_client(provider, api_key, model)
+    def __init__(self, client, system_prompts: Optional[Dict[str, str]] = None):
+        self.client = client
+        self.system_prompts = system_prompts or {}
+
+    @classmethod
+    def from_tenant_config(cls, cfg: TenantAIConfig) -> "AIService":
+        client = ProviderRegistry.create_client(
+            provider_id=cfg.provider_id,
+            api_key=cfg.api_key,
+            model=cfg.model,
+            base_url=cfg.base_url,
+        )
+        return cls(client, system_prompts=cfg.prompts)
 
     async def analyze_root_cause(self, alert: Alert) -> tuple[Optional[str], Optional[str]]:
-        """
-        根因分析
-        分析告警的可能原因并提供处理建议
-        """
-        # 构建提示词
-        system_prompt = """你是一个资深的SRE工程师，擅长分析告警的根本原因。
-请根据提供的告警信息，分析可能的根本原因，并给出处理建议。
-请用中文回复，格式如下：
-
-## 可能原因
-1. ...
-2. ...
-3. ...
-
-## 处理建议
-1. ...
-2. ...
-3. ...
-
-## 进一步调查
-- 检查哪些指标...
-- 查看哪些日志...
-"""
+        """根因分析"""
+        system_prompt = resolve_system_prompt("analyze", self.system_prompts)
 
         prompt = f"""## 告警信息
 - 标题: {alert.title}
@@ -85,12 +79,8 @@ class AIService:
         template: str = None,
         style: str = "formal",
     ) -> tuple[Optional[str], Optional[str]]:
-        """
-        内容润色
-        将告警内容润色成更易读的通知格式
-        """
+        """内容润色"""
         if template:
-            # 使用模板格式化
             content = template
             replacements = {
                 "{{title}}": alert.title or "",
@@ -109,16 +99,12 @@ class AIService:
 
             return content, None
 
-        # 构建润色提示词
-        system_prompt = f"""你是一个告警通知撰写专家。请将告警信息润色成一段简洁、清晰的通知文本。
-
-要求:
-- {style == 'formal' and '正式、简洁、专业' or '简洁、易懂、友好'}
-- 突出关键信息（告警名称、严重级别、发生时间）
-- 如有必要，添加简要的上下文信息
-- 长度控制在200字以内
-- 使用表情符号增加可读性
-"""
+        style_instruction = STYLE_INSTRUCTIONS.get(style, STYLE_INSTRUCTIONS["formal"])
+        system_prompt = resolve_system_prompt(
+            "polish",
+            self.system_prompts,
+            style_instruction=style_instruction,
+        )
 
         prompt = f"""## 原始告警信息
 - 标题: {alert.title}
@@ -158,19 +144,9 @@ class AIService:
         self,
         alert: Alert,
         history: List[Dict[str, Any]] = None,
-    ) -> tuple[Optional[List[str]], Optional[str]]:
-        """
-        建议操作
-        根据告警历史和当前告警，推荐下一步操作
-        """
-        system_prompt = """你是一个SRE告警处理专家。请根据告警历史和当前告警，推荐下一步应该执行的操作。
-
-要求:
-- 给出3-5个具体、可执行的操作建议
-- 按优先级排序
-- 每个建议简明扼要
-- 如果是重复告警，优先建议升级或通知相关人员
-"""
+    ) -> tuple[Optional[str], Optional[str]]:
+        """建议操作"""
+        system_prompt = resolve_system_prompt("suggest_actions", self.system_prompts)
 
         history_text = ""
         if history and len(history) > 0:
@@ -205,18 +181,9 @@ class AIService:
                 logger.error("suggest_actions_error", alert_id=alert.id, error=error)
                 return None, error
 
-            # 解析返回的建议
-            actions = []
-            for line in result.split("\n"):
-                line = line.strip()
-                if line and (line.startswith("-") or line.startswith("*") or line[0].isdigit()):
-                    # 移除列表标记
-                    cleaned = line.lstrip("-*0123456789. )").strip()
-                    if cleaned:
-                        actions.append(cleaned)
-
-            logger.info("suggest_actions_success", alert_id=alert.id, action_count=len(actions))
-            return actions if actions else None, None
+            text = (result or "").strip()
+            logger.info("suggest_actions_success", alert_id=alert.id, content_len=len(text))
+            return text or None, None
 
         except Exception as e:
             logger.error("suggest_actions_exception", alert_id=alert.id, error=str(e))
@@ -226,18 +193,8 @@ class AIService:
         self,
         alert: Alert,
     ) -> tuple[Optional[str], Optional[str]]:
-        """
-        影响预测
-        预测该告警如果未处理可能造成的影响
-        """
-        system_prompt = """你是一个SRE工程师。请分析这个告警如果不处理，可能造成的影响。
-
-要求:
-- 预测可能的服务影响范围
-- 评估业务影响程度
-- 给出影响持续时间预估
-- 用非技术人员也能理解的语言描述
-"""
+        """影响预测"""
+        system_prompt = resolve_system_prompt("predict_impact", self.system_prompts)
 
         prompt = f"""## 告警信息
 - 标题: {alert.title}
