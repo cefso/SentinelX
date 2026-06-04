@@ -42,6 +42,7 @@ class MessageQueue:
             password=parsed.password or "",
             verbose=False,
             log_filename=None,
+            init_extension=False,  # SQL-only 安装，跳过 CREATE EXTENSION
         )
         self._queues_initialized = False
 
@@ -51,7 +52,7 @@ class MessageQueue:
             return
 
         # 初始化连接池
-        await self.mq.init(init_extension=False)
+        await self.mq.init()
 
         queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai", "alerts_escalation"]
 
