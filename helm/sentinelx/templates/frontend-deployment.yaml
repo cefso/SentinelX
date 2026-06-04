@@ -28,6 +28,11 @@ spec:
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.frontend.containerPort }}
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
           envFrom:
             - configMapRef:
                 name: {{ include "sentinelx.configMapName" . }}
@@ -45,6 +50,10 @@ spec:
               port: {{ .Values.frontend.containerPort }}
             initialDelaySeconds: 5
             periodSeconds: 10
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: {{ include "sentinelx.frontend.nginxConfigMapName" . }}
 ---
 apiVersion: v1
 kind: Service
