@@ -3,7 +3,6 @@ SentinelX - 消息队列管理
 支持 PGMQ (PostgreSQL原生消息队列)
 """
 import asyncio
-import inspect
 import json
 import logging
 from typing import Optional, Any, List, Dict
@@ -35,18 +34,16 @@ class MessageQueue:
             raise ImportError("pgmq not installed. Run: pip install pgmq")
         # 解析 postgresql://user:pass@host:port/dbname
         parsed = urlparse(database_url)
-        mq_kwargs = {
-            "host": parsed.hostname or "localhost",
-            "port": str(parsed.port or 5432),
-            "database": parsed.path.lstrip("/") or "postgres",
-            "username": parsed.username or "postgres",
-            "password": parsed.password or "",
-            "verbose": False,
-            "log_filename": None,
-        }
-        if "init_extension" in inspect.signature(PGMQueue.__init__).parameters:
-            mq_kwargs["init_extension"] = False  # pgmq>=1.1: SQL-only 安装，跳过 CREATE EXTENSION
-        self.mq = PGMQueue(**mq_kwargs)
+        self.mq = PGMQueue(
+            host=parsed.hostname or "localhost",
+            port=str(parsed.port or 5432),
+            database=parsed.path.lstrip("/") or "postgres",
+            username=parsed.username or "postgres",
+            password=parsed.password or "",
+            verbose=False,
+            log_filename=None,
+            init_extension=False,  # pgmq>=1.1: SQL-only 安装，跳过 CREATE EXTENSION
+        )
         self._queues_initialized = False
 
     async def init_queues(self):
@@ -54,8 +51,8 @@ class MessageQueue:
         if self._queues_initialized:
             return
 
-        # 初始化连接池（SQL-only 安装 pgmq 时跳过 CREATE EXTENSION）
-        await self.mq.init(init_extension=False)
+        # 初始化连接池
+        await self.mq.init()
 
         queues = ["alerts_raw", "alerts_notify", "alerts_dlq", "alerts_ai", "alerts_escalation"]
 
