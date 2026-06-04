@@ -4,7 +4,14 @@ import { apiClient } from '@/services/api'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
-import { SuppressConfigForm, suppressConfigToPayload, DEFAULT_SUPPRESS_CONFIG, SuppressConfig } from '@/components/strategy/SuppressConfigForm'
+import {
+  buildSuppressConfigPayload,
+  mergeLegacySuppressConditions,
+  getDurationMinutesFromConfig,
+  formatEffectiveUntilLocal,
+  SUPPRESS_DURATION_HELP,
+  getSuppressStatusBadge,
+} from '@/components/strategy/SuppressConfigForm'
 import { Modal } from '@/components/common/Modal'
 
 interface StrategyRule {
@@ -19,19 +26,24 @@ interface StrategyRule {
   config: any
   match_count: number
   last_match_at?: string
+  suppress_in_effect?: boolean | null
   created_at: string
   updated_at: string
 }
 
-function getSuppressSummary(config: any): string {
-  if (!config) return ''
-  const type = config.type || 'maintenance_window'
-  if (type === 'maintenance_window') {
-    const minutes = config.maintenance_window?.duration_minutes || 60
-    return `维护窗口: ${minutes} 分钟`
-  }
-  const count = (config.rule_based?.conditions || []).length
-  return `规则匹配: ${count} 个条件`
+function formatDurationSummary(rule: StrategyRule): string {
+  const minutes = getDurationMinutesFromConfig(rule.config)
+  if (minutes <= 0) return '永久'
+  const until = formatEffectiveUntilLocal(rule.config?.effective_until as string | undefined)
+  return until ? `${minutes} 分钟 · 至 ${until}` : `${minutes} 分钟`
+}
+
+function formatConditionSummary(rule: StrategyRule): string {
+  const cond =
+    rule.conditions.length === 0
+      ? '无条件（匹配全部告警）'
+      : `${rule.conditions.length} 个条件 (${rule.condition_mode})`
+  return `${cond} · ${formatDurationSummary(rule)}`
 }
 
 export function SuppressRulesPage() {
@@ -39,7 +51,7 @@ export function SuppressRulesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingRule, setEditingRule] = useState<StrategyRule | null>(null)
 
-  const { data: rules = [], isLoading } = useQuery<StrategyRule[]>({
+  const { data: rules = [], isLoading, isError, error } = useQuery<StrategyRule[]>({
     queryKey: ['suppress-rules'],
     queryFn: () => apiClient.get('/rules/suppress-rules'),
   })
@@ -69,7 +81,7 @@ export function SuppressRulesPage() {
     <RulesLayout>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          抑制规则在维护窗口或指定条件下静默告警，避免在计划内运维期间产生干扰
+          抑制规则在指定条件下静默告警，避免重复或计划内运维告警产生干扰
         </p>
         <button
           onClick={handleCreate}
@@ -80,7 +92,11 @@ export function SuppressRulesPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow">
-        {isLoading ? (
+        {isError ? (
+          <div className="p-8 text-center text-rose-600 text-sm">
+            加载抑制规则失败：{(error as Error)?.message || '请刷新重试'}
+          </div>
+        ) : isLoading ? (
           <div className="p-8 text-center text-gray-500">加载中...</div>
         ) : rules.length === 0 ? (
           <div className="p-12 text-center">
@@ -95,10 +111,9 @@ export function SuppressRulesPage() {
             <thead className="bg-rose-50/50">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">规则名称</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">抑制策略</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">触发条件</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">抑制条件</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">优先级</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">匹配</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">抑制次数</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-rose-700">状态</th>
                 <th className="px-4 py-3 text-right text-sm font-medium text-rose-700">操作</th>
               </tr>
@@ -113,16 +128,7 @@ export function SuppressRulesPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-gray-600">{getSuppressSummary(rule.config)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {rule.conditions.length > 0 ? (
-                      <div className="text-sm text-gray-600">
-                        {rule.conditions.length} 个条件 ({rule.condition_mode})
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">无条件（全局生效）</span>
-                    )}
+                    <div className="text-sm text-gray-600">{formatConditionSummary(rule)}</div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 text-sm bg-rose-100 text-rose-800 rounded">
@@ -131,15 +137,33 @@ export function SuppressRulesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-sm">{rule.match_count}</div>
+                    {rule.last_match_at && (
+                      <div className="text-xs text-gray-400">
+                        最近 {new Date(rule.last_match_at).toLocaleString('zh-CN')}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleMutation.mutate({ ruleId: rule.id, is_active: !rule.is_active })}
-                      disabled={toggleMutation.isPending}
-                      className={`px-2 py-1 text-xs rounded disabled:opacity-50 ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
-                    >
-                      {rule.is_active ? '启用' : '停用'}
-                    </button>
+                    {(() => {
+                      const badge = getSuppressStatusBadge(rule)
+                      return (
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`px-2 py-1 text-xs rounded ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleMutation.mutate({ ruleId: rule.id, is_active: !rule.is_active })
+                            }
+                            disabled={toggleMutation.isPending}
+                            className="text-xs text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                          >
+                            {rule.is_active ? '点击停用' : '点击启用'}
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -185,38 +209,53 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
   const [name, setName] = useState(rule?.name || '')
   const [description, setDescription] = useState(rule?.description || '')
   const [priority, setPriority] = useState(rule?.priority || 0)
-  const [conditions, setConditions] = useState<Condition[]>(rule?.conditions || initialConditions || [])
-  const [conditionMode, setConditionMode] = useState(rule?.condition_mode || 'and')
-  const [config, setConfig] = useState<SuppressConfig>(() => {
-    if (rule?.config) {
-      const c = rule.config
-      return {
-        enabled: c.enabled ?? true,
-        type: c.type ?? 'maintenance_window',
-        duration_minutes: c.maintenance_window?.duration_minutes ?? 60,
-        cluster_labels: c.maintenance_window?.cluster_labels ?? [],
-        rule_conditions: (c.rule_based?.conditions ?? []).map((cond: any) => ({
-          field: cond.field,
-          operator: cond.operator,
-          value: cond.value,
-        })),
-      }
+  const [conditions, setConditions] = useState<Condition[]>(() => {
+    if (rule) {
+      return mergeLegacySuppressConditions(rule.conditions, rule.config) as Condition[]
     }
-    return DEFAULT_SUPPRESS_CONFIG
+    return initialConditions || []
   })
+  const [conditionMode, setConditionMode] = useState(rule?.condition_mode || 'and')
+  const [durationMinutes, setDurationMinutes] = useState(() =>
+    rule ? getDurationMinutesFromConfig(rule.config) : 0,
+  )
+
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const effectiveUntilLabel = rule
+    ? formatEffectiveUntilLocal(rule.config?.effective_until as string | undefined)
+    : null
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/rules/suppress-rules', data),
-    onSuccess,
+    onSuccess: () => {
+      setSubmitError(null)
+      onSuccess()
+    },
+    onError: (err: Error) => {
+      setSubmitError(err.message || '创建失败')
+    },
   })
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => apiClient.put(`/rules/suppress-rules/${rule?.id}`, data),
-    onSuccess,
+    onSuccess: () => {
+      setSubmitError(null)
+      onSuccess()
+    },
+    onError: (err: Error) => {
+      setSubmitError(err.message || '保存失败')
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitError(null)
+
+    if (conditions.length === 0) {
+      setSubmitError('请至少添加一条抑制条件')
+      return
+    }
+
     const payload = {
       name,
       description: description || null,
@@ -224,7 +263,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
       is_active: true,
       conditions,
       condition_mode: conditionMode,
-      config: suppressConfigToPayload(config),
+      config: buildSuppressConfigPayload(durationMinutes),
     }
     if (rule) {
       updateMutation.mutate(payload)
@@ -262,6 +301,24 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">抑制时长（分钟）</label>
+            <input
+              type="number"
+              min={0}
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              className="w-full px-3 py-2 border rounded-md"
+            />
+            <p className="text-xs text-gray-500 mt-1">0 表示永久抑制</p>
+            <p className="text-xs text-gray-500 mt-1">{SUPPRESS_DURATION_HELP}</p>
+            {effectiveUntilLabel && (
+              <p className="text-xs text-rose-700 mt-2">
+                当前生效至：{effectiveUntilLabel}（保存后将按新时长重算）
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">条件组合方式</label>
@@ -288,7 +345,10 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">触发条件（可选，仅当条件满足时此规则才生效）</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">抑制条件</label>
+            <p className="text-xs text-gray-500 mb-2">
+              告警满足以下条件时将被抑制（不发送通知），适用于各类告警源
+            </p>
             <ConditionEditor
               conditions={conditions}
               onChange={setConditions}
@@ -296,10 +356,11 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
             />
           </div>
 
-          <div className="border-t pt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">抑制配置</label>
-            <SuppressConfigForm config={config} onChange={setConfig} />
-          </div>
+          {submitError && (
+            <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+              {submitError}
+            </p>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md hover:bg-gray-50">

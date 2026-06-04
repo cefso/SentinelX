@@ -12,12 +12,16 @@ from sqlalchemy import select
 from redis.asyncio import Redis
 
 from apps.rule.models import AlertRule
+from apps.rule.suppress_timing import is_suppress_rule_in_effect
 from apps.alert.models import Alert, AlertAggregateGroup, AlertAggregateMember
 from apps.alert.services.alert_utils import alert_to_dict
 
 import structlog
 
 logger = structlog.get_logger()
+
+# 策略规则 code 前缀（不参与路由「规则匹配」统计）
+_STRATEGY_CODE_PREFIXES = ("_dedup_%", "_suppress_%", "_aggregate_%")
 
 
 @dataclass
@@ -59,12 +63,13 @@ class RuleEngine:
 
     async def match_rules(self, db: AsyncSession, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
         """匹配规则（带数据库会话）"""
-        result = await db.execute(
-            select(AlertRule).where(
-                AlertRule.tenant_id == tenant_id,
-                AlertRule.is_active == True
-            ).order_by(AlertRule.priority.desc())
+        query = select(AlertRule).where(
+            AlertRule.tenant_id == tenant_id,
+            AlertRule.is_active == True,
         )
+        for prefix in _STRATEGY_CODE_PREFIXES:
+            query = query.where(~AlertRule.code.like(prefix))
+        result = await db.execute(query.order_by(AlertRule.priority.desc()))
         rules = result.scalars().all()
 
         logger.debug("rules_evaluating", tenant_id=tenant_id, total_rules=len(rules))
@@ -357,6 +362,17 @@ class RuleEngine:
                 matched.append(rule)
         return matched
 
+    def _get_suppress_rule_conditions(self, rule: AlertRule) -> tuple[List[Dict[str, Any]], str]:
+        """获取抑制规则的生效条件（优先 rule.conditions，兼容旧 rule_based 配置）"""
+        conditions = rule.conditions or []
+        condition_mode = rule.condition_mode or "and"
+        if conditions:
+            return conditions, condition_mode
+        suppress_config = getattr(rule, "suppress_config", None) or {}
+        rb = suppress_config.get("rule_based") or {}
+        legacy = rb.get("conditions") or suppress_config.get("conditions", [])
+        return legacy, rb.get("condition_mode", suppress_config.get("condition_mode", "and"))
+
     async def _find_matching_suppress_rules(self, db: AsyncSession, alert: Alert) -> List[AlertRule]:
         """查找所有匹配的抑制规则（按优先级排序，条件匹配）"""
         result = await db.execute(
@@ -370,11 +386,11 @@ class RuleEngine:
         alert_data = self._alert_to_dict(alert)
         matched = []
         for rule in rules:
-            conditions = rule.conditions or []
+            conditions, condition_mode = self._get_suppress_rule_conditions(rule)
             if not conditions:
                 matched.append(rule)
                 continue
-            ok, _, _ = self.evaluate_conditions(conditions, rule.condition_mode or "and", alert_data)
+            ok, _, _ = self.evaluate_conditions(conditions, condition_mode, alert_data)
             if ok:
                 matched.append(rule)
         return matched
@@ -448,7 +464,8 @@ class RuleEngine:
             await _add_step("suppress_result", "抑制检查", "passed", {"description": "未配置抑制规则，跳过"})
             return False, None, trace_steps
 
-        # 遍历所有匹配的抑制规则，任一触发即抑制
+        now = datetime.now(timezone.utc)
+        # 遍历所有匹配的抑制规则，任一在生效窗口内即抑制
         for suppress_rule in suppress_rules:
             suppress_config = getattr(suppress_rule, "suppress_config", None)
             if not suppress_config:
@@ -457,48 +474,42 @@ class RuleEngine:
             if suppress_config.get("disabled", not suppress_config.get("enabled", False)):
                 continue
 
-            suppress_type = suppress_config.get("type", "maintenance_window")
+            in_effect, window_reason = is_suppress_rule_in_effect(
+                suppress_config,
+                now,
+                rule_created_at=getattr(suppress_rule, "created_at", None),
+            )
+            if not in_effect:
+                continue
 
-            if suppress_type == "maintenance_window":
-                maintenance_config = suppress_config.get("maintenance_window", {})
-                cluster_labels = maintenance_config.get("cluster_labels", [])
-                alert_cluster = (alert.labels or {}).get("cluster", "")
+            logger.info(
+                "suppress_triggered",
+                alert_id=alert.id,
+                trace_id=trace_id,
+                rule_name=suppress_rule.name,
+                window_reason=window_reason,
+            )
+            if db is not None:
+                suppress_rule.match_count = (getattr(suppress_rule, "match_count", None) or 0) + 1
+                suppress_rule.last_match_at = now
+                await db.commit()
 
-                for cluster_name in cluster_labels:
-                    if alert_cluster == cluster_name:
-                        logger.info("suppress_triggered", alert_id=alert.id, trace_id=trace_id, reason="maintenance_window", rule_name=suppress_rule.name)
-                        await _add_step("suppress_result", "抑制检查", "blocked", {
-                            "description": f"处于维护窗口期 (cluster: {alert_cluster})",
-                            "details": {
-                                "matched_rules": matched_rule_names,
-                                "triggered_by_rule": suppress_rule.name,
-                            },
-                        })
-                        return True, f"处于维护窗口期 (cluster: {alert_cluster})", trace_steps
-
-            elif suppress_type == "rule_based":
-                conditions = suppress_config.get("conditions", [])
-                condition_mode = suppress_config.get("condition_mode", "and")
-
-                alert_data = self._alert_to_dict(alert)
-                is_suppressed, reason, _ = self.evaluate_conditions(
-                    conditions, condition_mode, alert_data
-                )
-
-                if is_suppressed:
-                    logger.info("suppress_triggered", alert_id=alert.id, trace_id=trace_id, reason=reason, rule_name=suppress_rule.name)
-                    await _add_step("suppress_result", "抑制检查", "blocked", {
-                        "description": f"触发规则抑制: {reason}",
-                        "details": {
-                            "matched_rules": matched_rule_names,
-                            "triggered_by_rule": suppress_rule.name,
-                        },
-                    })
-                    return True, f"触发规则抑制: {reason}", trace_steps
+            await _add_step("suppress_result", "抑制检查", "blocked", {
+                "description": f"触发规则抑制: {suppress_rule.name}",
+                "details": {
+                    "matched_rules": matched_rule_names,
+                    "triggered_by_rule": suppress_rule.name,
+                    "duration_minutes": suppress_config.get("duration_minutes"),
+                    "effective_until": suppress_config.get("effective_until"),
+                    "in_effect": True,
+                    "window_reason": window_reason,
+                },
+            })
+            return True, f"触发规则抑制: {suppress_rule.name}", trace_steps
 
         logger.info("suppress_check_passed", alert_id=alert.id, trace_id=trace_id)
         await _add_step("suppress_result", "抑制检查", "passed", {
-            "description": "未触发抑制",
+            "description": "未触发抑制（无生效窗口内的匹配规则）",
             "details": {"matched_rules": matched_rule_names} if matched_rule_names else None,
         })
         return False, None, trace_steps

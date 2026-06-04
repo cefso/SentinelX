@@ -24,6 +24,7 @@ from apps.rule.schemas import (
     StrategyRuleCreate, StrategyRuleUpdate, StrategyRuleResponse,
     RuleAction,
 )
+from apps.rule.suppress_timing import enrich_suppress_config
 
 router = APIRouter()
 
@@ -210,6 +211,193 @@ async def get_field_values(
     )
 
 
+# ============ 策略规则 CRUD ============
+
+STRATEGY_RULE_NAME = "_strategy_config"
+
+# 策略类型 -> code 前缀映射
+_STRATEGY_PREFIXES = {
+    "dedup": "_dedup_",
+    "suppress": "_suppress_",
+    "aggregate": "_aggregate_",
+}
+
+# 策略类型 -> 配置字段映射
+_STRATEGY_CONFIG_FIELDS = {
+    "dedup": "deduplication_config",
+    "suppress": "suppress_config",
+    "aggregate": "aggregate_config",
+}
+
+
+def _slugify(name: str) -> str:
+    """将名称转换为 slug"""
+    # 简单的 slug 生成：小写 + 去特殊字符
+    slug = _re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    if slug:
+        return slug[:40]
+    # 兜底：中文/纯特殊字符名称时使用时间戳
+    from datetime import datetime
+    return datetime.now().strftime('%Y%m%d%H%M%S')
+
+
+def _normalize_strategy_config(config: dict, config_field: str) -> dict:
+    """策略规则 config 入库前规范化（抑制规则写入生效窗口）。"""
+    if config_field == "suppress_config":
+        return enrich_suppress_config(config)
+    return config
+
+
+def _build_strategy_crud(prefix: str, config_field: str):
+    """为策略类型构建 CRUD 端点工厂"""
+
+    async def list_strategy_rules(
+        is_active: Optional[bool] = None,
+        tenant_id: int = Depends(get_current_tenant_id),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """获取策略规则列表"""
+        query = select(AlertRule).where(
+            AlertRule.tenant_id == str(tenant_id),
+            AlertRule.code.like(f'{prefix}%'),
+        )
+        if is_active is not None:
+            query = query.where(AlertRule.is_active == is_active)
+        query = query.order_by(AlertRule.priority.desc(), AlertRule.id)
+        result = await db.execute(query)
+        return [
+            StrategyRuleResponse.from_alert_rule(r, config_field=config_field)
+            for r in result.scalars().all()
+        ]
+
+    async def create_strategy_rule(
+        request: StrategyRuleCreate,
+        tenant_id: int = Depends(get_current_tenant_id),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """创建策略规则"""
+        slug = _slugify(request.name)
+        code = f"{prefix}{slug}"
+        rule = AlertRule(
+            tenant_id=str(tenant_id),
+            name=request.name,
+            code=code,
+            description=request.description,
+            conditions=[c.model_dump() for c in request.conditions],
+            condition_mode=request.condition_mode,
+            actions=[],
+            priority=request.priority,
+            is_active=request.is_active,
+        )
+        setattr(rule, config_field, _normalize_strategy_config(request.config, config_field))
+        db.add(rule)
+        await db.commit()
+        await db.refresh(rule)
+        return StrategyRuleResponse.from_alert_rule(rule, config_field=config_field)
+
+    async def get_strategy_rule(
+        rule_id: int,
+        tenant_id: int = Depends(get_current_tenant_id),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """获取策略规则详情"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.id == rule_id,
+                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.code.like(f'{prefix}%'),
+            )
+        )
+        rule = result.scalar_one_or_none()
+        if not rule:
+            raise HTTPException(status_code=404, detail="Strategy rule not found")
+        return StrategyRuleResponse.from_alert_rule(rule, config_field=config_field)
+
+    async def update_strategy_rule(
+        rule_id: int,
+        request: StrategyRuleUpdate,
+        tenant_id: int = Depends(get_current_tenant_id),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """更新策略规则"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.id == rule_id,
+                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.code.like(f'{prefix}%'),
+            )
+        )
+        rule = result.scalar_one_or_none()
+        if not rule:
+            raise HTTPException(status_code=404, detail="Strategy rule not found")
+
+        update_data = request.model_dump(exclude_unset=True)
+        if "conditions" in update_data:
+            update_data["conditions"] = [
+                c.model_dump() if hasattr(c, 'model_dump') else c
+                for c in update_data["conditions"]
+            ]
+        if "config" in update_data:
+            setattr(rule, config_field, _normalize_strategy_config(update_data.pop("config"), config_field))
+
+        for field, value in update_data.items():
+            setattr(rule, field, value)
+
+        await db.commit()
+        await db.refresh(rule)
+        return StrategyRuleResponse.from_alert_rule(rule, config_field=config_field)
+
+    async def delete_strategy_rule(
+        rule_id: int,
+        tenant_id: int = Depends(get_current_tenant_id),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """删除策略规则"""
+        result = await db.execute(
+            select(AlertRule).where(
+                AlertRule.id == rule_id,
+                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.code.like(f'{prefix}%'),
+            )
+        )
+        rule = result.scalar_one_or_none()
+        if not rule:
+            raise HTTPException(status_code=404, detail="Strategy rule not found")
+
+        await db.delete(rule)
+        await db.commit()
+        return {"message": "Strategy rule deleted successfully"}
+
+    return list_strategy_rules, create_strategy_rule, get_strategy_rule, update_strategy_rule, delete_strategy_rule
+
+
+# 创建三组 CRUD 端点
+_list_dedup, _create_dedup, _get_dedup, _update_dedup, _delete_dedup = _build_strategy_crud("_dedup_", "deduplication_config")
+_list_suppress, _create_suppress, _get_suppress, _update_suppress, _delete_suppress = _build_strategy_crud("_suppress_", "suppress_config")
+_list_aggregate, _create_aggregate, _get_aggregate, _update_aggregate, _delete_aggregate = _build_strategy_crud("_aggregate_", "aggregate_config")
+
+# 注册去重规则端点
+router.add_api_route("/rules/dedup-rules", _list_dedup, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_dedup_rules")
+router.add_api_route("/rules/dedup-rules", _create_dedup, methods=["POST"], response_model=StrategyRuleResponse, name="create_dedup_rule")
+router.add_api_route("/rules/dedup-rules/{rule_id}", _get_dedup, methods=["GET"], response_model=StrategyRuleResponse, name="get_dedup_rule")
+router.add_api_route("/rules/dedup-rules/{rule_id}", _update_dedup, methods=["PUT"], response_model=StrategyRuleResponse, name="update_dedup_rule")
+router.add_api_route("/rules/dedup-rules/{rule_id}", _delete_dedup, methods=["DELETE"], name="delete_dedup_rule")
+
+# 注册抑制规则端点
+router.add_api_route("/rules/suppress-rules", _list_suppress, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_suppress_rules")
+router.add_api_route("/rules/suppress-rules", _create_suppress, methods=["POST"], response_model=StrategyRuleResponse, name="create_suppress_rule")
+router.add_api_route("/rules/suppress-rules/{rule_id}", _get_suppress, methods=["GET"], response_model=StrategyRuleResponse, name="get_suppress_rule")
+router.add_api_route("/rules/suppress-rules/{rule_id}", _update_suppress, methods=["PUT"], response_model=StrategyRuleResponse, name="update_suppress_rule")
+router.add_api_route("/rules/suppress-rules/{rule_id}", _delete_suppress, methods=["DELETE"], name="delete_suppress_rule")
+
+# 注册聚合规则端点
+router.add_api_route("/rules/aggregate-rules", _list_aggregate, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_aggregate_rules")
+router.add_api_route("/rules/aggregate-rules", _create_aggregate, methods=["POST"], response_model=StrategyRuleResponse, name="create_aggregate_rule")
+router.add_api_route("/rules/aggregate-rules/{rule_id}", _get_aggregate, methods=["GET"], response_model=StrategyRuleResponse, name="get_aggregate_rule")
+router.add_api_route("/rules/aggregate-rules/{rule_id}", _update_aggregate, methods=["PUT"], response_model=StrategyRuleResponse, name="update_aggregate_rule")
+router.add_api_route("/rules/aggregate-rules/{rule_id}", _delete_aggregate, methods=["DELETE"], name="delete_aggregate_rule")
+
+
 @router.get("/rules/{rule_id}", response_model=RuleResponse)
 async def get_rule(
     rule_id: int,
@@ -283,183 +471,6 @@ async def delete_rule(
     await db.delete(rule)
     await db.commit()
     return {"message": "Rule deleted successfully"}
-
-
-# ============ 策略规则 CRUD ============
-
-STRATEGY_RULE_NAME = "_strategy_config"
-
-# 策略类型 -> code 前缀映射
-_STRATEGY_PREFIXES = {
-    "dedup": "_dedup_",
-    "suppress": "_suppress_",
-    "aggregate": "_aggregate_",
-}
-
-# 策略类型 -> 配置字段映射
-_STRATEGY_CONFIG_FIELDS = {
-    "dedup": "deduplication_config",
-    "suppress": "suppress_config",
-    "aggregate": "aggregate_config",
-}
-
-
-def _slugify(name: str) -> str:
-    """将名称转换为 slug"""
-    # 简单的 slug 生成：小写 + 去特殊字符
-    slug = _re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
-    if slug:
-        return slug[:40]
-    # 兜底：中文/纯特殊字符名称时使用时间戳
-    from datetime import datetime
-    return datetime.now().strftime('%Y%m%d%H%M%S')
-
-
-def _build_strategy_crud(prefix: str, config_field: str):
-    """为策略类型构建 CRUD 端点工厂"""
-
-    async def list_strategy_rules(
-        is_active: Optional[bool] = None,
-        tenant_id: int = Depends(get_current_tenant_id),
-        db: AsyncSession = Depends(get_db),
-    ):
-        """获取策略规则列表"""
-        query = select(AlertRule).where(
-            AlertRule.tenant_id == str(tenant_id),
-            AlertRule.code.like(f'{prefix}%'),
-        )
-        if is_active is not None:
-            query = query.where(AlertRule.is_active == is_active)
-        query = query.order_by(AlertRule.priority.desc(), AlertRule.id)
-        result = await db.execute(query)
-        return result.scalars().all()
-
-    async def create_strategy_rule(
-        request: StrategyRuleCreate,
-        tenant_id: int = Depends(get_current_tenant_id),
-        db: AsyncSession = Depends(get_db),
-    ):
-        """创建策略规则"""
-        slug = _slugify(request.name)
-        code = f"{prefix}{slug}"
-        rule = AlertRule(
-            tenant_id=str(tenant_id),
-            name=request.name,
-            code=code,
-            description=request.description,
-            conditions=[c.model_dump() for c in request.conditions],
-            condition_mode=request.condition_mode,
-            actions=[],
-            priority=request.priority,
-            is_active=request.is_active,
-        )
-        setattr(rule, config_field, request.config)
-        db.add(rule)
-        await db.commit()
-        await db.refresh(rule)
-        return rule
-
-    async def get_strategy_rule(
-        rule_id: int,
-        tenant_id: int = Depends(get_current_tenant_id),
-        db: AsyncSession = Depends(get_db),
-    ):
-        """获取策略规则详情"""
-        result = await db.execute(
-            select(AlertRule).where(
-                AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
-                AlertRule.code.like(f'{prefix}%'),
-            )
-        )
-        rule = result.scalar_one_or_none()
-        if not rule:
-            raise HTTPException(status_code=404, detail="Strategy rule not found")
-        return rule
-
-    async def update_strategy_rule(
-        rule_id: int,
-        request: StrategyRuleUpdate,
-        tenant_id: int = Depends(get_current_tenant_id),
-        db: AsyncSession = Depends(get_db),
-    ):
-        """更新策略规则"""
-        result = await db.execute(
-            select(AlertRule).where(
-                AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
-                AlertRule.code.like(f'{prefix}%'),
-            )
-        )
-        rule = result.scalar_one_or_none()
-        if not rule:
-            raise HTTPException(status_code=404, detail="Strategy rule not found")
-
-        update_data = request.model_dump(exclude_unset=True)
-        if "conditions" in update_data:
-            update_data["conditions"] = [
-                c.model_dump() if hasattr(c, 'model_dump') else c
-                for c in update_data["conditions"]
-            ]
-        if "config" in update_data:
-            setattr(rule, config_field, update_data.pop("config"))
-
-        for field, value in update_data.items():
-            setattr(rule, field, value)
-
-        await db.commit()
-        await db.refresh(rule)
-        return rule
-
-    async def delete_strategy_rule(
-        rule_id: int,
-        tenant_id: int = Depends(get_current_tenant_id),
-        db: AsyncSession = Depends(get_db),
-    ):
-        """删除策略规则"""
-        result = await db.execute(
-            select(AlertRule).where(
-                AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
-                AlertRule.code.like(f'{prefix}%'),
-            )
-        )
-        rule = result.scalar_one_or_none()
-        if not rule:
-            raise HTTPException(status_code=404, detail="Strategy rule not found")
-
-        await db.delete(rule)
-        await db.commit()
-        return {"message": "Strategy rule deleted successfully"}
-
-    return list_strategy_rules, create_strategy_rule, get_strategy_rule, update_strategy_rule, delete_strategy_rule
-
-
-# 创建三组 CRUD 端点
-_list_dedup, _create_dedup, _get_dedup, _update_dedup, _delete_dedup = _build_strategy_crud("_dedup_", "deduplication_config")
-_list_suppress, _create_suppress, _get_suppress, _update_suppress, _delete_suppress = _build_strategy_crud("_suppress_", "suppress_config")
-_list_aggregate, _create_aggregate, _get_aggregate, _update_aggregate, _delete_aggregate = _build_strategy_crud("_aggregate_", "aggregate_config")
-
-# 注册去重规则端点
-router.add_api_route("/rules/dedup-rules", _list_dedup, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_dedup_rules")
-router.add_api_route("/rules/dedup-rules", _create_dedup, methods=["POST"], response_model=StrategyRuleResponse, name="create_dedup_rule")
-router.add_api_route("/rules/dedup-rules/{rule_id}", _get_dedup, methods=["GET"], response_model=StrategyRuleResponse, name="get_dedup_rule")
-router.add_api_route("/rules/dedup-rules/{rule_id}", _update_dedup, methods=["PUT"], response_model=StrategyRuleResponse, name="update_dedup_rule")
-router.add_api_route("/rules/dedup-rules/{rule_id}", _delete_dedup, methods=["DELETE"], name="delete_dedup_rule")
-
-# 注册抑制规则端点
-router.add_api_route("/rules/suppress-rules", _list_suppress, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_suppress_rules")
-router.add_api_route("/rules/suppress-rules", _create_suppress, methods=["POST"], response_model=StrategyRuleResponse, name="create_suppress_rule")
-router.add_api_route("/rules/suppress-rules/{rule_id}", _get_suppress, methods=["GET"], response_model=StrategyRuleResponse, name="get_suppress_rule")
-router.add_api_route("/rules/suppress-rules/{rule_id}", _update_suppress, methods=["PUT"], response_model=StrategyRuleResponse, name="update_suppress_rule")
-router.add_api_route("/rules/suppress-rules/{rule_id}", _delete_suppress, methods=["DELETE"], name="delete_suppress_rule")
-
-# 注册聚合规则端点
-router.add_api_route("/rules/aggregate-rules", _list_aggregate, methods=["GET"], response_model=list[StrategyRuleResponse], name="list_aggregate_rules")
-router.add_api_route("/rules/aggregate-rules", _create_aggregate, methods=["POST"], response_model=StrategyRuleResponse, name="create_aggregate_rule")
-router.add_api_route("/rules/aggregate-rules/{rule_id}", _get_aggregate, methods=["GET"], response_model=StrategyRuleResponse, name="get_aggregate_rule")
-router.add_api_route("/rules/aggregate-rules/{rule_id}", _update_aggregate, methods=["PUT"], response_model=StrategyRuleResponse, name="update_aggregate_rule")
-router.add_api_route("/rules/aggregate-rules/{rule_id}", _delete_aggregate, methods=["DELETE"], name="delete_aggregate_rule")
 
 
 @router.post("/rules/test", response_model=RuleTestResponse)

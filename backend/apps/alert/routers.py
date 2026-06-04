@@ -238,18 +238,17 @@ async def _resolve_firing_alerts(
     fingerprints: List[str],
 ) -> int:
     """
-    将同 fingerprint 的 firing 告警标记为 resolved
+    将同 fingerprint 的 firing / suppressed 告警标记为 resolved（OK 恢复时）
     返回：处理的告警数量
     """
     if not fingerprints:
         return 0
 
-    # 查找 firing 状态的告警
     result = await db.execute(
         select(Alert).where(
             Alert.tenant_id == tenant_id,
             Alert.fingerprint.in_(fingerprints),
-            Alert.status == "firing",
+            Alert.status.in_(["firing", "suppressed"]),
         )
     )
     firing_alerts = result.scalars().all()
