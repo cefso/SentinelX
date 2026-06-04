@@ -34,15 +34,7 @@ helm install sentinelx ./helm/sentinelx -n sentinelx --create-namespace \
 
 镜像默认从 `ghcr.io/cefso/sentinelx` 拉取（backend、frontend、postgres）。可通过 `global.imageRegistry` 与各组件 `image.repository` / `image.tag` 覆盖。
 
-### 命名空间已存在
-
-若 `sentinelx` 命名空间已创建（例如曾执行过 `--create-namespace` 或手动 `kubectl create ns`），Chart 会自动跳过重复创建。直接安装即可：
-
-```bash
-helm install sentinelx ./helm/sentinelx -n sentinelx -f values.yaml
-```
-
-也可显式关闭 Chart 内的 Namespace 资源：`--set namespace.create=false`。
+**命名空间：** Chart 不创建 Namespace，完全由 Helm 命令指定。首次安装使用 `-n sentinelx --create-namespace`；命名空间已存在时省略 `--create-namespace` 即可。
 
 ## 升级与回滚
 
@@ -87,7 +79,7 @@ helm install sentinelx ./helm/sentinelx \
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `global.imageRegistry` | 镜像仓库前缀 | `ghcr.io/cefso/sentinelx` |
-| `namespace.name` | 目标命名空间 | `sentinelx` |
+| （命名空间） | 使用 `helm install -n <ns>`，不用 values 配置 | — |
 | `postgresql.enabled` | 是否部署内置 PostgreSQL | `true` |
 | `postgresql.serviceName` | DB 连接 Service 名（`DB_HOST`） | `postgres` |
 | `redis.enabled` | 是否部署内置 Redis | `true` |
