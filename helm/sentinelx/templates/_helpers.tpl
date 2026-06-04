@@ -165,3 +165,11 @@ lookup requires a live cluster on install/upgrade; helm template falls back to g
 {{- define "sentinelx.frontend.fullname" -}}
 {{- printf "%s-frontend" (include "sentinelx.fullname" .) }}
 {{- end }}
+
+{{- define "sentinelx.backend.serviceHost" -}}
+{{- printf "%s.%s.svc.cluster.local" (include "sentinelx.backend.fullname" .) (include "sentinelx.namespace" .) -}}
+{{- end }}
+
+{{- define "sentinelx.frontend.nginxConfigMapName" -}}
+{{- printf "%s-frontend-nginx" (include "sentinelx.fullname" .) }}
+{{- end }}
