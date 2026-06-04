@@ -6,6 +6,8 @@ from typing import Optional, List, Dict, Any, Literal, Union
 from pydantic import BaseModel, Field
 
 from apps.alert.schemas import AlertResponse
+from apps.rule.models import AlertRule
+from apps.rule.suppress_timing import is_suppress_rule_in_effect
 
 
 # ============ 规则动作Schema ============
@@ -103,10 +105,12 @@ class RuleBasedSuppressionConfig(BaseModel):
 
 
 class SuppressionConfig(BaseModel):
-    """抑制配置"""
+    """抑制配置（统一为 rule_based 条件匹配）"""
     enabled: bool = False
-    type: Literal["maintenance_window", "rule_based"] = "maintenance_window"
-    maintenance_window: Optional[MaintenanceWindowConfig] = None
+    type: Literal["maintenance_window", "rule_based"] = "rule_based"
+    duration_minutes: int = Field(0, ge=0, description="0 表示永久抑制；>0 从规则保存时刻起算窗口")
+    effective_until: Optional[str] = Field(None, description="抑制窗口截止时间 ISO8601 UTC")
+    maintenance_window: Optional[MaintenanceWindowConfig] = None  # 已废弃，仅兼容旧数据
     rule_based: Optional[RuleBasedSuppressionConfig] = None
 
 
@@ -403,8 +407,44 @@ class StrategyRuleResponse(BaseModel):
     config: Optional[Dict[str, Any]] = None
     match_count: int = 0
     last_match_at: Optional[datetime] = None
+    suppress_in_effect: Optional[bool] = Field(
+        None,
+        description="抑制规则是否在生效窗口内（仅 suppress 列表返回）",
+    )
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_alert_rule(cls, rule: AlertRule, *, config_field: str) -> "StrategyRuleResponse":
+        """将 ORM 规则转为 API 响应，映射 deduplication/suppress/aggregate 配置到 config。"""
+        raw_conditions = rule.conditions or []
+        config = getattr(rule, config_field, None)
+        suppress_in_effect = None
+        if config_field == "suppress_config":
+            if not rule.is_active:
+                suppress_in_effect = False
+            else:
+                in_effect, _ = is_suppress_rule_in_effect(
+                    config or {},
+                    rule_created_at=rule.created_at,
+                )
+                suppress_in_effect = in_effect
+        return cls(
+            id=rule.id,
+            name=rule.name,
+            code=rule.code,
+            description=rule.description,
+            priority=rule.priority,
+            is_active=rule.is_active,
+            conditions=raw_conditions,
+            condition_mode=rule.condition_mode or "and",
+            config=config,
+            match_count=rule.match_count or 0,
+            last_match_at=rule.last_match_at,
+            suppress_in_effect=suppress_in_effect,
+            created_at=rule.created_at,
+            updated_at=rule.updated_at,
+        )

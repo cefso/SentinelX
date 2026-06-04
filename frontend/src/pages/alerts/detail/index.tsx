@@ -6,6 +6,7 @@ import { SuppressRuleModal } from '../../rules/suppress'
 import { AggregateRuleModal } from '../../rules/aggregate'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@/stores/toast-store'
 import { apiClient } from '@/services/api'
 import { AlertResponse } from '@/types/alert'
 import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc } from '@/hooks/useCloudMetrics'
@@ -537,6 +538,7 @@ export function AlertDetailPage() {
           onSuccess={() => {
             setShowRuleModal(null)
             queryClient.invalidateQueries({ queryKey: ['suppress-rules'] })
+            toast.success('抑制规则已创建，可在「规则 → 抑制规则」中查看')
           }}
         />
       )}
