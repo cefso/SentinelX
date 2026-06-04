@@ -97,16 +97,16 @@ class AlertSourceType:
 
     # 来源类型对应的接收路径
     WEBHOOK_PATHS: dict[str, str] = {
-        PROMETHEUS: "/api/v1/webhooks/{tenant}/prometheus",
-        ALERTMANAGER: "/api/v1/webhooks/{tenant}/alertmanager",
-        ALIYUN: "/api/v1/webhooks/{tenant}/aliyun",
-        ALIYUN_CMS: "/api/v1/webhooks/{tenant}/aliyun_cms",
-        ALIYUN_CMS2: "/api/v1/webhooks/{tenant}/aliyun_cms2",
-        TENCENT: "/api/v1/webhooks/{tenant}/tencent",
-        HUAWEI: "/api/v1/webhooks/{tenant}/huawei",
-        ZABBIX: "/api/v1/webhooks/{tenant}/zabbix",
-        GRAFANA: "/api/v1/webhooks/{tenant}/grafana",
-        CUSTOM: "/api/v1/webhooks/{tenant}/custom",
+        PROMETHEUS: "/api/v1/webhooks/{tenant}/prometheus/{client_id}",
+        ALERTMANAGER: "/api/v1/webhooks/{tenant}/alertmanager/{client_id}",
+        ALIYUN: "/api/v1/webhooks/{tenant}/aliyun/{client_id}",
+        ALIYUN_CMS: "/api/v1/webhooks/{tenant}/aliyun_cms/{client_id}",
+        ALIYUN_CMS2: "/api/v1/webhooks/{tenant}/aliyun_cms2/{client_id}",
+        TENCENT: "/api/v1/webhooks/{tenant}/tencent/{client_id}",
+        HUAWEI: "/api/v1/webhooks/{tenant}/huawei/{client_id}",
+        ZABBIX: "/api/v1/webhooks/{tenant}/zabbix/{client_id}",
+        GRAFANA: "/api/v1/webhooks/{tenant}/grafana/{client_id}",
+        CUSTOM: "/api/v1/webhooks/{tenant}/custom/{client_id}",
     }
 
     @classmethod

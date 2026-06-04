@@ -30,3 +30,4 @@ def test_alert_source_type_includes_aliyun_cms2():
 def test_aliyun_cms2_webhook_path():
     path = AlertSourceType.WEBHOOK_PATHS[AlertSourceType.ALIYUN_CMS2]
     assert "aliyun_cms2" in path
+    assert "{client_id}" in path
