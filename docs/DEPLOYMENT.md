@@ -5,7 +5,7 @@
 | 部署方式 | 适用场景 | 复杂度 |
 |---------|---------|--------|
 | Docker Compose | 开发/测试/小规模生产 | 低 |
-| Kubernetes | 生产环境/大规模部署 | 中 |
+| Helm (Kubernetes) | 生产环境/大规模部署 | 中 |
 | 直接部署 | 开发调试 | 低 |
 
 ## Docker Compose 部署
@@ -43,13 +43,14 @@ docker compose --profile tools up -d
 - pgAdmin: http://localhost:5050
 - Redis Commander: http://localhost:8081
 
-## Kubernetes 部署
+## Helm (Kubernetes) 部署
 
-详见 [k8s/README.md](../k8s/README.md)
+详见 [helm/sentinelx/README.md](../helm/sentinelx/README.md)
 
 ### 前提条件
 
 - Kubernetes 1.25+
+- Helm 3.x
 - kubectl 配置完成
 - Ingress Controller（nginx-ingress）
 - metrics-server（用于 HPA）
@@ -57,24 +58,22 @@ docker compose --profile tools up -d
 ### 部署步骤
 
 ```bash
-# 1. 创建命名空间
-kubectl apply -f k8s/namespace.yaml
+# 安装 Chart（必须设置 JWT 与数据库密码）
+helm install sentinelx ./helm/sentinelx \
+  -n sentinelx \
+  --create-namespace \
+  --set secrets.jwtSecretKey="$(openssl rand -hex 32)" \
+  --set secrets.dbPassword="$(openssl rand -hex 16)" \
+  --set ingress.host=sentinelx.your-domain.com
 
-# 2. 部署数据库和缓存
-kubectl apply -f k8s/postgres-deployment.yaml
-kubectl apply -f k8s/redis-deployment.yaml
+# 等待 Pod 就绪
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=sentinelx -n sentinelx --timeout=300s
 
-# 3. 等待就绪
-kubectl wait --for=condition=ready pod -l app=sentinelx,component=postgres -n sentinelx --timeout=120s
-
-# 4. 部署后端
-kubectl apply -f k8s/backend-deployment.yaml
-kubectl apply -f k8s/backend-hpa.yaml
-
-# 5. 部署前端
-kubectl apply -f k8s/frontend-deployment.yaml
-kubectl apply -f k8s/frontend-hpa.yaml
+# 查看 Ingress
+kubectl get ingress -n sentinelx
 ```
+
+生产环境使用外置数据库时，可参考 `helm/sentinelx/values-production.yaml` 并通过 `-f` 传入。
 
 ## 生产环境配置
 
@@ -207,7 +206,7 @@ redis-cli SAVE
 
 ```bash
 # 检查数据库日志
-kubectl logs -n sentinelx -l app=sentinelx,component=postgres
+kubectl logs -n sentinelx -l app.kubernetes.io/component=postgresql
 
 # 测试连接
 kubectl exec -n sentinelx deploy/sentinelx-backend -- python -c "from apps.core.database import async_session; print('OK')"
@@ -239,12 +238,14 @@ docker compose pull
 docker compose up -d
 ```
 
-### Kubernetes 升级
+### Helm 升级
 
 ```bash
-# 更新镜像
-kubectl set image deployment/sentinelx-backend backend=sentinelx/backend:v2.0.0 -n sentinelx
+# 更新镜像 tag 并滚动升级
+helm upgrade sentinelx ./helm/sentinelx -n sentinelx \
+  --reuse-values \
+  --set backend.image.tag=v2.0.0 \
+  --set frontend.image.tag=v2.0.0
 
-# 滚动更新
 kubectl rollout status deployment/sentinelx-backend -n sentinelx
 ```

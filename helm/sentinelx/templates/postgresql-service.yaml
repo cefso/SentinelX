@@ -1,0 +1,37 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinelx.postgresql.headlessServiceName" . }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  clusterIP: None
+  selector:
+    {{- include "sentinelx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.postgresql.serviceName }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sentinelx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+{{- end }}

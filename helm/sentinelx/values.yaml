@@ -1,0 +1,127 @@
+global:
+  imageRegistry: ghcr.io/cefso/sentinelx
+  imagePullSecrets: []
+
+namespace:
+  create: true
+  name: sentinelx
+
+nameOverride: ""
+fullnameOverride: ""
+
+postgresql:
+  enabled: true
+  serviceName: postgres
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: IfNotPresent
+  auth:
+    username: postgres
+    password: ""
+    database: sentinelx
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+redis:
+  enabled: true
+  serviceName: redis
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+  maxmemory: 256mb
+  maxmemoryPolicy: allkeys-lru
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+backend:
+  replicaCount: 2
+  image:
+    repository: backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  migration:
+    enabled: true
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  env:
+    APP_NAME: SentinelX
+    DEBUG: "false"
+    DB_PORT: "5432"
+    DB_NAME: sentinelx
+    REDIS_PORT: "6379"
+    PGMQ_ENABLED: "true"
+    LOG_LEVEL: INFO
+    LOG_FORMAT: json
+  # Override when using external database (postgresql.enabled=false)
+  externalDbHost: ""
+  externalRedisHost: ""
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  containerPort: 80
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+  env:
+    VITE_API_BASE_URL: /api/v1
+
+ingress:
+  enabled: true
+  className: nginx
+  host: sentinelx.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  tls: []
+
+secrets:
+  jwtSecretKey: ""
+  dbPassword: ""
+  dbUser: ""
+  defaultAdminPassword: ""
+
+hpa:
+  backend:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+  frontend:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sentinelx
+description: SentinelX comprehensive alerting platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,0 +1,21 @@
+# Production example: external managed PostgreSQL and Redis
+postgresql:
+  enabled: false
+
+redis:
+  enabled: false
+
+backend:
+  externalDbHost: your-rds-endpoint.example.com
+  externalRedisHost: your-elasticache-endpoint.example.com
+
+ingress:
+  host: sentinelx.your-domain.com
+  tls:
+    - secretName: sentinelx-tls
+      hosts:
+        - sentinelx.your-domain.com
+
+# Set secrets at install time, never commit real values:
+# helm install sentinelx ./helm/sentinelx -f helm/sentinelx/values-production.yaml \
+#   --set secrets.jwtSecretKey=... --set secrets.dbPassword=...
