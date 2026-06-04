@@ -1,4 +1,4 @@
-{{- if .Values.namespace.create }}
+{{- if and .Values.namespace.create (not (lookup "v1" "Namespace" "" (include "sentinelx.namespace" .))) }}
 apiVersion: v1
 kind: Namespace
 metadata:
