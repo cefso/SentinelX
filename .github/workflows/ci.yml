@@ -198,7 +198,7 @@ jobs:
             --set secrets.dbPassword=test-password \
             > /tmp/sentinelx-rendered.yaml
           grep -q 'kind: Deployment' /tmp/sentinelx-rendered.yaml
-          grep -q 'DB_HOST: postgres' /tmp/sentinelx-rendered.yaml
+          grep -qE 'DB_HOST: "?postgres"?' /tmp/sentinelx-rendered.yaml
 
       - name: Helm template (external DB mode)
         run: |
@@ -210,4 +210,4 @@ jobs:
             --set backend.externalRedisHost=redis.example.com \
             > /tmp/sentinelx-prod.yaml
           ! grep -q 'kind: StatefulSet' /tmp/sentinelx-prod.yaml
-          grep -q 'DB_HOST: db.example.com' /tmp/sentinelx-prod.yaml
+          grep -qE 'DB_HOST: "?db\.example\.com"?' /tmp/sentinelx-prod.yaml
