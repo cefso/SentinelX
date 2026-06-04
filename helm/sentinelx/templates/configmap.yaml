@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinelx.configMapName" . }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+data:
+  APP_NAME: {{ .Values.backend.env.APP_NAME | quote }}
+  DEBUG: {{ .Values.backend.env.DEBUG | quote }}
+  DB_HOST: {{ include "sentinelx.dbHost" . | quote }}
+  DB_PORT: {{ .Values.backend.env.DB_PORT | quote }}
+  DB_NAME: {{ .Values.backend.env.DB_NAME | quote }}
+  REDIS_HOST: {{ include "sentinelx.redisHost" . | quote }}
+  REDIS_PORT: {{ .Values.backend.env.REDIS_PORT | quote }}
+  PGMQ_ENABLED: {{ .Values.backend.env.PGMQ_ENABLED | quote }}
+  LOG_LEVEL: {{ .Values.backend.env.LOG_LEVEL | quote }}
+  LOG_FORMAT: {{ .Values.backend.env.LOG_FORMAT | quote }}
+  VITE_API_BASE_URL: {{ .Values.frontend.env.VITE_API_BASE_URL | quote }}

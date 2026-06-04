@@ -173,3 +173,41 @@ jobs:
       - name: Verify tables created
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d sentinelx_test -c "\dt"
+
+  # ============ Helm Chart 校验 ============
+  helm-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Helm lint
+        run: |
+          helm lint helm/sentinelx \
+            --set secrets.jwtSecretKey=test-secret \
+            --set secrets.dbPassword=test-password
+
+      - name: Helm template render
+        run: |
+          helm template sentinelx helm/sentinelx -n sentinelx \
+            --set secrets.jwtSecretKey=test-secret \
+            --set secrets.dbPassword=test-password \
+            > /tmp/sentinelx-rendered.yaml
+          grep -q 'kind: Deployment' /tmp/sentinelx-rendered.yaml
+          grep -qE 'DB_HOST: "?postgres"?' /tmp/sentinelx-rendered.yaml
+
+      - name: Helm template (external DB mode)
+        run: |
+          helm template sentinelx helm/sentinelx -n sentinelx \
+            -f helm/sentinelx/values-production.yaml \
+            --set secrets.jwtSecretKey=test-secret \
+            --set secrets.dbPassword=test-password \
+            --set backend.externalDbHost=db.example.com \
+            --set backend.externalRedisHost=redis.example.com \
+            > /tmp/sentinelx-prod.yaml
+          ! grep -q 'kind: StatefulSet' /tmp/sentinelx-prod.yaml
+          grep -qE 'DB_HOST: "?db\.example\.com"?' /tmp/sentinelx-prod.yaml

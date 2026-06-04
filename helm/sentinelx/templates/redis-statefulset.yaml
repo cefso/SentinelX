@@ -1,0 +1,66 @@
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sentinelx.redis.fullname" . }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: {{ include "sentinelx.redis.headlessServiceName" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sentinelx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "sentinelx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          ports:
+            - containerPort: 6379
+              name: redis
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - {{ .Values.redis.maxmemory | quote }}
+            - --maxmemory-policy
+            - {{ .Values.redis.maxmemoryPolicy | quote }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  {{- if .Values.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.redis.persistence.storageClass }}
+        storageClassName: {{ .Values.redis.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+  {{- end }}
+{{- end }}

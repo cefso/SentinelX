@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinelx.frontend.fullname" . }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sentinelx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "sentinelx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: {{ include "sentinelx.image" (dict "Values" .Values "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag) }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.frontend.containerPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "sentinelx.configMapName" . }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.containerPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.containerPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinelx.frontend.fullname" . }}
+  namespace: {{ include "sentinelx.namespace" . }}
+  labels:
+    {{- include "sentinelx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sentinelx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+  ports:
+    - port: 80
+      targetPort: {{ .Values.frontend.containerPort }}

@@ -509,9 +509,7 @@ function SourceModal({
   }
 
   const currentType = alertSourceTypes.find(t => t.id === formData.source_type)
-  const webhookUrl = formData.source_type === 'custom'
-    ? `${webhookBaseUrl}/custom`
-    : `${webhookBaseUrl}/${formData.source_type}/${formData.client_id}`
+  const webhookUrl = `${webhookBaseUrl}/${formData.source_type}/${formData.client_id}`
 
   return (
     <Modal

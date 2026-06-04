@@ -21,10 +21,12 @@ class AlertSourceCreate(AlertSourceBase):
 
 
 class AlertSourceUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=128)
+    code: Optional[str] = Field(None, min_length=1, max_length=64)
+    source_type: Optional[str] = Field(None, min_length=1, max_length=32)
     config: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
     description: Optional[str] = None
+    is_active: Optional[str] = Field(None, pattern="^(active|inactive)$")
 
 
 class AlertSourceResponse(AlertSourceBase):

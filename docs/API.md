@@ -124,10 +124,14 @@ GET /api/v1/tenants/public
 ### 接收告警（多租户）
 
 ```
-POST /api/v1/webhooks/{tenant_slug}/{source_type}
+POST /api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}
 X-API-Key: <WEBHOOK_API_KEY>
 Content-Type: application/json
 ```
+
+- **tenant_slug**: 租户标识（如 `sentinelx`）
+- **source_type**: 告警源类型
+- **client_id**: 在「告警提供商」创建告警源时生成的客户端 ID（也支持数字形式的告警源 `id`）
 
 **支持的 source_type**: `prometheus`, `alertmanager`, `aliyun`, `aliyun_cms`, `aliyun_cms2`, `tencent`, `huawei`, `zabbix`, `grafana`, `custom`
 
@@ -186,6 +190,7 @@ Authorization: Bearer <TOKEN>
 | end_time | string | 结束时间 ISO 格式 |
 | page | int | 页码 |
 | page_size | int | 每页数量 |
+| aggregate | bool | 为 `true` 时按指纹聚合，返回 `count`（触发次数）与 `latest`（最新告警） |
 
 ### 告警统计
 
@@ -209,6 +214,22 @@ Authorization: Bearer <TOKEN>
 ```
 
 返回告警从接收到通知的完整处理流程。
+
+## 告警源接口 `/sources`
+
+在「告警提供商」中配置接入渠道；`client_id` 用于组成 Webhook URL。
+
+```
+GET    /api/v1/sources
+POST   /api/v1/sources
+PUT    /api/v1/sources/{id}
+DELETE /api/v1/sources/{id}
+PATCH  /api/v1/sources/{id}/toggle
+GET    /api/v1/sources/stats
+Authorization: Bearer <TOKEN>
+```
+
+创建请求体需包含 `client_id`（客户端生成的短 ID，如 8 位十六进制）。更新时不可修改 `client_id`。
 
 ## 规则接口 `/rules`
 

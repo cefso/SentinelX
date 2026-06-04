@@ -353,6 +353,40 @@ async def create_source(
     return source
 
 
+@router.put("/sources/{source_id}", response_model=AlertSourceResponse)
+async def update_source(
+    source_id: int,
+    request: AlertSourceUpdate,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新告警源"""
+    source = await db.get(AlertSource, source_id)
+    if not source or source.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="AlertSource not found")
+
+    updates = request.model_dump(exclude_unset=True)
+    if not updates:
+        return source
+
+    if "code" in updates and updates["code"] != source.code:
+        existing = await db.execute(
+            select(AlertSource).where(
+                AlertSource.code == updates["code"],
+                AlertSource.id != source_id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Alert source code already exists")
+
+    for field, value in updates.items():
+        setattr(source, field, value)
+
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
 @router.delete("/sources/{source_id}")
 async def delete_source(
     source_id: int,

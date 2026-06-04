@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentConfig:
     """Agent配置"""
-    api_base_url: str = "http://localhost:8000/api/v1"
+    api_base_url: str = "http://localhost:8001/api/v1"
     api_key: str = ""
     tenant_id: str = ""
     agent_id: str = str(uuid.uuid4())[:8]

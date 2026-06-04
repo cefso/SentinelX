@@ -2,6 +2,8 @@
 
 > **安全提示**：`docker/.env.docker` 中的 `DEFAULT_ADMIN_PASSWORD`、`JWT_SECRET_KEY` 仅用于本地开发。生产部署前必须更换为强密码与随机密钥。
 
+> **API 路径**：REST 接口以 [docs/API.md](../docs/API.md) 为准；下文部分 API 列表可能与根目录 README 重复，若有冲突以 API 文档及 OpenAPI `/docs` 为准。
+
 企业级、多租户、高可用的综合告警平台。
 
 ## 开发进度
@@ -143,7 +145,7 @@ docker compose up -d --build
 详细文档请参考 `docs/` 目录：
 
 - [API 文档](docs/API.md) - 完整的 API 接口说明
-- [部署指南](docs/DEPLOYMENT.md) - Docker Compose 和 Kubernetes 部署
+- [部署指南](docs/DEPLOYMENT.md) - Docker Compose 和 Helm 部署
 
 ## 项目结构
 
@@ -208,14 +210,12 @@ SentinelX/
 │   ├── init-db.sh             # 数据库初始化脚本
 │   ├── .env.docker            # Docker 环境配置
 │   └── README.md              # Docker 详细说明
-├── k8s/                       # Kubernetes 部署配置
-│   ├── namespace.yaml         # 命名空间/ConfigMap/Secret
-│   ├── postgres-deployment.yaml # PostgreSQL
-│   ├── redis-deployment.yaml   # Redis
-│   ├── backend-deployment.yaml # 后端
-│   ├── frontend-deployment.yaml # 前端+Ingress
-│   ├── backend-hpa.yaml       # 后端自动扩缩容
-│   └── frontend-hpa.yaml     # 前端自动扩缩容
+├── helm/sentinelx/            # Helm Chart（Kubernetes 部署）
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   ├── values-production.yaml
+│   ├── README.md
+│   └── templates/             # K8s 资源模板
 ├── docs/                      # 详细文档
 │   ├── API.md                 # API 文档
 │   ├── DEPLOYMENT.md          # 部署指南
@@ -526,9 +526,12 @@ POST   /api/v1/roles             # 创建角色
 
 ### 告警源管理
 ```
-GET    /api/v1/alerts/sources             # 获取告警源列表
-POST   /api/v1/alerts/sources             # 创建告警源（需传入 client_id）
-GET    /api/v1/alerts/sources/stats        # 获取各告警源的统计数据（总数/触发中数）
+GET    /api/v1/sources                    # 获取告警源列表
+POST   /api/v1/sources                    # 创建告警源（需传入 client_id）
+PUT    /api/v1/sources/{id}               # 更新告警源
+DELETE /api/v1/sources/{id}               # 删除告警源
+PATCH  /api/v1/sources/{id}/toggle        # 切换启用/禁用
+GET    /api/v1/sources/stats              # 获取各告警源的统计数据（总数/触发中数）
 ```
 
 **告警源 client_id**: 客户端生成的随机短ID（如 8 位十六进制），用于构造 Webhook URL，比内部 ID 更安全且无需泄露数据库主键。
