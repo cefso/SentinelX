@@ -13,13 +13,23 @@
 ## 快速安装
 
 ```bash
-# 安装（必须提供密钥）
+# 安装（默认自动生成 JWT / 数据库 / 初始管理员密码并写入 Secret）
 helm install sentinelx ./helm/sentinelx \
   -n sentinelx \
   --create-namespace \
-  --set secrets.jwtSecretKey="$(openssl rand -hex 32)" \
-  --set secrets.dbPassword="$(openssl rand -hex 16)" \
   --set ingress.host=sentinelx.your-domain.com
+
+# 安装完成后查看自动生成的 Secret
+kubectl get secret sentinelx-secrets -n sentinelx
+```
+
+如需自行指定密钥（关闭自动生成）：
+
+```bash
+helm install sentinelx ./helm/sentinelx -n sentinelx --create-namespace \
+  --set secrets.autoGenerate=false \
+  --set secrets.jwtSecretKey="$(openssl rand -hex 32)" \
+  --set secrets.dbPassword="$(openssl rand -hex 16)"
 ```
 
 镜像默认从 `ghcr.io/cefso/sentinelx` 拉取（backend、frontend、postgres）。可通过 `global.imageRegistry` 与各组件 `image.repository` / `image.tag` 覆盖。
@@ -75,8 +85,9 @@ helm install sentinelx ./helm/sentinelx \
 | `backend.replicaCount` | 后端副本数 | `2` |
 | `frontend.containerPort` | 前端容器端口（nginx 为 80） | `80` |
 | `ingress.host` | Ingress 域名 | `sentinelx.example.com` |
-| `secrets.jwtSecretKey` | JWT 密钥（必填） | `""` |
-| `secrets.dbPassword` | 数据库密码（必填） | `""` |
+| `secrets.autoGenerate` | 为空时自动生成密钥并写入 Secret | `true` |
+| `secrets.jwtSecretKey` | JWT 密钥（可选，覆盖自动生成） | `""` |
+| `secrets.dbPassword` | 数据库密码（可选） | `""` |
 | `hpa.backend.enabled` | 后端 HPA | `true` |
 | `hpa.frontend.enabled` | 前端 HPA | `true` |
 
@@ -97,6 +108,7 @@ curl http://localhost:8000/health
 
 ## 密钥管理建议
 
+- 默认由 Chart 在首次安装时生成随机密钥，保存在 `sentinelx-secrets`（升级时会复用已有 Secret，避免轮换导致登出/连库失败）
 - 不要将真实密码写入 `values.yaml` 并提交到 Git
-- 安装时使用 `--set` 或 `--set-file`
-- 生产环境可配合 External Secrets Operator 等方案
+- 生产环境可设置 `secrets.autoGenerate=false` 并用手动 `--set`，或配合 External Secrets Operator
+- 查看 JWT：`kubectl get secret <release>-secrets -n sentinelx -o jsonpath='{.data.JWT_SECRET_KEY}' | base64 -d`

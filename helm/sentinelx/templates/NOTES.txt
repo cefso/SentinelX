@@ -1,0 +1,27 @@
+SentinelX has been deployed to namespace {{ include "sentinelx.namespace" . }}.
+
+Release: {{ .Release.Name }}
+
+{{- if .Values.ingress.enabled }}
+
+Ingress host: {{ .Values.ingress.host }}
+  http://{{ .Values.ingress.host }}/
+{{- end }}
+
+{{- if .Values.secrets.autoGenerate }}
+
+Secrets (auto-generated or reused from existing Secret):
+  kubectl get secret {{ include "sentinelx.secretName" . }} -n {{ include "sentinelx.namespace" . }}
+
+  JWT (do not log in shared terminals):
+  kubectl get secret {{ include "sentinelx.secretName" . }} -n {{ include "sentinelx.namespace" . }} -o jsonpath='{.data.JWT_SECRET_KEY}' | base64 -d; echo
+
+To supply your own passwords instead, set secrets.autoGenerate=false and pass:
+  --set secrets.jwtSecretKey=... --set secrets.dbPassword=...
+{{- else }}
+
+Secrets were taken from Helm values (secrets.autoGenerate=false).
+{{- end }}
+
+Check pods:
+  kubectl get pods -n {{ include "sentinelx.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
