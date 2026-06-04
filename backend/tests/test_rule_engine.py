@@ -1,7 +1,6 @@
 """
 SentinelX - 规则引擎测试
 """
-import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -213,11 +212,12 @@ def test_supported_fields():
     assert "raw_data" not in SUPPORTED_SIMPLE_FIELDS
 
 
-def test_status_field_values():
+@pytest.mark.asyncio
+async def test_status_field_values():
     """测试 status 固定枚举值"""
     from apps.rule.routers import _get_status_field_values, STATUS_CHINESE_LABELS
 
-    resp = asyncio.run(_get_status_field_values(search="", limit=10, offset=0))
+    resp = await _get_status_field_values(search="", limit=10, offset=0)
     values = [v.value for v in resp.values]
 
     assert "firing" in values
@@ -227,7 +227,7 @@ def test_status_field_values():
     assert resp.total == 4
 
     # 搜索过滤
-    resp = asyncio.run(_get_status_field_values(search="触发", limit=10, offset=0))
+    resp = await _get_status_field_values(search="触发", limit=10, offset=0)
     assert resp.total == 1
     assert resp.values[0].value == "firing"
 
