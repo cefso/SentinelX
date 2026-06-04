@@ -1,8 +1,0 @@
-{{- if and .Values.namespace.create (not (lookup "v1" "Namespace" "" (include "sentinelx.namespace" .))) }}
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ include "sentinelx.namespace" . }}
-  labels:
-    {{- include "sentinelx.labels" . | nindent 4 }}
-{{- end }}

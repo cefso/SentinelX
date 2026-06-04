@@ -58,11 +58,13 @@ docker compose --profile tools up -d
 ### 部署步骤
 
 ```bash
-# 安装 Chart（默认自动生成 JWT / DB / 初始管理员密码并写入 Secret）
+# 安装 Chart（命名空间由 -n / --create-namespace 指定，Chart 不创建 Namespace）
 helm install sentinelx ./helm/sentinelx \
   -n sentinelx \
   --create-namespace \
   --set ingress.host=sentinelx.your-domain.com
+
+# 若 sentinelx 命名空间已存在，去掉 --create-namespace 即可
 
 # 等待 Pod 就绪
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=sentinelx -n sentinelx --timeout=300s

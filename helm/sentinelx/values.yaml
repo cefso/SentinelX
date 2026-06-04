@@ -2,12 +2,6 @@ global:
   imageRegistry: ghcr.io/cefso/sentinelx
   imagePullSecrets: []
 
-namespace:
-  # Create Namespace only when it does not exist (safe with --create-namespace).
-  # Set false if you always pre-create the namespace yourself.
-  create: true
-  name: sentinelx
-
 nameOverride: ""
 fullnameOverride: ""
 

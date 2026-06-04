@@ -26,7 +26,7 @@ Create a default fully qualified app name.
 {{- end }}
 
 {{- define "sentinelx.namespace" -}}
-{{- .Values.namespace.name }}
+{{- .Release.Namespace }}
 {{- end }}
 
 {{- define "sentinelx.labels" -}}
