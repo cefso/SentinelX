@@ -191,14 +191,23 @@ jobs:
             --set secrets.jwtSecretKey=test-secret \
             --set secrets.dbPassword=test-password
 
-      - name: Helm template render
+      - name: Helm template render (auto-generated secrets)
+        run: |
+          helm template sentinelx helm/sentinelx -n sentinelx > /tmp/sentinelx-rendered.yaml
+          grep -q 'kind: Deployment' /tmp/sentinelx-rendered.yaml
+          grep -qE 'DB_HOST: "?postgres"?' /tmp/sentinelx-rendered.yaml
+          grep -q 'JWT_SECRET_KEY:' /tmp/sentinelx-rendered.yaml
+          grep -q 'DB_PASSWORD:' /tmp/sentinelx-rendered.yaml
+          grep -q 'sentinelx.io/auto-generated: "true"' /tmp/sentinelx-rendered.yaml
+
+      - name: Helm template render (explicit secrets)
         run: |
           helm template sentinelx helm/sentinelx -n sentinelx \
             --set secrets.jwtSecretKey=test-secret \
             --set secrets.dbPassword=test-password \
-            > /tmp/sentinelx-rendered.yaml
-          grep -q 'kind: Deployment' /tmp/sentinelx-rendered.yaml
-          grep -qE 'DB_HOST: "?postgres"?' /tmp/sentinelx-rendered.yaml
+            > /tmp/sentinelx-explicit.yaml
+          grep -q 'JWT_SECRET_KEY: "test-secret"' /tmp/sentinelx-explicit.yaml
+          grep -q 'DB_PASSWORD: "test-password"' /tmp/sentinelx-explicit.yaml
 
       - name: Helm template (external DB mode)
         run: |

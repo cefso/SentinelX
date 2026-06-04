@@ -58,12 +58,10 @@ docker compose --profile tools up -d
 ### 部署步骤
 
 ```bash
-# 安装 Chart（必须设置 JWT 与数据库密码）
+# 安装 Chart（默认自动生成 JWT / DB / 初始管理员密码并写入 Secret）
 helm install sentinelx ./helm/sentinelx \
   -n sentinelx \
   --create-namespace \
-  --set secrets.jwtSecretKey="$(openssl rand -hex 32)" \
-  --set secrets.dbPassword="$(openssl rand -hex 16)" \
   --set ingress.host=sentinelx.your-domain.com
 
 # 等待 Pod 就绪
