@@ -91,7 +91,7 @@ services:
       service: "sentinelx-frontend"
 
   # ============================================================================
-  # PostgreSQL + TimescaleDB 数据库
+  # PostgreSQL + PGMQ 数据库
   # ============================================================================
   postgres:
     image: ghcr.io/cefso/sentinelx/postgres:latest

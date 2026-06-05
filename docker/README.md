@@ -34,7 +34,7 @@
 
 ### 后端
 - Python 3.11 + FastAPI
-- PostgreSQL + TimescaleDB (时序扩展)
+- PostgreSQL 16
 - Redis
 - PGMQ (PostgreSQL 原生消息队列)
 - SQLAlchemy + Pydantic + Alembic
@@ -47,7 +47,6 @@
 ### 架构优势
 - JSONB + GIN 索引：毫秒级动态查询
 - CTE + 窗口函数：数据库层聚合/去重
-- TimescaleDB：自动分区与降采样
 - PGMQ：PostgreSQL 原生消息队列
 
 ## 快速开始
@@ -72,7 +71,7 @@ docker compose -f docker/docker-compose.infra.yml up -d
 ```
 
 这将启动:
-- PostgreSQL (TimescaleDB + TimescaleDB 扩展) - 端口 5432
+- PostgreSQL 16（含 PGMQ 扩展）- 端口 5432
 - Redis - 端口 6379
 
 ### 3. 本地开发 (前后端不使用 Docker)
@@ -205,7 +204,7 @@ SentinelX/
 │   ├── docker-compose.infra.yml # 基础设施
 │   ├── Dockerfile             # 后端镜像
 │   ├── Dockerfile.frontend   # 前端镜像
-│   ├── Dockerfile.pg          # PostgreSQL + TimescaleDB 镜像
+│   ├── Dockerfile.pg          # PostgreSQL + PGMQ 镜像
 │   ├── backend-entrypoint.sh   # 后端启动脚本
 │   ├── init-db.sh             # 数据库初始化脚本
 │   ├── .env.docker            # Docker 环境配置

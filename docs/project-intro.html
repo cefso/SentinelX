@@ -1,0 +1,2561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SentinelX — 企业级多租户综合告警平台，统一接入、智能路由、多渠道通知。" />
+  <meta name="color-scheme" content="light dark" />
+  <title>SentinelX — 综合告警平台</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem("sentinelx-theme");
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = stored || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --bg-elevated: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f1f5f9;
+      --border: #e2e8f0;
+      --border-hover: rgba(59, 130, 246, 0.35);
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #2563eb;
+      --accent-light: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.1);
+      --accent-border: rgba(59, 130, 246, 0.25);
+      --green: #16a34a;
+      --amber: #d97706;
+      --purple: #7c3aed;
+      --rose: #e11d48;
+      --code-bg: rgba(15, 23, 42, 0.06);
+      --tag-bg: rgba(15, 23, 42, 0.04);
+      --row-hover: rgba(15, 23, 42, 0.03);
+      --nav-bg: rgba(248, 250, 252, 0.88);
+      --hero-gradient: linear-gradient(160deg, #f8fafc 0%, #eff6ff 45%, #ede9fe 100%);
+      --hero-glow-1: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.12), transparent);
+      --hero-glow-2: radial-gradient(ellipse 40% 30% at 80% 60%, rgba(124, 58, 237, 0.08), transparent);
+      --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+      --radius: 12px;
+      --transition: background-color 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0b1120;
+      --bg-elevated: #111827;
+      --bg-card: #111827;
+      --bg-card-hover: #1a2332;
+      --border: #1e293b;
+      --border-hover: rgba(59, 130, 246, 0.3);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-light: #60a5fa;
+      --accent-soft: rgba(59, 130, 246, 0.15);
+      --accent-border: rgba(59, 130, 246, 0.3);
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --purple: #a78bfa;
+      --rose: #fb7185;
+      --code-bg: rgba(255, 255, 255, 0.06);
+      --tag-bg: rgba(255, 255, 255, 0.05);
+      --row-hover: rgba(255, 255, 255, 0.02);
+      --nav-bg: rgba(11, 17, 32, 0.88);
+      --hero-gradient: linear-gradient(160deg, #0b1120 0%, #0f172a 40%, #1e1b4b 100%);
+      --hero-glow-1: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59, 130, 246, 0.15), transparent);
+      --hero-glow-2: radial-gradient(ellipse 40% 30% at 80% 60%, rgba(167, 139, 250, 0.08), transparent);
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 16px;
+      transition: var(--transition);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(56px, 10vw, 100px) 24px clamp(72px, 12vw, 120px);
+      text-align: center;
+      background: var(--hero-gradient);
+      transition: var(--transition);
+    }
+
+    .hero-orbs {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.45;
+      animation: orbFloat 14s ease-in-out infinite;
+    }
+
+    .orb-1 {
+      width: clamp(200px, 40vw, 420px);
+      height: clamp(200px, 40vw, 420px);
+      background: rgba(59, 130, 246, 0.35);
+      top: -10%;
+      left: -5%;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: clamp(160px, 30vw, 320px);
+      height: clamp(160px, 30vw, 320px);
+      background: rgba(124, 58, 237, 0.3);
+      top: 20%;
+      right: -8%;
+      animation-delay: -5s;
+    }
+
+    .orb-3 {
+      width: clamp(120px, 22vw, 240px);
+      height: clamp(120px, 22vw, 240px);
+      background: rgba(45, 212, 191, 0.22);
+      bottom: 5%;
+      left: 30%;
+      animation-delay: -9s;
+    }
+
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(30px, -24px) scale(1.06); }
+      66%       { transform: translate(-20px, 16px) scale(0.94); }
+    }
+
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--hero-glow-1), var(--hero-glow-2);
+      pointer-events: none;
+      transition: var(--transition);
+    }
+
+    .hero-inner { position: relative; max-width: 820px; margin: 0 auto; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-light);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      margin-bottom: 24px;
+      transition: var(--transition);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, var(--accent-light), var(--purple), var(--accent-light));
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientShift 5s ease infinite;
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% center; }
+      50%       { background-position: 200% center; }
+    }
+
+    /* Hero entrance */
+    @keyframes heroFadeUp {
+      from { opacity: 0; transform: translateY(28px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero-enter {
+      animation: heroFadeUp 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .hero-enter-d1 { animation-delay: 0.1s; }
+    .hero-enter-d2 { animation-delay: 0.22s; }
+    .hero-enter-d3 { animation-delay: 0.34s; }
+    .hero-enter-d4 { animation-delay: 0.46s; }
+    .hero-enter-d5 { animation-delay: 0.58s; }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 620px;
+      margin: 0 auto 36px;
+    }
+
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .hero-actions--start { justify-content: flex-start; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.22) 50%, transparent 60%);
+      transform: translateX(-120%);
+      transition: transform 0.55s ease;
+    }
+    .btn-primary:hover::after { transform: translateX(120%); }
+    .btn-primary:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent-light); }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    section { padding: clamp(52px, 8vw, 88px) 0; transition: var(--transition); }
+
+    section + section { border-top: 1px solid var(--border); }
+
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-light);
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-size: clamp(1.6rem, 3vw, 2rem);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      max-width: 640px;
+      margin-bottom: 40px;
+    }
+
+    .muted-note {
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* ── Feature Grid ── */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, background 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 42%, rgba(59, 130, 246, 0.06) 50%, transparent 58%);
+      transform: translateX(-110%);
+      transition: transform 0.65s ease;
+      pointer-events: none;
+    }
+
+    .card:hover::before { transform: translateX(110%); }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-6px) scale(1.01);
+      box-shadow: var(--shadow), 0 0 0 1px var(--border-hover);
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    .card p { font-size: 0.9rem; color: var(--text-muted); }
+
+    .icon-blue   { background: rgba(59, 130, 246, 0.15); }
+    .icon-green  { background: rgba(34, 197, 94, 0.15); }
+    .icon-amber  { background: rgba(245, 158, 11, 0.15); }
+    .icon-purple { background: rgba(167, 139, 250, 0.15); }
+    .icon-rose   { background: rgba(251, 113, 133, 0.15); }
+    .icon-teal   { background: rgba(45, 212, 191, 0.15); }
+
+    /* ── Architecture ── */
+    .arch-diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      white-space: pre;
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 24px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: var(--transition);
+      animation: flowPulse 3s ease-in-out infinite;
+    }
+
+    .flow-step:nth-child(1)  { animation-delay: 0s; }
+    .flow-step:nth-child(3)  { animation-delay: 0.4s; }
+    .flow-step:nth-child(5)  { animation-delay: 0.8s; }
+    .flow-step:nth-child(7)  { animation-delay: 1.2s; }
+    .flow-step:nth-child(9)  { animation-delay: 1.6s; }
+    .flow-step:nth-child(11) { animation-delay: 2.0s; }
+    .flow-step:nth-child(13) { animation-delay: 2.4s; }
+    .flow-step:nth-child(15) { animation-delay: 2.8s; }
+
+    @keyframes flowPulse {
+      0%, 100% { border-color: var(--border); box-shadow: none; }
+      50%       { border-color: var(--accent-light); box-shadow: 0 0 16px var(--accent-soft); }
+    }
+
+    .flow-arrow { color: var(--accent-light); font-size: 18px; flex-shrink: 0; animation: arrowBounce 1.5s ease-in-out infinite; }
+
+    @keyframes arrowBounce {
+      0%, 100% { transform: translateX(0); opacity: 0.7; }
+      50%       { transform: translateX(3px); opacity: 1; }
+    }
+
+    /* ── Tech Stack ── */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .tech-group {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: var(--transition);
+    }
+
+    .tech-group h4 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent-light);
+      margin-bottom: 14px;
+    }
+
+    .tech-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .tag {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text);
+      transition: var(--transition);
+    }
+
+    /* ── Sources Table ── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      transition: var(--transition);
+    }
+
+    th {
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    tr:hover td { background: var(--row-hover); }
+
+    code {
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 12px;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent-light);
+      transition: var(--transition);
+    }
+
+    .code-block {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+      overflow-x: auto;
+      line-height: 1.8;
+      margin: 0;
+    }
+
+    /* ── Deploy Cards ── */
+    .deploy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .deploy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .deploy-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+
+    .deploy-card .level {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .level-low    { color: var(--green); }
+    .level-medium { color: var(--amber); }
+
+    .deploy-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .deploy-card p  { font-size: 0.9rem; color: var(--text-muted); }
+
+    .mt-32 { margin-top: 32px; }
+    .mt-24 { margin-top: 24px; }
+    .mb-12 { margin-bottom: 12px; }
+
+    /* ── Stats Bar ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-top: 48px;
+      transition: var(--transition);
+    }
+
+    .stat {
+      background: var(--bg-card);
+      padding: 28px 24px;
+      text-align: center;
+      transition: var(--transition);
+    }
+
+    .stat-num {
+      font-size: 2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-light), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .stat-link {
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .stat-link:hover { background: var(--bg-card-hover); }
+
+    .inline-link { color: var(--accent-light); text-decoration: none; }
+    .inline-link:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    footer {
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+      transition: var(--transition);
+    }
+
+    footer a { color: var(--accent-light); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    .footer-sub { margin-top: 8px; font-size: 13px; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: var(--nav-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+    }
+
+    nav.is-scrolled {
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    [data-theme="dark"] nav.is-scrolled {
+      box-shadow: 0 4px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .nav-logo {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .nav-logo span { color: var(--accent-light); }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-links { display: flex; gap: 24px; list-style: none; }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      position: relative;
+    }
+
+    .nav-links a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -4px;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-light), var(--purple));
+      border-radius: 2px;
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a:hover::after { width: 100%; }
+
+    /* Mobile menu */
+    .menu-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .menu-toggle:hover { border-color: var(--accent); color: var(--accent-light); }
+
+    .menu-toggle svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .menu-toggle .icon-close { display: none; }
+    .menu-toggle.is-open .icon-menu { display: none; }
+    .menu-toggle.is-open .icon-close { display: block; }
+
+    .nav-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 150;
+      opacity: 0;
+      transition: opacity 0.3s;
+      backdrop-filter: blur(4px);
+    }
+
+    .nav-overlay.is-open {
+      display: block;
+      opacity: 1;
+    }
+
+    .nav-drawer {
+      display: none;
+      position: fixed;
+      top: 56px;
+      right: 0;
+      bottom: 0;
+      width: min(300px, 85vw);
+      background: var(--bg-elevated);
+      border-left: 1px solid var(--border);
+      z-index: 180;
+      padding: 24px;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow-y: auto;
+    }
+
+    .nav-drawer.is-open {
+      display: block;
+      transform: translateX(0);
+    }
+
+    .nav-drawer-links {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-drawer-links a {
+      display: block;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .nav-drawer-links a:hover {
+      background: var(--accent-soft);
+      color: var(--accent-light);
+    }
+
+    /* ── Theme Toggle ── */
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent-light);
+      background: var(--bg-card-hover);
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .theme-toggle .icon-sun,
+    .theme-toggle .icon-moon { display: none; }
+
+    [data-theme="light"] .theme-toggle .icon-moon { display: block; }
+    [data-theme="dark"]  .theme-toggle .icon-sun  { display: block; }
+
+    /* ── Adapter Grid ── */
+    .adapter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .adapter-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+
+    .adapter-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: var(--shadow);
+    }
+
+    .adapter-logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .adapter-item:hover .adapter-logo { transform: scale(1.12) rotate(-3deg); }
+
+    .adapter-name {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .adapter-code {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+
+    .logo-prom  { background: rgba(230, 67, 47, 0.15);  color: #e6432f; }
+    .logo-am    { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+    .logo-graf  { background: rgba(242, 105, 36, 0.15); color: #ea580c; }
+    .logo-zbx   { background: rgba(220, 38, 38, 0.15);  color: #dc2626; }
+    .logo-ali   { background: rgba(255, 106, 0, 0.15);  color: #ea580c; }
+    .logo-tenc  { background: rgba(0, 82, 217, 0.15);   color: #2563eb; }
+    .logo-hw    { background: rgba(207, 10, 44, 0.15);  color: #e11d48; }
+    .logo-custom{ background: rgba(100, 116, 139, 0.15); color: var(--text-muted); }
+
+    /* ── Channel Grid ── */
+    .channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .channel-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 22px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+
+    .channel-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+
+    .channel-icon {
+      font-size: 28px;
+      line-height: 1;
+      margin-bottom: 4px;
+      display: inline-block;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .channel-item:hover .channel-icon { transform: scale(1.2) rotate(8deg); }
+
+    .channel-name { font-size: 14px; font-weight: 600; }
+    .channel-code {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+    .channel-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Highlight Grid (performance) ── */
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .highlight-grid--2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .highlight-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .highlight-item:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+
+    .highlight-metric {
+      font-size: 1.75rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-light), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    .highlight-item h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+    .highlight-item p { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 12px; }
+
+    .highlight-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+
+    .highlight-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* ── Open Source Banner ── */
+    .oss-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .oss-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      transition: var(--transition);
+    }
+
+    .oss-item:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .oss-icon { font-size: 32px; margin-bottom: 12px; }
+    .oss-item h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .oss-item p { font-size: 0.875rem; color: var(--text-muted); }
+
+    /* ── AI Section ── */
+    #ai {
+      position: relative;
+      overflow: hidden;
+    }
+
+    #ai::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 50% 40% at 20% 50%, rgba(124, 58, 237, 0.07), transparent),
+        radial-gradient(ellipse 40% 35% at 80% 30%, rgba(59, 130, 246, 0.08), transparent);
+      pointer-events: none;
+    }
+
+    #ai .container { position: relative; }
+
+    .ai-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 560px) {
+      .experience-grid { grid-template-columns: 1fr; }
+      .ai-grid { grid-template-columns: 1fr; }
+      .policy-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Policy Grid (3 cols) ── */
+    .policy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .policy-grid { grid-template-columns: 1fr; }
+    }
+
+    .policy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .policy-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-5px);
+      box-shadow: var(--shadow);
+    }
+
+    .policy-card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+
+    .policy-dedup   .policy-card-icon { background: rgba(245, 158, 11, 0.15); }
+    .policy-suppress .policy-card-icon { background: rgba(239, 68, 68, 0.12); }
+    .policy-aggregate .policy-card-icon { background: rgba(59, 130, 246, 0.15); }
+    .icon-purple-bg { background: rgba(167, 139, 250, 0.15); }
+    .icon-green-bg  { background: rgba(34, 197, 94, 0.15); }
+
+    .policy-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; }
+    .policy-card > p { font-size: 0.875rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px; }
+
+    .policy-features {
+      list-style: none;
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .policy-features li {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 5px 0 5px 18px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .policy-features li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    /* ── Tenant / Governance ── */
+    .tenant-diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      white-space: pre;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .approval-flow {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-top: 24px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .approval-step {
+      flex-shrink: 0;
+      padding: 12px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .approval-step.highlight {
+      border-color: var(--accent-border);
+      background: var(--accent-soft);
+      color: var(--accent-light);
+    }
+
+    .tenant-cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    @media (max-width: 640px) {
+      .tenant-cards { grid-template-columns: 1fr; }
+    }
+
+    .trace-table-wrap { margin-top: 32px; }
+
+    .ai-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .ai-card::after {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: calc(var(--radius) + 1px);
+      padding: 1px;
+      background: linear-gradient(135deg, var(--accent-light), var(--purple), transparent 60%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity 0.35s;
+      pointer-events: none;
+    }
+
+    .ai-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow), 0 0 32px rgba(124, 58, 237, 0.12);
+    }
+
+    .ai-card:hover::after { opacity: 1; }
+
+    .ai-card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 14px;
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(59, 130, 246, 0.15));
+    }
+
+    .ai-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+    .ai-card p { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6; }
+
+    .ai-api {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      color: var(--accent-light);
+      background: var(--code-bg);
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+      margin-top: auto;
+    }
+
+    .ai-providers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+      margin-bottom: 8px;
+    }
+
+    .ai-provider {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+    }
+
+    .ai-provider:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .ai-provider-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-openai    { background: #10a37f; }
+    .dot-deepseek  { background: #4d6bfe; }
+    .dot-anthropic { background: #d97757; }
+    .dot-qwen      { background: #6366f1; }
+    .dot-custom    { background: var(--text-muted); }
+
+    .ai-config {
+      margin-top: 28px;
+      padding: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+      gap: 20px;
+    }
+
+    .ai-config-item h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .ai-config-item p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .ai-flow {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 28px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .ai-flow-step {
+      flex-shrink: 0;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .ai-flow-arrow {
+      color: var(--purple);
+      font-size: 16px;
+      flex-shrink: 0;
+      animation: arrowBounce 1.5s ease-in-out infinite;
+    }
+
+    /* ── Trace Timeline ── */
+    .trace-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-top: 8px;
+    }
+
+    .trace-step {
+      display: flex;
+      gap: 16px;
+      position: relative;
+      padding-bottom: 20px;
+    }
+
+    .trace-step:last-child { padding-bottom: 0; }
+
+    .trace-step:not(:last-child)::before {
+      content: "";
+      position: absolute;
+      left: 15px;
+      top: 32px;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--accent-light), var(--border));
+    }
+
+    .trace-step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      border: 2px solid var(--accent-border);
+      color: var(--accent-light);
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .trace-step-body {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .trace-step:hover .trace-step-body {
+      border-color: var(--border-hover);
+      transform: translateX(4px);
+    }
+
+    .trace-step-body h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .trace-step-body p { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+    .trace-status {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .status-pass  { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+    .status-block { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+    .status-skip  { background: rgba(100, 116, 139, 0.15); color: var(--text-muted); }
+
+    .experience-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 560px) {
+      .experience-grid { grid-template-columns: 1fr; }
+    }
+
+    .experience-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      transition: border-color 0.3s, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+    }
+
+    .experience-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-3px);
+      box-shadow: var(--shadow);
+    }
+
+    .experience-icon {
+      font-size: 26px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .experience-card h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+    .experience-card p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── Scroll Reveal ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(36px);
+      transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .reveal-stagger > * {
+      opacity: 0;
+      transform: translateY(28px) scale(0.96);
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .reveal-stagger.is-visible > * {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .stat-num.counting {
+      animation: statPop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes statPop {
+      0%   { transform: scale(0.6); opacity: 0; }
+      70%  { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+      .nav-links { gap: 16px; }
+      .nav-links a { font-size: 13px; }
+    }
+
+    @media (max-width: 860px) {
+      .nav-links { display: none; }
+      .menu-toggle { display: inline-flex; }
+      .container { padding: 0 20px; }
+      .adapter-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding: 48px 16px 64px; }
+      .hero p { font-size: 1rem; }
+      section { padding: 48px 0; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stat { padding: 20px 16px; }
+      .stat-num { font-size: 1.6rem; }
+      .grid-3 { grid-template-columns: 1fr; }
+      .channel-grid { grid-template-columns: 1fr; }
+      .highlight-grid { grid-template-columns: 1fr; }
+      .highlight-grid--2 { grid-template-columns: 1fr; }
+      .deploy-grid { grid-template-columns: 1fr; }
+      .tech-grid { grid-template-columns: 1fr; }
+      .oss-grid { grid-template-columns: repeat(2, 1fr); }
+      .arch-diagram { padding: 20px 16px; font-size: 11px; }
+      .card { padding: 22px; }
+    }
+
+    @media (max-width: 400px) {
+      .oss-grid { grid-template-columns: 1fr; }
+      .adapter-grid { grid-template-columns: repeat(2, 1fr); }
+      .hero-actions { flex-direction: column; align-items: stretch; }
+      .hero-actions .btn { justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal, .reveal-stagger > * {
+        opacity: 1;
+        transform: none;
+      }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="main-nav">
+  <div class="nav-inner">
+    <a class="nav-logo" href="#">Sentinel<span>X</span></a>
+    <div class="nav-right">
+      <ul class="nav-links">
+        <li><a href="#adapters">告警适配</a></li>
+        <li><a href="#channels">通知渠道</a></li>
+        <li><a href="#ai">AI 增强</a></li>
+        <li><a href="#strategies">去重/抑制/聚合</a></li>
+        <li><a href="#trace">Trace 诊断</a></li>
+        <li><a href="#tenant">多租户</a></li>
+        <li><a href="#architecture">架构设计</a></li>
+        <li><a href="#performance">性能亮点</a></li>
+        <li><a href="#deploy">部署方式</a></li>
+      </ul>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="打开菜单" aria-expanded="false">
+        <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换主题" title="切换白天/黑夜模式">
+        <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</nav>
+<div class="nav-overlay" id="nav-overlay"></div>
+<aside class="nav-drawer" id="nav-drawer" aria-hidden="true">
+  <ul class="nav-drawer-links">
+    <li><a href="#adapters">告警适配</a></li>
+    <li><a href="#channels">通知渠道</a></li>
+    <li><a href="#ai">AI 增强</a></li>
+    <li><a href="#strategies">去重/抑制/聚合</a></li>
+    <li><a href="#trace">Trace 诊断</a></li>
+    <li><a href="#tenant">多租户/审批</a></li>
+    <li><a href="#experience">运维体验</a></li>
+    <li><a href="#features">核心能力</a></li>
+    <li><a href="#architecture">架构设计</a></li>
+    <li><a href="#performance">性能亮点</a></li>
+    <li><a href="#tech">技术栈</a></li>
+    <li><a href="#opensource">开源</a></li>
+    <li><a href="#deploy">部署方式</a></li>
+    <li><a href="#security">安全认证</a></li>
+  </ul>
+</aside>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <div class="badge hero-enter">Enterprise Alert Platform</div>
+    <h1 class="hero-enter hero-enter-d1">统一告警，<span>智能运维</span></h1>
+    <p class="hero-enter hero-enter-d2">
+      SentinelX 是一款企业级、多租户、高可用的综合告警平台。
+      将 Prometheus、云监控、Zabbix 等异构告警源统一接入，
+      通过规则引擎实现智能路由、去重聚合与多渠道通知，让运维团队从告警风暴中解脱。
+    </p>
+    <div class="hero-actions hero-enter hero-enter-d3">
+      <a class="btn btn-primary" href="https://github.com/cefso/SentinelX" target="_blank" rel="noopener">GitHub 仓库</a>
+      <a class="btn btn-ghost" href="#adapters">查看适配器</a>
+    </div>
+
+    <div class="stats hero-enter hero-enter-d4 reveal-stagger" id="hero-stats">
+      <a class="stat stat-link" href="#adapters">
+        <div class="stat-num" data-count="8" data-suffix="+">8+</div>
+        <div class="stat-label">告警源适配器</div>
+      </a>
+      <a class="stat stat-link" href="#channels">
+        <div class="stat-num" data-count="5" data-suffix="+">5+</div>
+        <div class="stat-label">通知渠道</div>
+      </a>
+      <a class="stat stat-link" href="#performance">
+        <div class="stat-num">ms</div>
+        <div class="stat-label">JSONB 查询级</div>
+      </a>
+      <a class="stat stat-link" href="#opensource">
+        <div class="stat-num" data-count="100" data-suffix="%">100%</div>
+        <div class="stat-label">开源 MIT</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Alert Adapters -->
+<section id="adapters">
+  <div class="container">
+    <div class="section-label">Integrations</div>
+    <h2 class="section-title">8+ 告警源适配器</h2>
+    <p class="section-desc">
+      内置 AdapterFactory 统一解析各类告警格式，每种告警源独立 Webhook URL，
+      支持自动格式检测与扩展自定义适配器。
+    </p>
+
+    <div class="adapter-grid reveal-stagger">
+      <div class="adapter-item">
+        <div class="adapter-logo logo-prom">Prom</div>
+        <div class="adapter-name">Prometheus</div>
+        <div class="adapter-code">prometheus</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-am">AM</div>
+        <div class="adapter-name">Alertmanager</div>
+        <div class="adapter-code">alertmanager</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-graf">Graf</div>
+        <div class="adapter-name">Grafana</div>
+        <div class="adapter-code">grafana</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-zbx">Zbx</div>
+        <div class="adapter-name">Zabbix</div>
+        <div class="adapter-code">zabbix</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-ali">CMS</div>
+        <div class="adapter-name">阿里云云监控 1.0</div>
+        <div class="adapter-code">aliyun_cms</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-ali">CMS2</div>
+        <div class="adapter-name">阿里云云监控 2.0</div>
+        <div class="adapter-code">aliyun_cms2</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-ali">Ali</div>
+        <div class="adapter-name">阿里云</div>
+        <div class="adapter-code">aliyun</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-tenc">Tx</div>
+        <div class="adapter-name">腾讯云</div>
+        <div class="adapter-code">tencent</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-hw">HW</div>
+        <div class="adapter-name">华为云</div>
+        <div class="adapter-code">huawei</div>
+      </div>
+      <div class="adapter-item">
+        <div class="adapter-logo logo-custom">+</div>
+        <div class="adapter-name">自定义 Webhook</div>
+        <div class="adapter-code">custom</div>
+      </div>
+    </div>
+
+    <p class="muted-note">
+      每种告警源通过独立 Webhook 接入，URL 格式：
+      <code>/api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}</code>
+      — 详见下方<a href="#sources" class="inline-link">接入详情</a>。
+    </p>
+  </div>
+</section>
+
+<!-- Notification Channels -->
+<section id="channels">
+  <div class="container">
+    <div class="section-label">Notifications</div>
+    <h2 class="section-title">5+ 通知渠道</h2>
+    <p class="section-desc">
+      内置 ChannelFactory 统一管理通知发送，支持自定义模板渲染与发送历史追踪。
+      规则引擎匹配后写入 PGMQ <code>alerts_notify</code> 队列，由 NotificationWorker 异步投递。
+    </p>
+
+    <div class="channel-grid reveal-stagger">
+      <div class="channel-item">
+        <div class="channel-icon">🔔</div>
+        <div class="channel-name">钉钉</div>
+        <div class="channel-code">dingtalk</div>
+        <div class="channel-desc">群机器人通知，支持加签（Secret）安全模式</div>
+      </div>
+      <div class="channel-item">
+        <div class="channel-icon">✈️</div>
+        <div class="channel-name">飞书</div>
+        <div class="channel-code">feishu</div>
+        <div class="channel-desc">飞书群机器人，Webhook 一键接入</div>
+      </div>
+      <div class="channel-item">
+        <div class="channel-icon">💬</div>
+        <div class="channel-name">企业微信</div>
+        <div class="channel-code">wecom</div>
+        <div class="channel-desc">企业微信群机器人，适合内部值班通知</div>
+      </div>
+      <div class="channel-item">
+        <div class="channel-icon">📧</div>
+        <div class="channel-name">邮件</div>
+        <div class="channel-code">email</div>
+        <div class="channel-desc">SMTP 邮件通知，支持多收件人与 HTML 模板</div>
+      </div>
+      <div class="channel-item">
+        <div class="channel-icon">🔗</div>
+        <div class="channel-name">Webhook</div>
+        <div class="channel-code">webhook</div>
+        <div class="channel-desc">通用 HTTP Webhook，可对接任意第三方系统</div>
+      </div>
+      <div class="channel-item">
+        <div class="channel-icon">💬</div>
+        <div class="channel-name">Slack</div>
+        <div class="channel-code">slack</div>
+        <div class="channel-desc">Slack Incoming Webhook，国际化团队协作</div>
+      </div>
+    </div>
+
+    <p class="muted-note">
+      每个渠道支持独立配置、测试发送与通知模板；未命中路由规则时，可指定默认渠道作为兜底。
+      发送记录可通过 API <code>GET /api/v1/notifications</code> 查询。
+    </p>
+  </div>
+</section>
+
+<!-- AI Enhancement -->
+<section id="ai">
+  <div class="container">
+    <div class="section-label">AI Powered</div>
+    <h2 class="section-title">AI 智能增强</h2>
+    <p class="section-desc">
+      在告警详情页一键调用 LLM，辅助值班人员快速理解告警、生成通知文案与处置建议。
+      按租户独立配置模型与 API Key（AES 加密存储），任务通过 PGMQ <code>alerts_ai</code> 队列异步执行，不阻塞主流程。
+    </p>
+
+    <div class="ai-grid reveal-stagger">
+      <div class="ai-card">
+        <div class="ai-card-icon">🔬</div>
+        <h3>根因分析</h3>
+        <p>结合告警标题、标签、指标值与触发上下文，分析可能原因并给出排查方向，输出结构化 Markdown 报告。</p>
+        <code class="ai-api">POST /api/v1/alerts/{id}/analyze</code>
+      </div>
+      <div class="ai-card">
+        <div class="ai-card-icon">✨</div>
+        <h3>内容润色</h3>
+        <p>将原始告警润色为适合通知渠道发送的文案，支持 formal / simple / friendly 三种风格，可配合通知模板使用。</p>
+        <code class="ai-api">POST /api/v1/alerts/{id}/polish?style=formal</code>
+      </div>
+      <div class="ai-card">
+        <div class="ai-card-icon">🛠️</div>
+        <h3>建议操作</h3>
+        <p>参考同 alert_key 的历史告警记录，推荐可执行的排查与处置步骤，帮助新手值班人员快速上手。</p>
+        <code class="ai-api">POST /api/v1/alerts/{id}/suggest-actions</code>
+      </div>
+      <div class="ai-card">
+        <div class="ai-card-icon">📈</div>
+        <h3>影响预测</h3>
+        <p>评估告警若未及时处理的潜在业务与服务影响，辅助判断优先级与是否需要立即升级。</p>
+        <code class="ai-api">POST /api/v1/alerts/{id}/predict-impact</code>
+      </div>
+    </div>
+
+    <p class="muted-note mt-24">支持的 LLM 提供商（可在「系统设置 → AI 设置」中切换）：</p>
+    <div class="ai-providers reveal-stagger">
+      <span class="ai-provider"><span class="ai-provider-dot dot-openai"></span>OpenAI</span>
+      <span class="ai-provider"><span class="ai-provider-dot dot-deepseek"></span>DeepSeek</span>
+      <span class="ai-provider"><span class="ai-provider-dot dot-anthropic"></span>Anthropic Claude</span>
+      <span class="ai-provider"><span class="ai-provider-dot dot-qwen"></span>通义千问 Qwen</span>
+      <span class="ai-provider"><span class="ai-provider-dot dot-custom"></span>Custom（OpenAI 兼容）</span>
+    </div>
+
+    <div class="ai-flow">
+      <span class="ai-flow-step">告警详情页发起</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="ai-flow-step">API 返回 202 + task_id</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="ai-flow-step">PGMQ alerts_ai</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="ai-flow-step">AIWorker 调用 LLM</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="ai-flow-step">前端轮询展示结果</span>
+    </div>
+
+    <div class="ai-config reveal">
+      <div class="ai-config-item">
+        <h4>🔐 租户级配置</h4>
+        <p>每个租户独立配置 provider、model 与 API Key，密钥 AES 加密存于 <code>tenant.config.ai</code>，互不影响。</p>
+      </div>
+      <div class="ai-config-item">
+        <h4>📝 自定义 Prompt</h4>
+        <p>四大模块（analyze / polish / suggest_actions / predict_impact）均支持自定义 System Prompt，覆盖内置默认即可生效。</p>
+      </div>
+      <div class="ai-config-item">
+        <h4>⚡ 异步非阻塞</h4>
+        <p>AI 任务与告警主链路解耦，LLM 响应较慢时不影响告警接收、规则匹配与通知发送。</p>
+      </div>
+      <div class="ai-config-item">
+        <h4>🎛️ 按需启用</h4>
+        <p>租户超管在 AI 设置中开启后，告警详情页才显示 AI 操作入口；未配置则功能完全隐藏。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Core Features</div>
+    <h2 class="section-title">核心能力</h2>
+    <p class="section-desc">覆盖告警全生命周期 — 从接入、处理到通知与升级，每个环节均可灵活配置。</p>
+
+    <div class="grid-3 reveal-stagger">
+      <div class="card">
+        <div class="card-icon icon-blue">🔗</div>
+        <h3>多源告警统一接入</h3>
+        <p>支持 Prometheus、Alertmanager、阿里云云监控（1.0/2.0）、腾讯云、Zabbix 及自定义 Webhook，通过适配器自动解析各类告警格式。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-purple">🏢</div>
+        <h3>多租户 RBAC 隔离</h3>
+        <p>用户可属于多个租户，前端一键切换上下文。支持注册审批与 RBAC 权限，详见<a href="#tenant" class="inline-link">多租户与审批</a>。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-green">⚙️</div>
+        <h3>智能规则引擎</h3>
+        <p>基于标签的路由规则，支持 AND/OR 逻辑与正则匹配。去重、抑制、聚合详见<a href="#strategies" class="inline-link">去重 · 抑制 · 聚合</a>。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-amber">📣</div>
+        <h3>多渠道通知</h3>
+        <p>内置钉钉、飞书、企业微信、邮件、Webhook、Slack 等通知渠道，支持自定义模板渲染与发送历史追踪。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-rose">🤖</div>
+        <h3>AI 增强分析</h3>
+        <p>接入 LLM，支持根因分析、内容润色、建议操作与影响预测。详见<a href="#ai" class="inline-link">AI 智能增强</a>模块。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-teal">🔍</div>
+        <h3>Trace 全链路诊断</h3>
+        <p>每条告警附带唯一 Trace ID，可视化展示完整处理链路。详见<a href="#trace" class="inline-link">Trace 诊断</a>模块。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Alert Strategies: Dedup / Suppress / Aggregate -->
+<section id="strategies">
+  <div class="container">
+    <div class="section-label">Alert Policies</div>
+    <h2 class="section-title">去重 · 抑制 · 聚合</h2>
+    <p class="section-desc">
+      三大告警治理策略，按需配置、未配则跳过。每条告警按「指纹生成 → 去重 → 抑制 → 聚合 → 规则路由 → 通知」顺序流转，
+      各阶段结果可在 <a href="#trace" class="inline-link">Trace 诊断</a> 中逐步回溯。
+    </p>
+
+    <div class="policy-grid reveal-stagger">
+      <div class="policy-card policy-dedup">
+        <div class="policy-card-icon">🔄</div>
+        <h3>去重（Dedup）</h3>
+        <p>在指定时间窗口内，对满足条件的重复告警进行丢弃，避免同一故障引发告警风暴。命中后状态标记为「已去重」。</p>
+        <ul class="policy-features">
+          <li>指纹模式：按 alert_key 等字段生成指纹去重</li>
+          <li>条件模式：AND/OR 标签条件 + 时间窗口</li>
+          <li>规则预览 <code>POST /rules/preview-dedup</code></li>
+          <li>未配置去重规则时，每条消息正常流转</li>
+        </ul>
+      </div>
+      <div class="policy-card policy-suppress">
+        <div class="policy-card-icon">🚫</div>
+        <h3>抑制（Suppress）</h3>
+        <p>在维护窗口或规则命中时阻止告警继续通知，适用于发布变更、计划内维护等场景，避免无效打扰。</p>
+        <ul class="policy-features">
+          <li>维护窗口：按时间段自动抑制，同步 Redis 快速判断</li>
+          <li>抑制规则：标签条件匹配 + 按时解除</li>
+          <li>规则禁用时自动跳过该阶段</li>
+          <li>Trace 中区分「未触发 / 已抑制 / 规则关闭」</li>
+        </ul>
+      </div>
+      <div class="policy-card policy-aggregate">
+        <div class="policy-card-icon">📦</div>
+        <h3>聚合（Aggregate）</h3>
+        <p>将多条同类告警合并为策略聚合组，列表以虚拟指纹行展示，子告警标记 <code>aggregated</code>，值班界面更清爽。</p>
+        <ul class="policy-features">
+          <li>条件聚合：按 namespace、source 等字段分组</li>
+          <li>指纹视图 + <code>aggregated-members</code> 查成员</li>
+          <li>规则预览 <code>POST /rules/preview-aggregate</code></li>
+          <li>默认隐藏 aggregated 子告警，可参数展开</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="muted-note mt-24">
+      另有<strong>告警升级</strong>策略：未确认 firing 告警按 5 → 10 → 30 → 60 分钟逐级升级，由 EscalationWorker 异步处理。
+    </p>
+  </div>
+</section>
+
+<!-- Trace Diagnostics -->
+<section id="trace">
+  <div class="container">
+    <div class="section-label">Observability</div>
+    <h2 class="section-title">Trace 全链路诊断</h2>
+    <p class="section-desc">
+      每条告警分配唯一 12 位 Trace ID，贯穿接入、去重、抑制、聚合、规则匹配到通知队列的全流程。
+      值班同学可在诊断页输入 Trace ID，或从告警详情一键跳转，快速回答「这条告警为什么没通知？」。
+    </p>
+
+    <div class="highlight-grid highlight-grid--2 reveal-stagger">
+      <div class="highlight-item">
+        <div class="highlight-metric">12 位</div>
+        <h3>唯一 Trace ID</h3>
+        <p>告警从接入到处理结束全程携带同一 ID，支持跨日志、跨模块关联排查。</p>
+        <div class="highlight-tags">
+          <span class="highlight-tag">GET /api/v1/alerts/diagnose/{trace_id}</span>
+        </div>
+      </div>
+      <div class="highlight-item">
+        <div class="highlight-metric">逐步</div>
+        <h3>可视化诊断页</h3>
+        <p>前端诊断页展示 flow_steps 时间线：每步标题、状态、原因与详情，无需翻后端日志。</p>
+        <div class="highlight-tags">
+          <span class="highlight-tag">/diagnose?trace=xxx</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trace-steps reveal mt-32">
+      <div class="trace-step">
+        <div class="trace-step-num">1</div>
+        <div class="trace-step-body">
+          <h4>去重检查 <span class="trace-status status-pass">passed</span></h4>
+          <p>未命中 / 未配置规则 → 跳过；命中 → <code>blocked</code>，告警丢弃并标记「已去重」。</p>
+        </div>
+      </div>
+      <div class="trace-step">
+        <div class="trace-step-num">2</div>
+        <div class="trace-step-body">
+          <h4>抑制检查 <span class="trace-status status-skip">skipped</span></h4>
+          <p>维护窗口或抑制规则命中 → <code>blocked</code>；规则已禁用 → 跳过；未命中 → 继续流转。</p>
+        </div>
+      </div>
+      <div class="trace-step">
+        <div class="trace-step-num">3</div>
+        <div class="trace-step-body">
+          <h4>聚合检查 <span class="trace-status status-pass">aggregated</span></h4>
+          <p>加入现有组 → <code>aggregated</code>；创建新组 → <code>new_group</code>；无规则 / 不匹配 → 跳过。</p>
+        </div>
+      </div>
+      <div class="trace-step">
+        <div class="trace-step-num">4</div>
+        <div class="trace-step-body">
+          <h4>规则匹配 <span class="trace-status status-pass">success</span></h4>
+          <p>命中 N 条路由规则并绑定通知渠道；无命中 → 使用默认渠道 <code>fallback</code>。</p>
+        </div>
+      </div>
+      <div class="trace-step">
+        <div class="trace-step-num">5</div>
+        <div class="trace-step-body">
+          <h4>通知队列 <span class="trace-status status-pass">success</span></h4>
+          <p>写入 PGMQ <code>alerts_notify</code>；60 秒内同指纹已通知则 <code>dedup_skipped</code> 跳过重复发送。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap trace-table-wrap reveal">
+      <table>
+        <thead>
+          <tr>
+            <th>诊断步骤</th>
+            <th>常见状态</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>去重检查</td><td><code>passed</code> / 跳过</td><td>未命中去重，或无规则配置</td></tr>
+          <tr><td>去重检查</td><td><code>blocked</code></td><td>触发去重，告警被丢弃</td></tr>
+          <tr><td>抑制检查</td><td><code>blocked</code></td><td>维护窗口或抑制规则命中</td></tr>
+          <tr><td>聚合检查</td><td><code>aggregated</code></td><td>加入已有聚合组</td></tr>
+          <tr><td>通知队列</td><td><code>dedup_skipped</code></td><td>60 秒内同指纹已通知，跳过发送</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Multi-tenant & Registration Approval -->
+<section id="tenant">
+  <div class="container">
+    <div class="section-label">Multi-Tenant</div>
+    <h2 class="section-title">多租户切换 · 注册审批</h2>
+    <p class="section-desc">
+      支持集团多团队共用同一平台：用户与租户 N:M 关联，前端一键切换上下文；新用户注册需管理员审批后方可登录，兼顾灵活性与安全。
+    </p>
+
+    <div class="tenant-diagram reveal">┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│    User     │       │  UserTenant  │       │   Tenant    │
+├─────────────┤       ├─────────────┤       ├─────────────┤
+│ id          │──1:N──│ user_id     │──N:1──│ id          │
+│ username    │       │ tenant_id   │       │ name / slug │
+│ is_approved │       │ role_id     │       │ is_active   │
+│ is_active   │       │ is_current  │       └─────────────┘
+└─────────────┘       │ is_primary  │
+                      └─────────────┘</div>
+
+    <div class="tenant-cards reveal-stagger">
+      <div class="policy-card">
+        <div class="policy-card-icon icon-purple-bg">👥</div>
+        <h3>多租户快速切换</h3>
+        <p>一个用户可同时属于多个租户（如集团下各事业部），登录后在顶栏选择当前租户，所有告警、规则、渠道数据按租户隔离。</p>
+        <ul class="policy-features">
+          <li><code>is_current</code> 标记当前活跃租户</li>
+          <li><code>is_primary</code> 标记用户主租户</li>
+          <li><code>POST /api/v1/auth/switch-tenant</code></li>
+          <li><code>GET /api/v1/auth/tenants</code> 列出我的租户</li>
+          <li>系统管理员（is_system）拥有全局权限</li>
+        </ul>
+      </div>
+      <div class="policy-card">
+        <div class="policy-card-icon icon-green-bg">✅</div>
+        <h3>用户注册审批</h3>
+        <p>开放注册模式下，新用户提交注册后处于待审批状态，无法登录。系统管理员审核通过并分配角色/租户后，账号方可正常使用。</p>
+        <ul class="policy-features">
+          <li>注册后 <code>is_approved=false</code>，拒绝登录</li>
+          <li>管理员 <code>POST /admin/users/{id}/approve</code></li>
+          <li>可分配系统级或租户级角色</li>
+          <li>租户管理员管理本租户内用户</li>
+          <li>拒绝审批则账号保持无效</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="muted-note mt-24">注册与审批流程：</p>
+    <div class="approval-flow reveal">
+      <span class="approval-step">用户注册</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="approval-step highlight">待审批 is_approved=false</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="approval-step">管理员审批</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="approval-step">分配角色 / 租户</span>
+      <span class="ai-flow-arrow">→</span>
+      <span class="approval-step highlight">正常登录</span>
+    </div>
+    <p class="muted-note">审批拒绝 → 账号无效，流程终止。</p>
+  </div>
+</section>
+
+<!-- Product Experience -->
+<section id="experience">
+  <div class="container">
+    <div class="section-label">Experience</div>
+    <h2 class="section-title">运维体验亮点</h2>
+    <p class="section-desc">围绕日常值班场景设计的产品能力，降低告警平台使用与运维门槛。</p>
+
+    <div class="experience-grid reveal-stagger">
+      <div class="experience-card">
+        <div class="experience-icon">🧬</div>
+        <div>
+          <h3>指纹视图 / 明细视图</h3>
+          <p>告警列表支持按 fingerprint 合并的指纹视图与逐条明细视图切换，策略聚合组可展开查看成员告警。</p>
+        </div>
+      </div>
+      <div class="experience-card">
+        <div class="experience-icon">📡</div>
+        <div>
+          <h3>告警源独立管理</h3>
+          <p>每个告警源独立 Webhook URL 与 client_id，支持启用/禁用、统计触发数，避免暴露数据库主键。</p>
+        </div>
+      </div>
+      <div class="experience-card">
+        <div class="experience-icon">📝</div>
+        <div>
+          <h3>通知模板引擎</h3>
+          <p>按渠道类型配置模板，支持 <code>{{title}}</code>、<code>{{severity}}</code>、指标变量等占位符，渲染后发送。</p>
+        </div>
+      </div>
+      <div class="experience-card">
+        <div class="experience-icon">☁️</div>
+        <div>
+          <h3>云产品指标中文映射</h3>
+          <p>内置 cloud_product_metrics 表，将阿里云等 namespace / 指标名映射为中文，列表与详情直接可读。</p>
+        </div>
+      </div>
+    </div>
+    <p class="muted-note mt-24">多租户切换与用户注册审批详见上方 <a href="#tenant" class="inline-link">多租户切换 · 注册审批</a> 模块。</p>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2 class="section-title">架构设计</h2>
+    <p class="section-desc">基于 PostgreSQL + PGMQ 的消息驱动架构，无需额外消息中间件，简化部署与运维。</p>
+
+    <div class="arch-diagram">┌─────────────────────────────────────────────────────────────────┐
+│                         接入层                                    │
+│  Prometheus │ Alertmanager │ 云监控 │ Zabbix │ Webhook API      │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   告警接收 API       │
+                    │  (统一接入网关)       │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  PGMQ alerts_raw    │  ← 消息队列缓冲
+                    └──────────┬──────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│                        核心处理层                                  │
+│  AlertDispatcher │ 规则引擎 │ 去重/抑制/聚合 │ AI 增强           │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │ PGMQ alerts_notify  │  ← 通知队列
+                    └──────────┬──────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│                   PostgreSQL + Redis                              │
+│         JSONB/GIN 存储 │ Redis 缓存 │ 结构化日志                  │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│                         通知层                                    │
+│         钉钉 │ 飞书 │ 企业微信 │ 邮件 │ Webhook │ Slack          │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+    <div class="flow-steps">
+      <span class="flow-step">告警接入</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">PGMQ 缓冲</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">指纹生成</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">去重检查</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">抑制检查</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">聚合检查</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">规则匹配</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">通知发送</span>
+    </div>
+  </div>
+</section>
+
+<!-- Performance Highlights -->
+<section id="performance">
+  <div class="container">
+    <div class="section-label">Performance</div>
+    <h2 class="section-title">毫秒级数据查询</h2>
+    <p class="section-desc">
+      告警标签结构动态多变，SentinelX 在 PostgreSQL 层充分利用 JSONB、GIN 索引与窗口函数，
+      避免应用层全表扫描，支撑大规模告警场景下的实时检索与聚合。
+    </p>
+
+    <div class="highlight-grid reveal-stagger">
+      <div class="highlight-item">
+        <div class="highlight-metric">ms 级</div>
+        <h3>JSONB + GIN 索引</h3>
+        <p>告警 labels 以 JSONB 存储，GIN 索引支持任意标签键值的等值与包含查询，无需预定义 Schema 或额外表结构。</p>
+        <div class="highlight-tags">
+          <span class="highlight-tag">动态标签</span>
+          <span class="highlight-tag">规则条件匹配</span>
+          <span class="highlight-tag">字段值下拉</span>
+        </div>
+      </div>
+      <div class="highlight-item">
+        <div class="highlight-metric">SQL 层</div>
+        <h3>CTE + 窗口函数</h3>
+        <p>指纹视图、策略聚合、去重预览均在数据库层通过 CTE 与窗口函数完成，减少 Python 侧内存聚合与多次往返。</p>
+        <div class="highlight-tags">
+          <span class="highlight-tag">指纹视图</span>
+          <span class="highlight-tag">聚合预览</span>
+          <span class="highlight-tag">去重预览</span>
+        </div>
+      </div>
+      <div class="highlight-item">
+        <div class="highlight-metric">零中间件</div>
+        <h3>PGMQ 原生队列</h3>
+        <p>告警接收与通知发送均通过 PostgreSQL 原生消息队列异步解耦，无需部署 Kafka / RabbitMQ 等额外组件。</p>
+        <div class="highlight-tags">
+          <span class="highlight-tag">alerts_raw</span>
+          <span class="highlight-tag">alerts_notify</span>
+          <span class="highlight-tag">alerts_escalation</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Alert Sources -->
+<section id="sources">
+  <div class="container">
+    <div class="section-label">Webhook Details</div>
+    <h2 class="section-title">接入详情</h2>
+    <p class="section-desc">每个租户可配置多个告警源，独立 Webhook URL，支持启用/禁用与统计。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>告警源</th>
+            <th>类型标识</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Prometheus</td><td><code>prometheus</code></td><td>原生 Prometheus Alert 格式</td></tr>
+          <tr><td>Alertmanager</td><td><code>alertmanager</code></td><td>Alertmanager Webhook v4</td></tr>
+          <tr><td>Grafana</td><td><code>grafana</code></td><td>Grafana Unified Alerting</td></tr>
+          <tr><td>阿里云云监控 1.0</td><td><code>aliyun_cms</code></td><td>支持 OK/ALERT/INSUFFICIENT_DATA 状态</td></tr>
+          <tr><td>阿里云云监控 2.0</td><td><code>aliyun_cms2</code></td><td>新版云监控告警格式</td></tr>
+          <tr><td>阿里云</td><td><code>aliyun</code></td><td>阿里云通用告警格式</td></tr>
+          <tr><td>腾讯云</td><td><code>tencent</code></td><td>腾讯云监控告警</td></tr>
+          <tr><td>华为云</td><td><code>huawei</code></td><td>通用 Webhook 解析，按字段约定映射</td></tr>
+          <tr><td>Zabbix</td><td><code>zabbix</code></td><td>Zabbix Media Type Webhook</td></tr>
+          <tr><td>自定义</td><td><code>custom</code></td><td>通用 JSON Webhook，灵活扩展</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="muted-note">
+      Webhook URL 格式：<code>/api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}</code>
+      — 通过 <code>X-API-Key</code> Header 认证，client_id 为客户端生成的随机短 ID，避免泄露数据库主键。
+    </p>
+  </div>
+</section>
+
+<!-- Tech Stack -->
+<section id="tech">
+  <div class="container">
+    <div class="section-label">Tech Stack</div>
+    <h2 class="section-title">技术栈</h2>
+    <p class="section-desc">现代技术选型，兼顾开发效率与生产可靠性。</p>
+
+    <div class="tech-grid reveal-stagger">
+      <div class="tech-group">
+        <h4>后端</h4>
+        <div class="tech-tags">
+          <span class="tag">Python 3.11</span>
+          <span class="tag">FastAPI</span>
+          <span class="tag">SQLAlchemy</span>
+          <span class="tag">Pydantic</span>
+          <span class="tag">Alembic</span>
+        </div>
+      </div>
+      <div class="tech-group">
+        <h4>数据存储</h4>
+        <div class="tech-tags">
+          <span class="tag">PostgreSQL 16</span>
+          <span class="tag">Redis</span>
+          <span class="tag">PGMQ</span>
+          <span class="tag">JSONB + GIN</span>
+        </div>
+      </div>
+      <div class="tech-group">
+        <h4>前端</h4>
+        <div class="tech-tags">
+          <span class="tag">React 18</span>
+          <span class="tag">TypeScript</span>
+          <span class="tag">Vite</span>
+          <span class="tag">shadcn/ui</span>
+          <span class="tag">Tailwind CSS</span>
+          <span class="tag">Zustand</span>
+        </div>
+      </div>
+      <div class="tech-group">
+        <h4>部署 &amp; CI/CD</h4>
+        <div class="tech-tags">
+          <span class="tag">Docker Compose</span>
+          <span class="tag">Helm / K8s</span>
+          <span class="tag">GitHub Actions</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3 mt-32 reveal-stagger">
+      <div class="card">
+        <div class="card-icon icon-blue">⚡</div>
+        <h3>JSONB + GIN 索引</h3>
+        <p>毫秒级动态标签查询，无需预定义 Schema，灵活应对各类告警标签结构。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-green">📊</div>
+        <h3>CTE + 窗口函数</h3>
+        <p>数据库层完成聚合与去重，指纹视图与策略聚合在 SQL 层高效计算，减少应用层开销。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-purple">📬</div>
+        <h3>PGMQ 原生队列</h3>
+        <p>基于 PostgreSQL 的消息队列，零额外中间件，简化架构与运维。</p>
+      </div>
+    </div>
+    <p class="muted-note">更多性能设计细节见上方<a href="#performance" class="inline-link">毫秒级数据查询</a>模块。</p>
+  </div>
+</section>
+
+<!-- Open Source -->
+<section id="opensource">
+  <div class="container">
+    <div class="section-label">Open Source</div>
+    <h2 class="section-title">100% 开源 · MIT License</h2>
+    <p class="section-desc">
+      SentinelX 完全开源，可自由部署、修改与二次开发，无厂商锁定，适合企业内部自建告警平台。
+    </p>
+
+    <div class="oss-grid reveal-stagger">
+      <div class="oss-item">
+        <div class="oss-icon">📜</div>
+        <h3>MIT 许可证</h3>
+        <p>商业友好，允许闭源二次开发与私有化部署</p>
+      </div>
+      <div class="oss-item">
+        <div class="oss-icon">🐙</div>
+        <h3>GitHub 托管</h3>
+        <p>源码公开，Issue 与 PR 欢迎社区贡献</p>
+      </div>
+      <div class="oss-item">
+        <div class="oss-icon">🔄</div>
+        <h3>CI/CD 自动化</h3>
+        <p>GitHub Actions 覆盖单元测试、前端构建与镜像发布</p>
+      </div>
+      <div class="oss-item">
+        <div class="oss-icon">🐳</div>
+        <h3>开箱即用</h3>
+        <p>Docker Compose 与 Helm Chart 降低部署门槛</p>
+      </div>
+    </div>
+
+    <div class="hero-actions hero-actions--start mt-32">
+      <a class="btn btn-primary" href="https://github.com/cefso/SentinelX" target="_blank" rel="noopener">访问 GitHub 仓库</a>
+      <a class="btn btn-ghost" href="#deploy">查看部署方式</a>
+    </div>
+  </div>
+</section>
+
+<!-- Deploy -->
+<section id="deploy">
+  <div class="container">
+    <div class="section-label">Deployment</div>
+    <h2 class="section-title">部署方式</h2>
+    <p class="section-desc">从本地开发到生产集群，提供多种部署选项。</p>
+
+    <div class="deploy-grid reveal-stagger">
+      <div class="deploy-card">
+        <div class="level level-low">复杂度 · 低</div>
+        <h3>Docker Compose</h3>
+        <p>一键启动完整服务栈（后端、前端、PostgreSQL、Redis），适合开发测试与小规模生产。支持仅启动基础设施供本地开发。</p>
+      </div>
+      <div class="deploy-card">
+        <div class="level level-medium">复杂度 · 中</div>
+        <h3>Helm (Kubernetes)</h3>
+        <p>提供完整 Helm Chart，支持 HPA 自动扩缩、Ingress、外置数据库等生产级配置，适合大规模部署。</p>
+      </div>
+      <div class="deploy-card">
+        <div class="level level-low">复杂度 · 低</div>
+        <h3>本地开发</h3>
+        <p>Docker 启动 PG + Redis，前后端本地运行。支持热重载，API 文档自动生成，快速迭代。</p>
+      </div>
+    </div>
+
+    <div class="card mt-32">
+      <h3 class="mb-12">快速体验</h3>
+      <pre class="code-block"># 启动基础设施
+docker compose -f docker/docker-compose.infra.yml up -d
+
+# 后端
+cd backend &amp;&amp; alembic upgrade head
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+# 前端
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev
+
+# 访问
+# 前端: http://localhost:3000
+# API:  http://localhost:8001/docs</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Security & Auth -->
+<section id="security">
+  <div class="container">
+    <div class="section-label">Security</div>
+    <h2 class="section-title">安全与认证</h2>
+    <p class="section-desc">双认证体系，满足人机交互与自动化集成场景。</p>
+
+    <div class="grid-3 reveal-stagger">
+      <div class="card">
+        <div class="card-icon icon-blue">🔐</div>
+        <h3>JWT 用户认证</h3>
+        <p>用户登录获取 Bearer Token，支持 Token 刷新、多租户切换。新用户注册需<a href="#tenant" class="inline-link">管理员审批</a>。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-green">🔑</div>
+        <h3>API Key 服务认证</h3>
+        <p>Agent 与自动化服务通过 <code>X-API-Key</code> 认证，支持创建、列出与撤销 API Key。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-amber">🛡️</div>
+        <h3>RBAC 权限控制</h3>
+        <p>系统级与租户级角色分离，细粒度权限管理。审计日志记录敏感操作。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    SentinelX — 企业级综合告警平台 &nbsp;·&nbsp;
+    <a href="https://github.com/cefso/SentinelX" target="_blank" rel="noopener">GitHub</a> &nbsp;·&nbsp;
+    MIT License
+  </p>
+  <p class="footer-sub">Built with FastAPI + React + PostgreSQL</p>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById("theme-toggle");
+    var nav = document.getElementById("main-nav");
+    var menuBtn = document.getElementById("menu-toggle");
+    var navOverlay = document.getElementById("nav-overlay");
+    var navDrawer = document.getElementById("nav-drawer");
+
+    function setTheme(theme) {
+      root.setAttribute("data-theme", theme);
+      localStorage.setItem("sentinelx-theme", theme);
+      toggle.setAttribute("aria-label", theme === "dark" ? "切换到白天模式" : "切换到黑夜模式");
+      toggle.setAttribute("title", theme === "dark" ? "切换到白天模式" : "切换到黑夜模式");
+    }
+
+    toggle.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme") || "light";
+      setTheme(current === "dark" ? "light" : "dark");
+    });
+
+    var initial = root.getAttribute("data-theme") || "light";
+    toggle.setAttribute("aria-label", initial === "dark" ? "切换到白天模式" : "切换到黑夜模式");
+    toggle.setAttribute("title", initial === "dark" ? "切换到白天模式" : "切换到黑夜模式");
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+      if (!localStorage.getItem("sentinelx-theme")) {
+        setTheme(e.matches ? "dark" : "light");
+      }
+    });
+
+    /* Nav scroll shadow */
+    window.addEventListener("scroll", function () {
+      nav.classList.toggle("is-scrolled", window.scrollY > 16);
+    }, { passive: true });
+
+    /* Mobile menu */
+    function closeMenu() {
+      menuBtn.classList.remove("is-open");
+      navOverlay.classList.remove("is-open");
+      navDrawer.classList.remove("is-open");
+      navDrawer.setAttribute("aria-hidden", "true");
+      menuBtn.setAttribute("aria-expanded", "false");
+      menuBtn.setAttribute("aria-label", "打开菜单");
+      document.body.style.overflow = "";
+    }
+
+    function openMenu() {
+      menuBtn.classList.add("is-open");
+      navOverlay.classList.add("is-open");
+      navDrawer.classList.add("is-open");
+      navDrawer.setAttribute("aria-hidden", "false");
+      menuBtn.setAttribute("aria-expanded", "true");
+      menuBtn.setAttribute("aria-label", "关闭菜单");
+      document.body.style.overflow = "hidden";
+    }
+
+    menuBtn.addEventListener("click", function () {
+      if (menuBtn.classList.contains("is-open")) closeMenu();
+      else openMenu();
+    });
+
+    navOverlay.addEventListener("click", closeMenu);
+    navDrawer.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", closeMenu);
+    });
+
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 860) closeMenu();
+    });
+
+    /* Scroll reveal */
+    document.querySelectorAll("section .section-label, section .section-title, section .section-desc, .arch-diagram, .muted-note, .table-wrap").forEach(function (el) {
+      el.classList.add("reveal");
+    });
+
+    var revealObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        el.classList.add("is-visible");
+        if (el.classList.contains("reveal-stagger")) {
+          Array.from(el.children).forEach(function (child, i) {
+            child.style.transitionDelay = (i * 0.07) + "s";
+          });
+        }
+        revealObserver.unobserve(el);
+      });
+    }, { threshold: 0.1, rootMargin: "0px 0px -32px 0px" });
+
+    document.querySelectorAll(".reveal, .reveal-stagger").forEach(function (el) {
+      revealObserver.observe(el);
+    });
+
+    /* Hero stats auto-reveal on load */
+    var heroStats = document.getElementById("hero-stats");
+    if (heroStats) {
+      setTimeout(function () {
+        heroStats.classList.add("is-visible");
+        Array.from(heroStats.children).forEach(function (child, i) {
+          child.style.transitionDelay = (i * 0.1) + "s";
+        });
+      }, 600);
+    }
+
+    /* Stat counter animation */
+    function animateCount(el) {
+      var target = parseInt(el.getAttribute("data-count"), 10);
+      var suffix = el.getAttribute("data-suffix") || "";
+      if (isNaN(target)) return;
+      var duration = 1200;
+      var start = performance.now();
+      el.classList.add("counting");
+      function step(now) {
+        var progress = Math.min((now - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(target * eased) + suffix;
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    var statsObserved = false;
+    var statsObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting || statsObserved) return;
+        statsObserved = true;
+        document.querySelectorAll(".stat-num[data-count]").forEach(animateCount);
+        statsObserver.disconnect();
+      });
+    }, { threshold: 0.5 });
+
+    if (heroStats) statsObserver.observe(heroStats);
+  })();
+</script>
+
+</body>
+</html>
