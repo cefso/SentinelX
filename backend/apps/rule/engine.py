@@ -42,6 +42,22 @@ def _coerce_int(value: Any) -> Any:
     return value
 
 
+def _looks_like_source_id_value(value: Any) -> bool:
+    if isinstance(value, list):
+        return bool(value) and all(
+            isinstance(v, int) or (isinstance(v, str) and v.isdigit())
+            for v in value
+        )
+    return isinstance(value, int) or (isinstance(value, str) and str(value).isdigit())
+
+
+def _resolve_condition_field(field: str, operator: str, expected_value: Any) -> str:
+    """去重/聚合条件 UI 曾将告警源 ID 存为 field=source，应对齐 source_id。"""
+    if field == "source" and operator in ("in", "not_in", "eq", "ne") and _looks_like_source_id_value(expected_value):
+        return "source_id"
+    return field
+
+
 def _is_effective_dedup_config(config: Any) -> bool:
     """有效去重配置：排除 JSON null、空对象及未启用规则。"""
     if not config or not isinstance(config, dict):
@@ -49,6 +65,10 @@ def _is_effective_dedup_config(config: Any) -> bool:
     if config.get("disabled", not config.get("enabled", False)):
         return False
     return True
+
+
+def _is_condition_dedup_config(config: dict) -> bool:
+    return config.get("dedup_type") == "condition"
 
 
 @dataclass
@@ -174,8 +194,9 @@ class RuleEngine:
             expected_value = condition.get("value")
 
             # 获取字段值
-            actual_value = self._get_field_value(alert_data, field)
+            field = _resolve_condition_field(field, operator, expected_value)
             expected_value = self._normalize_condition_value(field, operator, expected_value)
+            actual_value = self._get_field_value(alert_data, field)
 
             # 执行比较
             evaluator = self.OPERATORS.get(operator)
@@ -426,6 +447,11 @@ class RuleEngine:
         alert_data = self._alert_to_dict(alert)
         matched = []
         for rule in rules:
+            dedup_config = rule.deduplication_config or {}
+            if _is_condition_dedup_config(dedup_config):
+                if dedup_config.get("conditions"):
+                    matched.append(rule)
+                continue
             conditions = rule.conditions or []
             if not conditions:
                 matched.append(rule)

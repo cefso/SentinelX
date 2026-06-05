@@ -69,7 +69,7 @@ class AlertCreate(AlertBase):
 
 class AlertUpdate(BaseModel):
     """更新告警状态"""
-    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed|acknowledged)$", description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)")
+    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed|acknowledged|deduplicated)$", description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)/deduplicated(已去重)")
     severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low|info)$", description="严重级别: critical/high/medium/low/info")
     assignee_id: Optional[int] = Field(None, description="处理人ID")
     assignee_name: Optional[str] = Field(None, description="处理人名称")
@@ -83,7 +83,7 @@ class AlertResponse(AlertBase):
     tenant_id: str = Field(..., description="租户ID")
     source_id: Optional[int] = Field(None, description="告警源ID")
     source_name: Optional[str] = Field(None, description="告警源名称（用户配置）")
-    status: str = Field(..., description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)")
+    status: str = Field(..., description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)/deduplicated(已去重)")
     fingerprint: str = Field(..., description="指纹")
     trace_id: Optional[str] = Field(None, description="追踪ID")
     fire_count: int = Field(..., description="触发次数")

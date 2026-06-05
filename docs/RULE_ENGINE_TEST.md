@@ -125,6 +125,8 @@ curl -sS "${BASE_URL}/api/v1/alerts/diagnose/${TRACE_ID}" \
 
 ### 1.1 创建指纹去重规则
 
+指纹模式下，规则级 `conditions` 控制该去重规则的生效范围；`config.fingerprint_fields` 决定窗口内如何判定重复。
+
 按 `alert_key` 在 300 秒内去重，且仅对 `source=rule-test` 的告警生效：
 
 ```bash
@@ -187,6 +189,10 @@ curl -sS "${BASE_URL}/api/v1/alerts/diagnose/${TRACE_DUP}" \
 
 ### 1.3 条件模式去重
 
+条件模式的去重条件写在 `config` 内，规则级 `conditions` 应为空数组（由 UI 保证）。满足 `config.conditions` 的告警在窗口内共用一个去重桶，仅首条通过。
+
+指纹模式的触发范围由规则级 `conditions` 控制（见 1.1），与条件模式互不混用。
+
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/rules/dedup-rules" \
   -H "Authorization: Bearer ${TOKEN}" \
@@ -208,7 +214,7 @@ curl -sS -X POST "${BASE_URL}/api/v1/rules/dedup-rules" \
   }'
 ```
 
-发送两条带相同 `labels.dedup_tag` 的告警，第二条应被去重。
+发送两条带相同 `labels.dedup_tag` 的告警（`alert_key` 可不同），第二条应被去重。
 
 ### 1.4 预览去重效果（不发送 Webhook）
 

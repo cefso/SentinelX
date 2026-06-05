@@ -132,6 +132,31 @@ class AlertDispatcher:
             "alert_key": str(alert.alert_key),
         })
 
+    async def _mark_deduplicated(
+        self,
+        alert: Alert,
+        trace_id: str,
+        *,
+        reason: str,
+        duplicate_of_alert_id: Optional[str] = None,
+        final_status: str = "duplicate",
+    ):
+        """标记告警为已去重"""
+        alert.status = "deduplicated"
+        history = AlertHistory(
+            tenant_id=alert.tenant_id,
+            alert_id=alert.id,
+            action="deduplicated",
+            description=reason,
+            new_value={
+                "status": "deduplicated",
+                "duplicate_of_alert_id": duplicate_of_alert_id,
+            },
+        )
+        self.db.add(history)
+        await self.db.commit()
+        await self._finish_trace(trace_id, final_status, deduction_reason=reason)
+
     async def _handle_duplicate(
         self,
         alert: Alert,
@@ -140,20 +165,13 @@ class AlertDispatcher:
     ):
         """处理被去重拦截的告警"""
         reason = f"去重拦截，已存在告警: {duplicate_of_alert_id}" if duplicate_of_alert_id else "去重拦截"
-        alert.status = "suppressed"
-        history = AlertHistory(
-            tenant_id=alert.tenant_id,
-            alert_id=alert.id,
-            action="deduplicated",
-            description=reason,
-            new_value={
-                "status": "suppressed",
-                "duplicate_of_alert_id": duplicate_of_alert_id,
-            },
+        await self._mark_deduplicated(
+            alert,
+            trace_id,
+            reason=reason,
+            duplicate_of_alert_id=duplicate_of_alert_id,
+            final_status="duplicate",
         )
-        self.db.add(history)
-        await self.db.commit()
-        await self._finish_trace(trace_id, "duplicate", deduction_reason=reason)
 
     async def _handle_suppressed(self, alert: Alert, trace_id: str, reason: str):
         """处理被抑制的告警"""
@@ -249,12 +267,19 @@ class AlertDispatcher:
         if already_notified:
             # redis.get returns bytes in some cases, decode to string
             previous_id = already_notified.decode() if isinstance(already_notified, bytes) else str(already_notified)
+            reason = f"去重跳过，{notify_window_seconds}秒内已通知（首条告警: {previous_id}）"
             await self._add_trace_step(trace_id, "notification_queued", "通知队列", "dedup_skipped", {
-                "description": f"去重跳过，{notify_window_seconds}秒内已通知",
+                "description": reason,
                 "fingerprint": str(alert.fingerprint),
                 "previous_alert_id": previous_id,
             })
-            await self._finish_trace(trace_id, "dedup_skipped")
+            await self._mark_deduplicated(
+                alert,
+                trace_id,
+                reason=reason,
+                duplicate_of_alert_id=previous_id,
+                final_status="dedup_skipped",
+            )
             return
 
         # 构建通知消息

@@ -220,6 +220,7 @@ export function AlertsPage() {
                 { value: 'firing', label: '触发中' },
                 { value: 'resolved', label: '已恢复' },
                 { value: 'suppressed', label: '已抑制' },
+                { value: 'deduplicated', label: '已去重' },
                 { value: 'acknowledged', label: '已确认' },
               ].map(opt => (
                 <button
