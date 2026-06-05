@@ -151,6 +151,26 @@ def test_evaluate_conditions_in():
     assert matched is False
 
 
+def test_evaluate_conditions_source_id_in_accepts_string_values_from_ui():
+    """页面保存的 source_id 字符串列表应能匹配整数告警字段"""
+    engine = RuleEngine()
+    conditions = [{"field": "source_id", "operator": "in", "value": ["3"]}]
+    alert_data = {"source_id": 3}
+
+    matched, reason, _ = engine.evaluate_conditions(conditions, "and", alert_data)
+
+    assert matched is True
+    assert reason is None
+
+
+def test_is_effective_dedup_config_rejects_json_null_and_disabled():
+    from apps.rule.engine import _is_effective_dedup_config
+
+    assert _is_effective_dedup_config(None) is False
+    assert _is_effective_dedup_config({"enabled": False}) is False
+    assert _is_effective_dedup_config({"enabled": True, "dedup_type": "fingerprint"}) is True
+
+
 def test_field_values_schema():
     """测试 FieldValuesResponse Schema 序列化"""
     from apps.rule.schemas import FieldValuesResponse, FieldValueItem
@@ -488,4 +508,132 @@ def test_strategy_rule_response_suppress_expired():
     rule.id = 100
     resp = StrategyRuleResponse.from_alert_rule(rule, config_field="suppress_config")
     assert resp.suppress_in_effect is False
+
+
+def _make_dedup_rule(dedup_config: dict, name: str = "dedup-test", rule_id: int = 20):
+    rule = SimpleNamespace(
+        id=rule_id,
+        name=name,
+        deduplication_config=dedup_config,
+        conditions=[],
+        condition_mode="and",
+    )
+    return rule
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_blocks_second_alert_with_same_fingerprint_fields():
+    """窗口内第二条相同指纹告警应被去重"""
+    engine = RuleEngine()
+    alert = _make_alert(id=2, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"1")
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, duplicate_of = await engine._check_dedup(
+            db=None, redis=redis, alert=alert, trace_id="trace-dedup-1"
+        )
+
+    assert is_duplicate is True
+    assert duplicate_of == "1"
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_allows_mq_redelivery_of_same_alert():
+    """MQ 重投同一告警时不应因 Redis 键指向自身而误判重复"""
+    engine = RuleEngine()
+    alert = _make_alert(id=42, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"42")
+    redis.set = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, duplicate_of = await engine._check_dedup(
+            db=None, redis=redis, alert=alert, trace_id="trace-dedup-redelivery"
+        )
+
+    assert is_duplicate is False
+    assert duplicate_of is None
+    redis.set.assert_not_awaited()
+
+
+def test_stable_hash_is_deterministic():
+    from apps.rule.engine import _stable_hash
+
+    assert _stable_hash("severity:eq:high") == _stable_hash("severity:eq:high")
+    assert _stable_hash("a") != _stable_hash("b")
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_increments_match_count_when_blocking():
+    engine = RuleEngine()
+    alert = _make_alert(id=2, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+    rule.match_count = 0
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"1")
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, _ = await engine._check_dedup(
+            db=db, redis=redis, alert=alert, trace_id="trace-dedup-count"
+        )
+
+    assert is_duplicate is True
+    assert rule.match_count == 1
+    assert rule.last_match_at is not None
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_increments_match_count_when_establishing_window():
+    engine = RuleEngine()
+    alert = _make_alert(id=1, alert_key="new-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+    rule.match_count = 2
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, _ = await engine._check_dedup(
+            db=db, redis=redis, alert=alert, trace_id="trace-dedup-window"
+        )
+
+    assert is_duplicate is False
+    assert rule.match_count == 3
+    db.commit.assert_awaited()
 

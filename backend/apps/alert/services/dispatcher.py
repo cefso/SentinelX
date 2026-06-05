@@ -10,6 +10,7 @@ import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from redis.asyncio import Redis
 
 from apps.alert.models import Alert, AlertHistory, AlertTrace
@@ -34,6 +35,14 @@ class AlertDispatcher:
     async def dispatch(self, alert: Alert, trace_id: str):
         """主分发流程"""
         try:
+            if await self._is_trace_completed(trace_id):
+                logger.info(
+                    "dispatch_skipped_completed",
+                    alert_id=alert.id,
+                    trace_id=trace_id,
+                )
+                return
+
             # 初始化Trace
             await self._init_trace(alert, trace_id)
 
@@ -49,8 +58,11 @@ class AlertDispatcher:
                 return
 
             if result.is_duplicate:
-                # 重复告警，记录但不创建新告警
-                await self._finish_trace(trace_id, "duplicate")
+                await self._handle_duplicate(
+                    alert,
+                    trace_id,
+                    result.duplicate_of_alert_id,
+                )
                 return
 
             # 记录匹配的规则信息到告警
@@ -84,9 +96,27 @@ class AlertDispatcher:
             logger.error("dispatch_error", alert_id=alert.id, trace_id=trace_id, error=str(e))
             await self._handle_error(alert, trace_id, str(e))
 
-    async def _init_trace(self, alert: Alert, trace_id: str):
-        """初始化追踪记录"""
+    async def _is_trace_completed(self, trace_id: str) -> bool:
+        """判断 Trace 是否已处理完成（用于 MQ 重投幂等）。"""
         trace_key = f"trace:{trace_id}"
+        status_raw = await self.redis.hget(trace_key, "final_status")
+        if status_raw:
+            status = status_raw.decode("utf-8") if isinstance(status_raw, bytes) else str(status_raw)
+            if status and status != "processing":
+                return True
+
+        result = await self.db.execute(
+            select(AlertTrace).where(AlertTrace.trace_id == trace_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def _init_trace(self, alert: Alert, trace_id: str):
+        """初始化追踪记录（重投时不重复写入「告警接入」）。"""
+        trace_key = f"trace:{trace_id}"
+        if await self.redis.exists(trace_key):
+            logger.debug("trace_redelivery", trace_id=trace_id, alert_id=alert.id)
+            return
+
         trace_data = {
             "trace_id": str(trace_id),
             "alert_id": str(alert.id),
@@ -101,6 +131,29 @@ class AlertDispatcher:
             "severity": str(alert.severity),
             "alert_key": str(alert.alert_key),
         })
+
+    async def _handle_duplicate(
+        self,
+        alert: Alert,
+        trace_id: str,
+        duplicate_of_alert_id: Optional[str] = None,
+    ):
+        """处理被去重拦截的告警"""
+        reason = f"去重拦截，已存在告警: {duplicate_of_alert_id}" if duplicate_of_alert_id else "去重拦截"
+        alert.status = "suppressed"
+        history = AlertHistory(
+            tenant_id=alert.tenant_id,
+            alert_id=alert.id,
+            action="deduplicated",
+            description=reason,
+            new_value={
+                "status": "suppressed",
+                "duplicate_of_alert_id": duplicate_of_alert_id,
+            },
+        )
+        self.db.add(history)
+        await self.db.commit()
+        await self._finish_trace(trace_id, "duplicate", deduction_reason=reason)
 
     async def _handle_suppressed(self, alert: Alert, trace_id: str, reason: str):
         """处理被抑制的告警"""
@@ -261,21 +314,34 @@ class AlertDispatcher:
                 for s in steps_raw
             ]
 
-            # 持久化到 PostgreSQL
+            # 持久化到 PostgreSQL（幂等 upsert，避免 MQ 重投时唯一键冲突）
             try:
-                alert_trace = AlertTrace(
-                    trace_id=trace_id,
-                    alert_id=trace_data.get("alert_id"),
-                    tenant_id=trace_data.get("tenant_id"),
-                    final_status=status,
-                    deduction_reason=kwargs.get("deduction_reason"),
-                    suppress_reason=kwargs.get("suppress_reason"),
-                    matched_rules=json.loads(trace_data.get("matched_rules", "[]")),
-                    notification_channels=json.loads(trace_data.get("notification_channels", "[]")),
-                    steps_chain=steps,
-                    expired_at=datetime.now(timezone.utc) + timedelta(days=7),
+                trace_values = {
+                    "trace_id": trace_id,
+                    "alert_id": trace_data.get("alert_id"),
+                    "tenant_id": trace_data.get("tenant_id"),
+                    "final_status": status,
+                    "deduction_reason": kwargs.get("deduction_reason"),
+                    "suppress_reason": kwargs.get("suppress_reason"),
+                    "matched_rules": json.loads(trace_data.get("matched_rules", "[]")),
+                    "notification_channels": json.loads(trace_data.get("notification_channels", "[]")),
+                    "steps_chain": steps,
+                    "expired_at": datetime.now(timezone.utc) + timedelta(days=7),
+                }
+                stmt = insert(AlertTrace).values(**trace_values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["trace_id"],
+                    set_={
+                        "final_status": status,
+                        "deduction_reason": kwargs.get("deduction_reason"),
+                        "suppress_reason": kwargs.get("suppress_reason"),
+                        "matched_rules": trace_values["matched_rules"],
+                        "notification_channels": trace_values["notification_channels"],
+                        "steps_chain": steps,
+                        "expired_at": trace_values["expired_at"],
+                    },
                 )
-                self.db.add(alert_trace)
+                await self.db.execute(stmt)
                 await self.db.commit()
                 logger.info("trace_persisted_to_pg", trace_id=trace_id, status=status)
             except Exception as e:

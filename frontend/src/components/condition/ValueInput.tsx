@@ -197,14 +197,14 @@ export function ValueInput({
       )
     }
 
-    // Source from API
+    // Source from API（source_id 字段，值存为数字以匹配告警数据）
     if (config?.apiField === 'source') {
       return (
         <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
           {sources.map((s: any) => {
             const checked = Array.isArray(condition.value)
-              ? condition.value.includes(String(s.id))
-              : condition.value === String(s.id)
+              ? condition.value.some((v) => Number(v) === s.id)
+              : Number(condition.value) === s.id
             return (
               <label key={s.id} className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -213,9 +213,9 @@ export function ValueInput({
                   onChange={() => {
                     const current = Array.isArray(condition.value) ? condition.value : []
                     if (checked) {
-                      updateCondition(index, 'value', current.filter((v: string) => v !== String(s.id)))
+                      updateCondition(index, 'value', current.filter((v) => Number(v) !== s.id))
                     } else {
-                      updateCondition(index, 'value', [...current, String(s.id)])
+                      updateCondition(index, 'value', [...current, s.id])
                     }
                   }}
                   className="w-4 h-4"
@@ -228,14 +228,14 @@ export function ValueInput({
       )
     }
 
-    // Assignee from API
+    // Assignee from API（值存为数字以匹配告警数据）
     if (config?.apiField === 'assignee') {
       return (
         <div className="flex-1 border rounded px-2 py-1 space-y-1 max-h-32 overflow-y-auto">
           {users.map((u: any) => {
             const checked = Array.isArray(condition.value)
-              ? condition.value.includes(String(u.id))
-              : condition.value === String(u.id)
+              ? condition.value.some((v) => Number(v) === u.id)
+              : Number(condition.value) === u.id
             return (
               <label key={u.id} className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -244,9 +244,9 @@ export function ValueInput({
                   onChange={() => {
                     const current = Array.isArray(condition.value) ? condition.value : []
                     if (checked) {
-                      updateCondition(index, 'value', current.filter((v: string) => v !== String(u.id)))
+                      updateCondition(index, 'value', current.filter((v) => Number(v) !== u.id))
                     } else {
-                      updateCondition(index, 'value', [...current, String(u.id)])
+                      updateCondition(index, 'value', [...current, u.id])
                     }
                   }}
                   className="w-4 h-4"
@@ -336,15 +336,19 @@ export function ValueInput({
 
     // Source from API
     if (config?.apiField === 'source') {
+      const selected = Array.isArray(condition.value) ? condition.value[0] : condition.value
       return (
         <select
-          value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-          onChange={(e) => updateCondition(index, 'value', e.target.value)}
+          value={selected ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value
+            updateCondition(index, 'value', raw === '' ? '' : Number(raw))
+          }}
           className="px-2 py-1 border rounded text-sm flex-1"
         >
           <option value="">全部</option>
           {sources.map((s: any) => (
-            <option key={s.id} value={String(s.id)}>{s.name}</option>
+            <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
       )
@@ -352,15 +356,19 @@ export function ValueInput({
 
     // Assignee from API
     if (config?.apiField === 'assignee') {
+      const selected = Array.isArray(condition.value) ? condition.value[0] : condition.value
       return (
         <select
-          value={Array.isArray(condition.value) ? condition.value[0] : condition.value}
-          onChange={(e) => updateCondition(index, 'value', e.target.value)}
+          value={selected ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value
+            updateCondition(index, 'value', raw === '' ? '' : Number(raw))
+          }}
           className="px-2 py-1 border rounded text-sm flex-1"
         >
           <option value="">全部</option>
           {users.map((u: any) => (
-            <option key={u.id} value={String(u.id)}>{u.username}</option>
+            <option key={u.id} value={u.id}>{u.username}</option>
           ))}
         </select>
       )

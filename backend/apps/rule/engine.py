@@ -2,6 +2,7 @@
 SentinelX - 规则引擎
 基于条件的告警路由匹配
 """
+import hashlib
 import re
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
@@ -24,10 +25,37 @@ logger = structlog.get_logger()
 _STRATEGY_CODE_PREFIXES = ("_dedup_%", "_suppress_%", "_aggregate_%")
 
 
+def _stable_hash(value: str) -> str:
+    """跨进程稳定的短哈希，用于 Redis 去重/聚合键。"""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+_NUMERIC_ID_FIELDS = frozenset({"source_id", "assignee"})
+_INTEGER_FIELDS = frozenset({"fire_count", "repeat_count", "escalation_count"})
+
+
+def _coerce_int(value: Any) -> Any:
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _is_effective_dedup_config(config: Any) -> bool:
+    """有效去重配置：排除 JSON null、空对象及未启用规则。"""
+    if not config or not isinstance(config, dict):
+        return False
+    if config.get("disabled", not config.get("enabled", False)):
+        return False
+    return True
+
+
 @dataclass
 class AlertProcessResult:
     """告警处理结果"""
     is_duplicate: bool = False
+    duplicate_of_alert_id: Optional[str] = None
     is_suppressed: bool = False
     suppress_reason: Optional[str] = None
     aggregated_info: Optional[Dict[str, Any]] = None
@@ -60,6 +88,35 @@ class RuleEngine:
 
     def __init__(self):
         pass
+
+    def _normalize_condition_value(self, field: str, operator: str, value: Any) -> Any:
+        """页面条件值规范化（如 source_id 的 in 列表存为字符串）。"""
+        if operator in ("in", "not_in") and isinstance(value, list):
+            if field in _NUMERIC_ID_FIELDS | _INTEGER_FIELDS:
+                return [_coerce_int(v) for v in value]
+            return value
+
+        if field in _NUMERIC_ID_FIELDS | _INTEGER_FIELDS:
+            return _coerce_int(value)
+        return value
+
+    async def _record_strategy_rule_match(self, db: AsyncSession, rule: AlertRule) -> None:
+        """策略规则命中统计（去重/抑制/聚合等）。"""
+        if db is None:
+            return
+        try:
+            # alert_rules.last_match_at 为 naive UTC，与模型列类型一致
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            rule.match_count = (getattr(rule, "match_count", None) or 0) + 1
+            rule.last_match_at = now
+            await db.commit()
+        except Exception as e:
+            logger.warning(
+                "strategy_rule_match_count_failed",
+                rule_id=getattr(rule, "id", None),
+                error=str(e),
+            )
+            await db.rollback()
 
     async def match_rules(self, db: AsyncSession, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
         """匹配规则（带数据库会话）"""
@@ -118,10 +175,7 @@ class RuleEngine:
 
             # 获取字段值
             actual_value = self._get_field_value(alert_data, field)
-
-            # 类型处理：source_id 字段需要字符串转整数比较
-            if field == "source_id" and isinstance(expected_value, str) and expected_value.isdigit():
-                expected_value = int(expected_value)
+            expected_value = self._normalize_condition_value(field, operator, expected_value)
 
             # 执行比较
             evaluator = self.OPERATORS.get(operator)
@@ -199,9 +253,12 @@ class RuleEngine:
         result = AlertProcessResult()
 
         # 1. 去重检查
-        is_duplicate, dedup_result = await self._check_dedup(db, redis, alert, trace_id, add_trace_step)
+        is_duplicate, dedup_result, duplicate_of_alert_id = await self._check_dedup(
+            db, redis, alert, trace_id, add_trace_step
+        )
         if is_duplicate:
             result.is_duplicate = True
+            result.duplicate_of_alert_id = duplicate_of_alert_id
             result.trace_steps = dedup_result
             return result
 
@@ -235,7 +292,7 @@ class RuleEngine:
         alert: Alert,
         trace_id: str,
         add_trace_step: Callable = None
-    ) -> tuple[bool, List[Dict]]:
+    ) -> tuple[bool, List[Dict], Optional[str]]:
         """去重检查 — 支持多规则"""
         trace_steps = []
 
@@ -253,23 +310,21 @@ class RuleEngine:
 
         await _add_step("dedup_check", "去重检查", "processing", {"description": "检查是否为重复告警"})
 
-        # 查找所有匹配的去重规则
+        # 查找所有匹配的去重规则（仅含有效去重配置）
         dedup_rules = await self._find_matching_dedup_rules(db, alert)
-        matched_rule_names = [{"id": r.id, "name": r.name} for r in dedup_rules]
+        active_dedup_rules = [
+            r for r in dedup_rules
+            if _is_effective_dedup_config(getattr(r, "deduplication_config", None))
+        ]
+        matched_rule_names = [{"id": r.id, "name": r.name} for r in active_dedup_rules]
 
-        if not dedup_rules:
+        if not active_dedup_rules:
             await _add_step("dedup_result", "去重检查", "passed", {"description": "未配置去重规则，跳过"})
-            return False, trace_steps
+            return False, trace_steps, None
 
         # 遍历所有匹配的去重规则，任一 Redis 命中即去重
-        for dedup_rule in dedup_rules:
-            dedup_config = getattr(dedup_rule, "deduplication_config", None)
-            if not dedup_config:
-                continue
-
-            if dedup_config.get("disabled", not dedup_config.get("enabled", False)):
-                continue
-
+        for dedup_rule in active_dedup_rules:
+            dedup_config = dedup_rule.deduplication_config
             dedup_type = dedup_config.get("dedup_type", "fingerprint")
             window_seconds = dedup_config.get("window_seconds", 300)
 
@@ -312,29 +367,44 @@ class RuleEngine:
                     f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
                     for c in conditions
                 )
-                dedup_key = f"dedup:cond:{hash(cond_sig)}:{alert.tenant_id}"
+                dedup_key = f"dedup:cond:{_stable_hash(cond_sig)}:{alert.tenant_id}"
             else:
                 continue
 
             existing = await redis.get(dedup_key)
             if existing:
-                logger.info("dedup_blocked", alert_id=alert.id, trace_id=trace_id, dedup_key=dedup_key, rule_name=dedup_rule.name)
+                existing_id = existing.decode("utf-8") if isinstance(existing, bytes) else str(existing)
+                # MQ 重投同一告警时，Redis 键可能指向自身，不应误判为重复
+                if existing_id == str(alert.id):
+                    continue
+
+                logger.info(
+                    "dedup_blocked",
+                    alert_id=alert.id,
+                    trace_id=trace_id,
+                    dedup_key=dedup_key,
+                    rule_name=dedup_rule.name,
+                    duplicate_of=existing_id,
+                )
                 await _add_step("dedup_result", "去重检查", "blocked", {
-                    "description": f"触发去重，已存在告警: {existing}",
+                    "description": f"触发去重，已存在告警: {existing_id}",
                     "details": {
                         "matched_rules": matched_rule_names,
                         "blocked_by_rule": dedup_rule.name,
+                        "duplicate_of_alert_id": existing_id,
                     },
                 })
-                return True, trace_steps
+                await self._record_strategy_rule_match(db, dedup_rule)
+                return True, trace_steps, existing_id
 
             await redis.set(dedup_key, str(alert.id), ex=window_seconds)
+            await self._record_strategy_rule_match(db, dedup_rule)
 
         await _add_step("dedup_result", "去重检查", "passed", {
             "description": "未触发去重",
             "details": {"matched_rules": matched_rule_names} if matched_rule_names else None,
         })
-        return False, trace_steps
+        return False, trace_steps, None
 
     def _alert_to_dict(self, alert: Alert) -> Dict[str, Any]:
         """将告警转换为字典"""
@@ -349,7 +419,10 @@ class RuleEngine:
                 AlertRule.deduplication_config.isnot(None),
             ).order_by(AlertRule.priority.desc())
         )
-        rules = result.scalars().all()
+        rules = [
+            r for r in result.scalars().all()
+            if _is_effective_dedup_config(r.deduplication_config)
+        ]
         alert_data = self._alert_to_dict(alert)
         matched = []
         for rule in rules:
@@ -489,10 +562,7 @@ class RuleEngine:
                 rule_name=suppress_rule.name,
                 window_reason=window_reason,
             )
-            if db is not None:
-                suppress_rule.match_count = (getattr(suppress_rule, "match_count", None) or 0) + 1
-                suppress_rule.last_match_at = now
-                await db.commit()
+            await self._record_strategy_rule_match(db, suppress_rule)
 
             await _add_step("suppress_result", "抑制检查", "blocked", {
                 "description": f"触发规则抑制: {suppress_rule.name}",
