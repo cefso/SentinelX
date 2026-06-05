@@ -343,6 +343,24 @@ curl -sS -X DELETE "${BASE_URL}/api/v1/rules/suppress-rules/{rule_id}" \
 
 聚合在**抑制之后**执行。相同分组键的告警在窗口内会归入同一聚合组；可通过成员接口查看组内告警。
 
+### 配置说明（与 UI 对齐）
+
+| 模式 | rule.conditions（触发条件） | config（聚合配置） |
+|------|---------------------------|-------------------|
+| **group_by**（分组模式） | 可选，限定哪些告警适用此规则 | `group_by` 字段决定分组键；默认 `alert_key + source` |
+| **condition**（条件模式） | 应留空（UI 不展示） | `config.conditions` 同时决定规则生效与分桶 |
+
+条件模式下，后端 `_find_matching_aggregate_rules` 仅检查 `config.conditions` 非空，不再重复评估 rule 级条件（与去重规则 condition 模式一致）。
+
+### 列表视图 vs 策略聚合（概念对照）
+
+| 概念 | 入口 | 分组依据 | 作用 |
+|------|------|---------|------|
+| **指纹视图** | 告警列表 → 视图「指纹视图」 | `fingerprint` | 展示层合并，减少列表行数 |
+| **策略聚合** | 规则 → 策略聚合 | 规则 `group_by` / 条件 | 引擎分桶；子告警 `status=aggregated`，默认不重复通知 |
+
+子告警加入已有组后 Trace 的 `final_status` 为 `aggregated`；首条（parent）仍为 `firing` 并正常通知（`notify_policy=parent_only` 默认）。
+
 ### 3.1 创建 group_by 聚合规则
 
 按 `alert_key` + `source` 聚合，窗口 300 秒，保存原始告警：
@@ -423,6 +441,8 @@ curl -sS "${BASE_URL}/api/v1/alerts/${ALERT1}/aggregated-members?page=1&page_siz
 
 ### 3.4 条件模式聚合
 
+条件模式规则：`conditions`（rule 级）留空，条件写在 `config` 内：
+
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/rules/aggregate-rules" \
   -H "Authorization: Bearer ${TOKEN}" \
@@ -445,6 +465,8 @@ curl -sS -X POST "${BASE_URL}/api/v1/rules/aggregate-rules" \
     }
   }'
 ```
+
+发送 `labels.batch=cond-agg` 的告警，窗口内满足同一 config 条件的告警应归入同一聚合桶。Trace 中 `aggregate_result` 为 `aggregated` 或 `new_group`。
 
 ### 3.5 预览聚合效果
 

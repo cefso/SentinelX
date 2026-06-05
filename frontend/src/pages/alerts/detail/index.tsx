@@ -8,7 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/stores/toast-store'
 import { apiClient } from '@/services/api'
-import { AlertResponse } from '@/types/alert'
+import { AlertResponse, AlertAggregateMembersResponse } from '@/types/alert'
 import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc } from '@/hooks/useCloudMetrics'
 import { Send, Circle, ChevronDown, Clock } from 'lucide-react'
 import { formatLocalDateTime } from '@/utils/datetime'
@@ -136,12 +136,23 @@ export function AlertDetailPage() {
   }
 
   const [aggregatedExpanded, setAggregatedExpanded] = useState(false)
+  const aggregateMembersRef = useRef<HTMLDivElement>(null)
 
-  const { data: aggregatedAlerts = [], isLoading: aggregatedLoading } = useQuery<AlertResponse[]>({
+  const handleShowAggregateMembers = () => {
+    setAggregatedExpanded(true)
+    window.setTimeout(() => {
+      aggregateMembersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
+  const { data: aggregateMembersData, isLoading: aggregatedLoading } = useQuery<AlertAggregateMembersResponse>({
     queryKey: ['alertAggregated', alert?.id],
     queryFn: () => apiClient.get(`/alerts/${alert!.id}/aggregated-members`),
     enabled: !!alert?.id,
   })
+  const aggregatedMembers = aggregateMembersData?.items ?? []
+  const aggregateGroupCount = aggregateMembersData?.alert_count ?? 0
+  const isAggregateParent = !alert?.aggregate_parent_id && aggregateGroupCount > 1
 
   const timeline = alert ? buildTimeline(alert) : []
 
@@ -162,6 +173,34 @@ export function AlertDetailPage() {
 
   return (
     <div className="space-y-6">
+      {alert.aggregate_parent_id && (
+        <div className="bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <span className="text-sm text-violet-800">
+            本告警已策略聚合至父告警 #{alert.aggregate_parent_id}
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate(`/alerts/${alert.aggregate_parent_id}`)}
+            className="text-sm text-violet-700 hover:text-violet-900 font-medium"
+          >
+            查看父告警 →
+          </button>
+        </div>
+      )}
+      {!alert.aggregate_parent_id && !aggregatedLoading && isAggregateParent && (
+        <div className="bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <span className="text-sm text-violet-800">
+            本告警为策略聚合父告警，组内共 {aggregateGroupCount} 条
+          </span>
+          <button
+            type="button"
+            onClick={handleShowAggregateMembers}
+            className="text-sm text-violet-700 hover:text-violet-900 font-medium"
+          >
+            查看组成员 →
+          </button>
+        </div>
+      )}
       {/* 顶部操作栏 */}
       <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
         <div className="flex items-center gap-4">
@@ -211,7 +250,7 @@ export function AlertDetailPage() {
                 <button onClick={() => handleCreateRule('route')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-t-lg">路由规则</button>
                 <button onClick={() => handleCreateRule('dedup')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">去重规则</button>
                 <button onClick={() => handleCreateRule('suppress')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">抑制规则</button>
-                <button onClick={() => handleCreateRule('aggregate')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-b-lg">聚合规则</button>
+                <button onClick={() => handleCreateRule('aggregate')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-b-lg">策略聚合规则</button>
               </div>
             )}
           </div>
@@ -455,18 +494,23 @@ export function AlertDetailPage() {
 
         </div>
       </div>
-      {/* 聚合告警折叠区域 */}
-      {!aggregatedLoading && aggregatedAlerts.length > 1 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* 策略聚合组成员 */}
+      {!aggregatedLoading && aggregateGroupCount > 1 && (
+        <div ref={aggregateMembersRef} className="bg-white rounded-lg shadow overflow-hidden scroll-mt-4">
           <button
             onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
             className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-700">聚合告警</span>
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                {aggregatedAlerts.length}条
+              <span className="text-sm font-semibold text-gray-700">策略聚合告警</span>
+              <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full">
+                {aggregateGroupCount}条
               </span>
+              {aggregateMembersData?.group_key && (
+                <span className="text-xs text-gray-400 font-mono truncate max-w-xs">
+                  {aggregateMembersData.group_key}
+                </span>
+              )}
             </div>
             <ChevronDown
               className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
@@ -477,13 +521,13 @@ export function AlertDetailPage() {
           {aggregatedExpanded && (
             <div className="border-t">
               <div className="divide-y">
-                {aggregatedAlerts.map((item) => (
+                {aggregatedMembers.map((item) => (
                   <div
-                    key={item.id}
+                    key={item.alert_id}
                     className={`flex items-center gap-3 px-6 py-3 ${
-                      item.id === alert.id ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                      item.alert_id === alert.id ? 'bg-yellow-50' : 'hover:bg-gray-50'
                     } cursor-pointer transition-colors`}
-                    onClick={() => item.id !== alert.id && navigate(`/alerts/${item.id}`)}
+                    onClick={() => item.alert_id !== alert.id && navigate(`/alerts/${item.alert_id}`)}
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${
                       item.severity === 'critical' ? 'bg-red-500' :
@@ -498,8 +542,9 @@ export function AlertDetailPage() {
                       item.severity === 'high' ? 'bg-orange-100 text-orange-800' :
                       item.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
                     }`}>{item.severity?.toUpperCase()}</span>
+                    <StatusBadge status={item.status} />
                     <span className="flex-1 text-sm text-gray-800 truncate">{item.title}</span>
-                    {item.id === alert.id && (
+                    {item.alert_id === alert.id && (
                       <span className="text-xs text-yellow-600 shrink-0 font-medium">当前告警</span>
                     )}
                   </div>

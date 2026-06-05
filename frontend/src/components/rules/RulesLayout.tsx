@@ -9,7 +9,7 @@ const tabs = [
   { key: 'routes', label: '路由规则', href: '/rules', icon: Route, color: 'blue' },
   { key: 'dedup', label: '去重规则', href: '/rules/dedup', icon: GitBranch, color: 'amber' },
   { key: 'suppress', label: '抑制规则', href: '/rules/suppress', icon: ShieldOff, color: 'rose' },
-  { key: 'aggregate', label: '聚合规则', href: '/rules/aggregate', icon: Layers, color: 'violet' },
+  { key: 'aggregate', label: '策略聚合', href: '/rules/aggregate', icon: Layers, color: 'violet' },
 ]
 
 export function RulesLayout({ children }: RulesLayoutProps) {

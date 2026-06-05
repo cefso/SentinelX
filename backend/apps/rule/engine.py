@@ -6,7 +6,7 @@ import hashlib
 import re
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -67,8 +67,21 @@ def _is_effective_dedup_config(config: Any) -> bool:
     return True
 
 
+def _is_effective_aggregate_config(config: Any) -> bool:
+    """有效聚合配置：排除 JSON null、空对象及未启用规则。"""
+    if not config or not isinstance(config, dict):
+        return False
+    if config.get("disabled", not config.get("enabled", False)):
+        return False
+    return True
+
+
 def _is_condition_dedup_config(config: dict) -> bool:
     return config.get("dedup_type") == "condition"
+
+
+def _is_condition_aggregate_config(config: dict) -> bool:
+    return config.get("mode") == "condition"
 
 
 @dataclass
@@ -503,10 +516,18 @@ class RuleEngine:
                 AlertRule.aggregate_config.isnot(None),
             ).order_by(AlertRule.priority.desc())
         )
-        rules = result.scalars().all()
+        rules = [
+            r for r in result.scalars().all()
+            if _is_effective_aggregate_config(r.aggregate_config)
+        ]
         alert_data = self._alert_to_dict(alert)
         matched = []
         for rule in rules:
+            agg_config = rule.aggregate_config or {}
+            if _is_condition_aggregate_config(agg_config):
+                if agg_config.get("conditions"):
+                    matched.append(rule)
+                continue
             conditions = rule.conditions or []
             if not conditions:
                 matched.append(rule)
@@ -610,6 +631,58 @@ class RuleEngine:
         })
         return False, None, trace_steps
 
+    async def _resolve_aggregate_group_for_join(
+        self,
+        db: AsyncSession,
+        tenant_id: str,
+        aggregate_key: str,
+        parent_alert_id: int,
+        window_seconds: int,
+    ) -> Optional[AlertAggregateGroup]:
+        """根据 Redis parent 告警 ID 解析应加入的聚合组（避免同 group_key 多历史组冲突）。"""
+        parent = await db.get(Alert, parent_alert_id)
+        if parent and parent.aggregate_group_id:
+            group = await db.get(AlertAggregateGroup, parent.aggregate_group_id)
+            if group and group.tenant_id == tenant_id:
+                return group
+
+        result = await db.execute(
+            select(AlertAggregateMember).where(
+                AlertAggregateMember.alert_id == parent_alert_id,
+            )
+        )
+        member = result.scalars().first()
+        if member:
+            group = await db.get(AlertAggregateGroup, member.group_id)
+            if group and group.tenant_id == tenant_id and group.group_key == aggregate_key:
+                return group
+
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+        result = await db.execute(
+            select(AlertAggregateGroup)
+            .where(
+                AlertAggregateGroup.group_key == aggregate_key,
+                AlertAggregateGroup.tenant_id == tenant_id,
+                AlertAggregateGroup.last_alert_at >= cutoff,
+            )
+            .order_by(AlertAggregateGroup.last_alert_at.desc())
+            .limit(1)
+        )
+        group = result.scalar_one_or_none()
+        if group:
+            return group
+
+        result = await db.execute(
+            select(AlertAggregateGroup)
+            .where(
+                AlertAggregateGroup.group_key == aggregate_key,
+                AlertAggregateGroup.tenant_id == tenant_id,
+            )
+            .order_by(AlertAggregateGroup.last_alert_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def _check_aggregate(
         self,
         db: AsyncSession,
@@ -651,6 +724,8 @@ class RuleEngine:
             window_seconds = agg_config.get("window_seconds", 300)
             max_count = agg_config.get("max_count", 100)
             store_original = agg_config.get("store_original_alerts", True)
+            notify_policy = agg_config.get("notify_policy", "parent_only")
+            rule_name = aggregate_rule.name
 
             if agg_mode == "condition":
                 # 条件模式：评估条件决定聚合组
@@ -712,16 +787,17 @@ class RuleEngine:
 
             if existing_id:
                 # 加入现有聚合组
+                if isinstance(existing_id, bytes):
+                    existing_id = existing_id.decode("utf-8")
                 existing_alert_id = int(existing_id)
 
-                # 检查 max_count 限制
-                result = await db.execute(
-                    select(AlertAggregateGroup).where(
-                        AlertAggregateGroup.group_key == aggregate_key,
-                        AlertAggregateGroup.tenant_id == alert.tenant_id,
-                    )
+                group = await self._resolve_aggregate_group_for_join(
+                    db,
+                    alert.tenant_id,
+                    aggregate_key,
+                    existing_alert_id,
+                    window_seconds,
                 )
-                group = result.scalar_one_or_none()
 
                 if group is None:
                     # Redis 与 DB 不一致，按新组处理
@@ -740,7 +816,6 @@ class RuleEngine:
                     # 创建聚合组成员记录
                     if store_original:
                         member = AlertAggregateMember(
-                            tenant_id=alert.tenant_id,
                             group_id=group.id,
                             alert_id=alert.id,
                         )
@@ -763,8 +838,11 @@ class RuleEngine:
                     })
                     return {
                         "aggregated": True,
-                        "parent_alert_id": existing_id,
+                        "parent_alert_id": existing_alert_id,
+                        "group_id": group.id,
                         "group_key": group_key,
+                        "notify_policy": notify_policy,
+                        "rule_name": rule_name,
                     }, trace_steps
 
             # 创建新聚合组
@@ -781,7 +859,6 @@ class RuleEngine:
 
             if store_original:
                 member = AlertAggregateMember(
-                    tenant_id=alert.tenant_id,
                     group_id=new_group.id,
                     alert_id=alert.id,
                 )
@@ -801,7 +878,13 @@ class RuleEngine:
                     "group_key": group_key,
                 },
             })
-            return None, trace_steps
+            return {
+                "new_group": True,
+                "group_id": new_group.id,
+                "group_key": group_key,
+                "notify_policy": notify_policy,
+                "rule_name": rule_name,
+            }, trace_steps
         else:
             # 没有聚合配置，跳过聚合
             await _add_step("aggregate_result", "聚合检查", "skipped", {"description": "未配置聚合规则，跳过"})

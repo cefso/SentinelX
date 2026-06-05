@@ -12,7 +12,7 @@ from apps.rule.suppress_timing import (
     enrich_suppress_config,
     is_suppress_rule_in_effect,
 )
-from apps.alert.models import Alert
+from apps.alert.models import Alert, AlertAggregateGroup, AlertAggregateMember
 
 
 def test_rule_engine_operators():
@@ -767,4 +767,256 @@ async def test_check_dedup_condition_mode_cohort_bucket():
         )
         assert is_dup2 is True
         assert duplicate_of == "1"
+
+
+def _make_aggregate_rule(aggregate_config: dict, name: str = "aggregate-test", rule_id: int = 30):
+    rule = SimpleNamespace(
+        id=rule_id,
+        name=name,
+        aggregate_config=aggregate_config,
+        conditions=[],
+        condition_mode="and",
+    )
+    return rule
+
+
+def _mock_aggregate_rules_db(rules: list):
+    db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = rules
+    db.execute = AsyncMock(return_value=mock_result)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_find_matching_aggregate_rules_condition_mode_ignores_rule_conditions():
+    """条件模式：不因 rule.conditions 不匹配而排除规则"""
+    engine = RuleEngine()
+    alert = _make_alert(severity="high")
+    rule = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "condition",
+            "conditions": [{"field": "severity", "operator": "eq", "value": "high"}],
+            "condition_mode": "and",
+            "window_seconds": 300,
+        },
+        rule_id=1,
+    )
+    rule.conditions = [{"field": "severity", "operator": "eq", "value": "low"}]
+
+    matched = await engine._find_matching_aggregate_rules(_mock_aggregate_rules_db([rule]), alert)
+    assert len(matched) == 1
+    assert matched[0].id == 1
+
+
+@pytest.mark.asyncio
+async def test_find_matching_aggregate_rules_group_by_mode_uses_rule_conditions():
+    """分组模式：规则级触发条件仍生效"""
+    engine = RuleEngine()
+    alert = _make_alert(severity="high")
+    rule_match = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "group_by",
+            "group_by": ["alert_key", "source"],
+            "window_seconds": 300,
+        },
+        rule_id=1,
+    )
+    rule_match.conditions = [{"field": "severity", "operator": "eq", "value": "high"}]
+    rule_no_match = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "group_by",
+            "group_by": ["alert_key"],
+            "window_seconds": 300,
+        },
+        rule_id=2,
+    )
+    rule_no_match.conditions = [{"field": "severity", "operator": "eq", "value": "low"}]
+
+    matched = await engine._find_matching_aggregate_rules(
+        _mock_aggregate_rules_db([rule_match, rule_no_match]), alert
+    )
+    assert len(matched) == 1
+    assert matched[0].id == 1
+
+
+@pytest.mark.asyncio
+async def test_find_matching_aggregate_rules_condition_mode_empty_config_conditions_skipped():
+    """条件模式：config.conditions 为空时不进入候选"""
+    engine = RuleEngine()
+    alert = _make_alert()
+    rule = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "condition",
+            "conditions": [],
+            "condition_mode": "and",
+            "window_seconds": 300,
+        },
+    )
+
+    matched = await engine._find_matching_aggregate_rules(_mock_aggregate_rules_db([rule]), alert)
+    assert matched == []
+
+
+@pytest.mark.asyncio
+async def test_find_matching_aggregate_rules_ignores_json_null_config():
+    """路由规则 aggregate_config 为 JSON null 时不应参与聚合匹配"""
+    engine = RuleEngine()
+    alert = _make_alert(severity="critical")
+    rule_null = _make_aggregate_rule(None, name="route-null", rule_id=1)
+    rule_null.aggregate_config = None  # ORM 读取 JSON null 的结果
+    rule_effective = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "group_by",
+            "group_by": ["alert_key"],
+            "window_seconds": 300,
+        },
+        rule_id=18,
+    )
+
+    matched = await engine._find_matching_aggregate_rules(
+        _mock_aggregate_rules_db([rule_null, rule_effective]), alert
+    )
+    assert len(matched) == 1
+    assert matched[0].id == 18
+
+
+@pytest.mark.asyncio
+async def test_check_aggregate_creates_new_group():
+    """分组模式：首条告警创建新聚合组"""
+    engine = RuleEngine()
+    alert = _make_alert(id=1, alert_key="agg-key", source="prometheus")
+    rule = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "group_by",
+            "group_by": ["alert_key", "source"],
+            "window_seconds": 300,
+            "max_count": 100,
+            "store_original_alerts": True,
+            "notify_policy": "parent_only",
+        },
+    )
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock()
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    async def _flush():
+        for call in db.add.call_args_list:
+            obj = call[0][0]
+            if hasattr(obj, "id") and getattr(obj, "id", None) is None:
+                obj.id = 10
+
+    db.flush = AsyncMock(side_effect=_flush)
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_aggregate_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        agg_info, steps = await engine._check_aggregate(
+            db=db, redis=redis, alert=alert, trace_id="trace-agg-new"
+        )
+
+    assert agg_info is not None
+    assert agg_info.get("new_group") is True
+    assert any(s.get("status") == "new_group" for s in steps)
+    redis.set.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_check_aggregate_joins_existing_group():
+    """分组模式：相同分组键加入已有聚合组"""
+    engine = RuleEngine()
+    alert = _make_alert(id=2, alert_key="agg-key", source="prometheus")
+    rule = _make_aggregate_rule(
+        {
+            "enabled": True,
+            "mode": "group_by",
+            "group_by": ["alert_key", "source"],
+            "window_seconds": 300,
+            "max_count": 100,
+            "store_original_alerts": True,
+            "notify_policy": "parent_only",
+        },
+    )
+
+    group = SimpleNamespace(id=10, alert_count=1, tenant_id="1")
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"1")
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_aggregate_rules", new_callable=AsyncMock) as mock_find, \
+         patch.object(engine, "_resolve_aggregate_group_for_join", new_callable=AsyncMock) as mock_resolve:
+        mock_find.return_value = [rule]
+        mock_resolve.return_value = group
+        agg_info, steps = await engine._check_aggregate(
+            db=db, redis=redis, alert=alert, trace_id="trace-agg-join"
+        )
+
+    assert agg_info is not None
+    assert agg_info["aggregated"] is True
+    assert agg_info["parent_alert_id"] == 1
+    assert agg_info["group_id"] == 10
+    assert agg_info.get("notify_policy") == "parent_only"
+    assert any(s.get("status") == "aggregated" for s in steps)
+    mock_resolve.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_aggregate_group_prefers_parent_member_over_stale_groups():
+    """同 group_key 存在多个历史组时，应通过 parent 成员关系命中当前组"""
+    engine = RuleEngine()
+    tenant_id = "1"
+    aggregate_key = "aggregate:1:agg-key"
+    now = datetime.now(timezone.utc)
+
+    stale_group = AlertAggregateGroup(
+        id=1,
+        tenant_id=tenant_id,
+        group_key=aggregate_key,
+        alert_count=4,
+        last_alert_at=now - timedelta(minutes=10),
+    )
+    active_group = AlertAggregateGroup(
+        id=2,
+        tenant_id=tenant_id,
+        group_key=aggregate_key,
+        alert_count=1,
+        last_alert_at=now,
+    )
+    parent = Alert(id=86, tenant_id=tenant_id, aggregate_group_id=2)
+    member = AlertAggregateMember(group_id=2, alert_id=86)
+
+    db = AsyncMock()
+
+    async def _get(model, pk):
+        if model is Alert and pk == 86:
+            return parent
+        if model is AlertAggregateGroup and pk == 2:
+            return active_group
+        return None
+
+    db.get = AsyncMock(side_effect=_get)
+
+    member_result = MagicMock()
+    member_result.scalars.return_value.first.return_value = member
+    db.execute = AsyncMock(return_value=member_result)
+
+    group = await engine._resolve_aggregate_group_for_join(
+        db, tenant_id, aggregate_key, parent_alert_id=86, window_seconds=300
+    )
+
+    assert group is not None
+    assert group.id == 2
 

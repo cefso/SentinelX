@@ -7,7 +7,7 @@
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
 - **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控（1.0/2.0）、腾讯云、Zabbix、自定义 Webhook 等，通过适配器自动解析各类告警格式
 - **告警源管理**: 支持配置多个告警源（AlertSource），每个告警源有独立的 Webhook URL，支持启用/禁用和统计
-- **告警聚合视图**: 告警列表支持按指纹（fingerprint）聚合模式，同一告警的多条记录合并展示并显示触发次数
+- **告警列表视图**: 支持按指纹（fingerprint）的「指纹视图」与「明细视图」；策略聚合规则命中后子告警标记为 `aggregated`
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
 - **多渠道通知**: 钉钉、飞书、企业微信、邮件等
@@ -601,7 +601,7 @@ GET    /api/v1/alerts/{id}/aggregated-members  # 获取聚合组的告警列表
 GET    /api/v1/alerts/diagnose/{trace_id}  # 诊断
 ```
 
-**告警列表聚合模式**: 使用 `GET /api/v1/alerts?aggregate=true` 可按指纹（fingerprint）聚合，同一告警的多条记录合并展示，返回 `count`（触发次数）和 `latest`（最新告警）。
+**告警列表视图**: `GET /api/v1/alerts?aggregate=true` 为**指纹视图**（按 fingerprint 合并展示）；策略聚合组见 `aggregated-members` 接口及 `hide_aggregated_children` 参数（默认隐藏 `status=aggregated` 子告警）。
 
 ### 云产品指标映射
 ```

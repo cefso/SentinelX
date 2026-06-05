@@ -33,6 +33,9 @@ export interface AlertResponse {
   namespace?: string
   instance_id?: string
   instance_name?: string
+  aggregate_parent_id?: number
+  aggregate_group_id?: number
+  aggregate_group_count?: number
 }
 
 export interface AlertStats {
@@ -50,12 +53,16 @@ export interface AlertStats {
   low: number
   info: number
   unassigned: number
+  aggregated?: number
 }
 
 export interface AlertAggregatedItem {
   fingerprint: string
   count: number
   latest: AlertResponse
+  row_type?: 'fingerprint' | 'strategy_group'
+  aggregate_group_id?: number
+  group_label?: string
 }
 
 export interface AlertFilter {
@@ -67,4 +74,23 @@ export interface AlertFilter {
   start_time?: string
   end_time?: string
   keyword?: string
+}
+
+export interface AlertAggregateMemberItem {
+  alert_id: number
+  title: string
+  severity: string
+  fired_at: string
+  source: string
+  status: string
+  added_at: string
+}
+
+export interface AlertAggregateMembersResponse {
+  items: AlertAggregateMemberItem[]
+  total: number
+  group_key?: string | null
+  alert_count: number
+  page: number
+  page_size: number
 }

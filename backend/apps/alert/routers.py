@@ -31,6 +31,7 @@ from apps.alert.schemas import (
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
+from apps.alert.services.fingerprint_list import list_alerts_fingerprint_aggregate
 
 router = APIRouter()
 
@@ -705,6 +706,7 @@ async def list_alerts(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     aggregate: bool = Query(False),
+    hide_aggregated_children: bool = Query(True),
     fingerprint: Optional[str] = None,
     source_id: Optional[int] = None,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -738,70 +740,28 @@ async def list_alerts(
         base_filter.append(Alert.fingerprint == fingerprint)
     if source_id:
         base_filter.append(Alert.source_id == source_id)
+    if hide_aggregated_children and status != "aggregated":
+        base_filter.append(Alert.status != "aggregated")
 
-    # 聚合模式
+    # 聚合模式（指纹视图 + 虚拟策略聚合指纹行）
     if aggregate:
-        from apps.alert.schemas import AlertAggregatedResponse, AlertAggregatedItem
-
-        # 子查询: 每 fingerprint 的最新告警 ID 和数量
-        subq = (
-            select(
-                Alert.fingerprint,
-                func.max(Alert.id).label("max_id"),
-                func.count(Alert.id).label("count"),
-            )
-            .where(and_(*base_filter))
-            .group_by(Alert.fingerprint)
-            .subquery()
-        )
-
-        # 总分组数
-        total_result = await db.execute(select(func.count()).select_from(subq))
-        total = total_result.scalar() or 0
-
-        # 分页子查询
-        paginated_subq = (
-            select(subq.c.fingerprint, subq.c.max_id, subq.c.count)
-            .order_by(subq.c.max_id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .subquery()
-        )
-
-        # 关联获取完整告警
-        # 注意: 需要在 JOIN 条件中再次应用 base_filter，确保返回的 Alert 符合过滤条件
-        alert_filter = [Alert.id == paginated_subq.c.max_id]
-        if severity:
-            alert_filter.append(Alert.severity == severity)
-
-        result = await db.execute(
-            select(Alert, paginated_subq.c.count, AlertSource.name.label("source_name"))
-            .join(paginated_subq, and_(*alert_filter))
-            .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
-            .order_by(Alert.fired_at.desc())
-        )
-        rows = result.all()
-
-        items = [
-            AlertAggregatedItem(
-                fingerprint=row.Alert.fingerprint,
-                count=row.count,
-                latest=build_alert_response(row.Alert, row.source_name),
-            )
-            for row in rows
-        ]
-
-        return AlertAggregatedResponse(
-            items=items,
-            total=total,
+        return await list_alerts_fingerprint_aggregate(
+            db=db,
+            tenant_id=str(tenant_id),
+            base_filter=base_filter,
             page=page,
             page_size=page_size,
         )
 
     # 普通模式
     query = (
-        select(Alert, AlertSource.name.label("source_name"))
+        select(
+            Alert,
+            AlertSource.name.label("source_name"),
+            AlertAggregateGroup.alert_count.label("agg_group_count"),
+        )
         .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .outerjoin(AlertAggregateGroup, Alert.aggregate_group_id == AlertAggregateGroup.id)
         .where(and_(*base_filter))
     )
 
@@ -816,7 +776,14 @@ async def list_alerts(
     rows = result.all()
 
     return AlertListResponse(
-        items=[build_alert_response(row.Alert, row.source_name) for row in rows],
+        items=[
+            build_alert_response(
+                row.Alert,
+                row.source_name,
+                aggregate_group_count=row.agg_group_count if row.agg_group_count and row.agg_group_count > 1 else None,
+            )
+            for row in rows
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -838,6 +805,7 @@ async def get_alert_stats(
             func.sum(case((Alert.status == "firing", 1), else_=0)),
             func.sum(case((Alert.status == "resolved", 1), else_=0)),
             func.sum(case((Alert.status == "suppressed", 1), else_=0)),
+            func.sum(case((Alert.status == "aggregated", 1), else_=0)),
         ).where(tenant_filter)
     )
     row = status_result.one()
@@ -845,6 +813,7 @@ async def get_alert_stats(
     firing = row[1] or 0
     resolved = row[2] or 0
     suppressed = row[3] or 0
+    aggregated = row[4] or 0
 
     # 查询2: 按严重级别分布 (仅 firing 状态, 1次DB调用)
     severity_result = await db.execute(
@@ -895,6 +864,7 @@ async def get_alert_stats(
         today=today,
         firing_critical=critical,
         firing_high=high,
+        aggregated=aggregated,
     )
 
 

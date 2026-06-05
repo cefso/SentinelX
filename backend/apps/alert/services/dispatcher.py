@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from redis.asyncio import Redis
 
-from apps.alert.models import Alert, AlertHistory, AlertTrace
+from apps.alert.models import Alert, AlertHistory, AlertTrace, AlertAggregateGroup
 from apps.rule.models import AlertRule, NotificationChannel
 from apps.rule.engine import RuleEngine
 from apps.core.database import AsyncSessionLocal
@@ -64,6 +64,28 @@ class AlertDispatcher:
                     result.duplicate_of_alert_id,
                 )
                 return
+
+            agg_info = result.aggregated_info
+            if agg_info and agg_info.get("aggregated"):
+                policy = agg_info.get("notify_policy", "parent_only")
+                if policy == "parent_only":
+                    await self._handle_aggregated(alert, trace_id, agg_info)
+                    return
+                if policy == "rollup":
+                    if result.matched_rules:
+                        alert.matched_rules = [
+                            {"id": r.id, "name": r.name, "priority": r.priority, "actions": r.actions or []}
+                            for r in result.matched_rules
+                        ]
+                    await self._handle_aggregated_rollup(
+                        alert,
+                        trace_id,
+                        agg_info,
+                        result.channel_ids,
+                        result.template_map,
+                    )
+                    return
+                # notify_policy == "all": 继续正常通知，在 finalize 中写入聚合关系
 
             # 记录匹配的规则信息到告警
             if result.matched_rules:
@@ -180,6 +202,114 @@ class AlertDispatcher:
 
         await self._finish_trace(trace_id, "suppressed", suppress_reason=reason)
 
+    async def _handle_aggregated(
+        self,
+        alert: Alert,
+        trace_id: str,
+        agg_info: Dict[str, Any],
+    ):
+        """处理加入已有策略聚合组的子告警（默认不发通知）"""
+        parent_id = agg_info.get("parent_alert_id")
+        group_id = agg_info.get("group_id")
+        group_key = agg_info.get("group_key")
+        reason = f"策略聚合，已并入告警: {parent_id}"
+        alert.status = "aggregated"
+        alert.aggregate_parent_id = int(parent_id) if parent_id is not None else None
+        alert.aggregate_group_id = int(group_id) if group_id is not None else None
+        history = AlertHistory(
+            tenant_id=alert.tenant_id,
+            alert_id=alert.id,
+            action="aggregated",
+            description=reason,
+            new_value={
+                "status": "aggregated",
+                "parent_alert_id": parent_id,
+                "group_id": group_id,
+                "group_key": group_key,
+            },
+        )
+        self.db.add(history)
+        await self.db.commit()
+        await self._finish_trace(
+            trace_id,
+            "aggregated",
+            aggregate_info=json.dumps(agg_info, ensure_ascii=False),
+        )
+
+    async def _handle_aggregated_rollup(
+        self,
+        alert: Alert,
+        trace_id: str,
+        agg_info: Dict[str, Any],
+        channel_ids: List[int],
+        template_map: Dict[int, int | None],
+    ):
+        """rollup 模式：子告警标记已聚合，更新 parent 计数并发送汇总通知"""
+        parent_id = agg_info.get("parent_alert_id")
+        group_id = agg_info.get("group_id")
+        alert.status = "aggregated"
+        alert.aggregate_parent_id = int(parent_id) if parent_id is not None else None
+        alert.aggregate_group_id = int(group_id) if group_id is not None else None
+
+        parent = None
+        group_count = None
+        if parent_id:
+            result = await self.db.execute(select(Alert).where(Alert.id == int(parent_id)))
+            parent = result.scalar_one_or_none()
+        if group_id:
+            group = await self.db.get(AlertAggregateGroup, int(group_id))
+            if group:
+                group_count = group.alert_count
+
+        if parent:
+            parent.fire_count = (parent.fire_count or 1) + 1
+            parent.repeat_count = (parent.repeat_count or 0) + 1
+            if group_count is not None:
+                parent.aggregate_group_id = int(group_id) if group_id else parent.aggregate_group_id
+
+        history = AlertHistory(
+            tenant_id=alert.tenant_id,
+            alert_id=alert.id,
+            action="aggregated",
+            description=f"策略聚合 rollup，已并入告警: {parent_id}",
+            new_value={
+                "status": "aggregated",
+                "parent_alert_id": parent_id,
+                "group_id": group_id,
+                "rollup": True,
+            },
+        )
+        self.db.add(history)
+        await self.db.commit()
+
+        if parent and channel_ids:
+            template_map_str_keys = {str(k): v for k, v in template_map.items()} if template_map else {}
+            rollup_msg = {
+                "alert_id": int(parent.id),
+                "trace_id": str(trace_id),
+                "tenant_id": str(alert.tenant_id),
+                "title": f"[聚合更新] {parent.title}",
+                "content": f"聚合组新增 1 条告警（组内共 {group_count or '?'} 条），最新: {alert.title}",
+                "severity": str(parent.severity),
+                "channels": [int(c) for c in channel_ids],
+                "template_map": template_map_str_keys,
+                "labels": parent.labels or {},
+                "fired_at": parent.fired_at.isoformat() if parent.fired_at else None,
+                "rollup": True,
+                "child_alert_id": int(alert.id),
+            }
+            mq = await get_mq_async()
+            await mq.send("alerts_notify", rollup_msg)
+            await self._add_trace_step(trace_id, "notification_queued", "通知队列", "rollup", {
+                "description": f"已发送聚合汇总通知至 parent #{parent.id}",
+            })
+
+        await self._finish_trace(
+            trace_id,
+            "aggregated",
+            aggregate_info=json.dumps(agg_info, ensure_ascii=False),
+        )
+
     async def _finalize_alert(
         self,
         alert: Alert,
@@ -210,6 +340,13 @@ class AlertDispatcher:
         alert.status = "firing"
         alert.fire_count = 1
         alert.notification_channels = channel_ids
+
+        if aggregated_info:
+            if aggregated_info.get("new_group"):
+                alert.aggregate_group_id = aggregated_info.get("group_id")
+            elif aggregated_info.get("aggregated") and aggregated_info.get("notify_policy") == "all":
+                alert.aggregate_parent_id = aggregated_info.get("parent_alert_id")
+                alert.aggregate_group_id = aggregated_info.get("group_id")
 
         # 记录历史
         history = AlertHistory(
@@ -341,6 +478,13 @@ class AlertDispatcher:
 
             # 持久化到 PostgreSQL（幂等 upsert，避免 MQ 重投时唯一键冲突）
             try:
+                agg_raw = kwargs.get("aggregate_info")
+                if isinstance(agg_raw, str):
+                    parsed_agg = json.loads(agg_raw)
+                elif isinstance(agg_raw, dict):
+                    parsed_agg = agg_raw
+                else:
+                    parsed_agg = None
                 trace_values = {
                     "trace_id": trace_id,
                     "alert_id": trace_data.get("alert_id"),
@@ -348,6 +492,7 @@ class AlertDispatcher:
                     "final_status": status,
                     "deduction_reason": kwargs.get("deduction_reason"),
                     "suppress_reason": kwargs.get("suppress_reason"),
+                    "aggregate_info": parsed_agg,
                     "matched_rules": json.loads(trace_data.get("matched_rules", "[]")),
                     "notification_channels": json.loads(trace_data.get("notification_channels", "[]")),
                     "steps_chain": steps,
@@ -360,6 +505,7 @@ class AlertDispatcher:
                         "final_status": status,
                         "deduction_reason": kwargs.get("deduction_reason"),
                         "suppress_reason": kwargs.get("suppress_reason"),
+                        "aggregate_info": trace_values["aggregate_info"],
                         "matched_rules": trace_values["matched_rules"],
                         "notification_channels": trace_values["notification_channels"],
                         "steps_chain": steps,

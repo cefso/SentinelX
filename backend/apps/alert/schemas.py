@@ -2,7 +2,7 @@
 SentinelX - 告警Schema
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -69,7 +69,7 @@ class AlertCreate(AlertBase):
 
 class AlertUpdate(BaseModel):
     """更新告警状态"""
-    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed|acknowledged|deduplicated)$", description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)/deduplicated(已去重)")
+    status: Optional[str] = Field(None, pattern="^(firing|resolved|suppressed|acknowledged|deduplicated|aggregated)$", description="状态")
     severity: Optional[str] = Field(None, pattern="^(critical|high|medium|low|info)$", description="严重级别: critical/high/medium/low/info")
     assignee_id: Optional[int] = Field(None, description="处理人ID")
     assignee_name: Optional[str] = Field(None, description="处理人名称")
@@ -83,7 +83,7 @@ class AlertResponse(AlertBase):
     tenant_id: str = Field(..., description="租户ID")
     source_id: Optional[int] = Field(None, description="告警源ID")
     source_name: Optional[str] = Field(None, description="告警源名称（用户配置）")
-    status: str = Field(..., description="状态: firing(触发中)/resolved(已恢复)/suppressed(已抑制)/acknowledged(已确认)/deduplicated(已去重)")
+    status: str = Field(..., description="状态: firing/resolved/suppressed/acknowledged/deduplicated/aggregated")
     fingerprint: str = Field(..., description="指纹")
     trace_id: Optional[str] = Field(None, description="追踪ID")
     fire_count: int = Field(..., description="触发次数")
@@ -97,6 +97,9 @@ class AlertResponse(AlertBase):
     escalation_count: int = Field(..., description="升级次数")
     matched_rules: List[Dict[str, Any]] = Field(default_factory=list, description="匹配的规则列表")
     notification_channels: List[Any] = Field(default_factory=list, description="通知渠道列表")
+    aggregate_parent_id: Optional[int] = Field(None, description="策略聚合父告警ID")
+    aggregate_group_id: Optional[int] = Field(None, description="策略聚合组ID")
+    aggregate_group_count: Optional[int] = Field(None, description="策略聚合组内告警数")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
 
@@ -113,10 +116,13 @@ class AlertListResponse(BaseModel):
 
 
 class AlertAggregatedItem(BaseModel):
-    """聚合告警项"""
+    """聚合告警项（指纹视图行）"""
     fingerprint: str
     count: int
     latest: AlertResponse
+    row_type: Literal["fingerprint", "strategy_group"] = "fingerprint"
+    aggregate_group_id: Optional[int] = Field(None, description="策略聚合组ID（虚拟指纹行）")
+    group_label: Optional[str] = Field(None, description="策略聚合组展示标签")
 
     class Config:
         from_attributes = True
@@ -160,6 +166,7 @@ class AlertStats(BaseModel):
     today: int = Field(..., description="今日新增告警数")
     firing_critical: int = Field(..., description="触发中Critical告警数")
     firing_high: int = Field(..., description="触发中High告警数")
+    aggregated: int = Field(0, description="已聚合子告警数")
 
 
 # ============ 告警历史Schema ============
