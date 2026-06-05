@@ -151,6 +151,26 @@ def test_evaluate_conditions_in():
     assert matched is False
 
 
+def test_evaluate_conditions_source_id_in_accepts_string_values_from_ui():
+    """页面保存的 source_id 字符串列表应能匹配整数告警字段"""
+    engine = RuleEngine()
+    conditions = [{"field": "source_id", "operator": "in", "value": ["3"]}]
+    alert_data = {"source_id": 3}
+
+    matched, reason, _ = engine.evaluate_conditions(conditions, "and", alert_data)
+
+    assert matched is True
+    assert reason is None
+
+
+def test_is_effective_dedup_config_rejects_json_null_and_disabled():
+    from apps.rule.engine import _is_effective_dedup_config
+
+    assert _is_effective_dedup_config(None) is False
+    assert _is_effective_dedup_config({"enabled": False}) is False
+    assert _is_effective_dedup_config({"enabled": True, "dedup_type": "fingerprint"}) is True
+
+
 def test_field_values_schema():
     """测试 FieldValuesResponse Schema 序列化"""
     from apps.rule.schemas import FieldValuesResponse, FieldValueItem
@@ -550,7 +570,7 @@ async def test_check_dedup_allows_mq_redelivery_of_same_alert():
 
     assert is_duplicate is False
     assert duplicate_of is None
-    redis.set.assert_awaited_once()
+    redis.set.assert_not_awaited()
 
 
 def test_stable_hash_is_deterministic():
@@ -558,4 +578,62 @@ def test_stable_hash_is_deterministic():
 
     assert _stable_hash("severity:eq:high") == _stable_hash("severity:eq:high")
     assert _stable_hash("a") != _stable_hash("b")
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_increments_match_count_when_blocking():
+    engine = RuleEngine()
+    alert = _make_alert(id=2, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+    rule.match_count = 0
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"1")
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, _ = await engine._check_dedup(
+            db=db, redis=redis, alert=alert, trace_id="trace-dedup-count"
+        )
+
+    assert is_duplicate is True
+    assert rule.match_count == 1
+    assert rule.last_match_at is not None
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_increments_match_count_when_establishing_window():
+    engine = RuleEngine()
+    alert = _make_alert(id=1, alert_key="new-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+    rule.match_count = 2
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, _ = await engine._check_dedup(
+            db=db, redis=redis, alert=alert, trace_id="trace-dedup-window"
+        )
+
+    assert is_duplicate is False
+    assert rule.match_count == 3
+    db.commit.assert_awaited()
 
