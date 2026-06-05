@@ -80,7 +80,7 @@ kubectl get ingress -n sentinelx
 ### 数据库
 
 - 建议使用托管数据库服务（RDS、Cloud SQL 等）
-- 启用 TimescaleDB 扩展以支持时序数据
+- 如使用自建 PostgreSQL，需安装 PGMQ 扩展（见 `docker/pgmq.sql`）
 - 配置定期备份
 - 推荐 PostgreSQL 16+
 
