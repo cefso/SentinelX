@@ -244,7 +244,7 @@ export function AlertDetailPage() {
               </div>
               <div className="flex flex-col">
                 <dt className="text-gray-500">告警来源</dt>
-                <dd className="font-medium">{alert.source}</dd>
+                <dd className="font-medium">{alert.source_name || alert.source}</dd>
               </div>
               <div className="flex flex-col">
                 <dt className="text-gray-500">Alert Key</dt>

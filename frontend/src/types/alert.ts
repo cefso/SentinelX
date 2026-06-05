@@ -4,6 +4,8 @@ export interface AlertResponse {
   alert_key: string
   fingerprint: string
   source: string
+  source_id?: number
+  source_name?: string
   title: string
   content?: string
   severity: string
