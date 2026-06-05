@@ -30,6 +30,7 @@ from apps.alert.schemas import (
     CloudMetricsListResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
+from apps.alert.services.alert_utils import build_alert_response
 
 router = APIRouter()
 
@@ -774,8 +775,9 @@ async def list_alerts(
             alert_filter.append(Alert.severity == severity)
 
         result = await db.execute(
-            select(Alert, paginated_subq.c.count)
+            select(Alert, paginated_subq.c.count, AlertSource.name.label("source_name"))
             .join(paginated_subq, and_(*alert_filter))
+            .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
             .order_by(Alert.fired_at.desc())
         )
         rows = result.all()
@@ -784,7 +786,7 @@ async def list_alerts(
             AlertAggregatedItem(
                 fingerprint=row.Alert.fingerprint,
                 count=row.count,
-                latest=row.Alert,
+                latest=build_alert_response(row.Alert, row.source_name),
             )
             for row in rows
         ]
@@ -797,18 +799,24 @@ async def list_alerts(
         )
 
     # 普通模式
-    query = select(Alert).where(and_(*base_filter))
+    query = (
+        select(Alert, AlertSource.name.label("source_name"))
+        .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .where(and_(*base_filter))
+    )
 
-    count_query = select(func.count()).select_from(query.subquery())
+    count_query = select(func.count()).select_from(
+        select(Alert.id).where(and_(*base_filter)).subquery()
+    )
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
     query = query.order_by(Alert.fired_at.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
-    alerts = result.scalars().all()
+    rows = result.all()
 
     return AlertListResponse(
-        items=alerts,
+        items=[build_alert_response(row.Alert, row.source_name) for row in rows],
         total=total,
         page=page,
         page_size=page_size,
@@ -898,15 +906,17 @@ async def get_alert(
 ):
     """获取告警详情"""
     result = await db.execute(
-        select(Alert).where(
+        select(Alert, AlertSource.name.label("source_name"))
+        .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id)
+            Alert.tenant_id == str(tenant_id),
         )
     )
-    alert = result.scalar_one_or_none()
-    if not alert:
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return alert
+    return build_alert_response(row.Alert, row.source_name)
 
 
 @router.get("/alerts/{alert_id}/aggregated-members", response_model=AlertAggregateMembersResponse)

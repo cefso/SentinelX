@@ -116,6 +116,9 @@ export function AlertsPage() {
     return records?.[0]?.namespace_desc || records?.[0]?.product || namespace || '-'
   }
 
+  const getSourceDisplayName = (alert: Pick<AlertResponse, 'source' | 'source_name'>) =>
+    alert.source_name || alert.source
+
   const totalPages = Math.ceil((alerts?.total || 0) / pageSize)
 
   return (
@@ -340,7 +343,7 @@ export function AlertsPage() {
                       <div className="text-xs text-gray-400 mt-0.5 font-mono">{item.fingerprint}</div>
                     </td>
                     <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-gray-500">{item.latest.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{getSourceDisplayName(item.latest)}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
@@ -366,7 +369,7 @@ export function AlertsPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2"><SeverityBadge severity={alert.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-gray-500">{alert.source}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{getSourceDisplayName(alert)}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
                     <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
