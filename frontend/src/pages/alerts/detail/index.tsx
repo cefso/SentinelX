@@ -416,8 +416,10 @@ export function AlertDetailPage() {
                             <Circle className="w-2.5 h-2.5 text-red-500 fill-red-100" />
                           ) : item.status === 'resolved' ? (
                             <Circle className="w-2.5 h-2.5 text-green-500 fill-green-100" />
-                          ) : item.status === 'acknowledged' ? (
+                          ) : item.status === 'deduplicated' ? (
                             <Circle className="w-2.5 h-2.5 text-yellow-500 fill-yellow-100" />
+                          ) : item.status === 'acknowledged' ? (
+                            <Circle className="w-2.5 h-2.5 text-blue-500 fill-blue-100" />
                           ) : (
                             <Circle className="w-2.5 h-2.5 text-gray-400 fill-gray-100" />
                           )}

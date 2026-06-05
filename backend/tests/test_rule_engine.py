@@ -3,7 +3,7 @@ SentinelX - 规则引擎测试
 """
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from apps.rule.engine import RuleEngine
@@ -156,6 +156,18 @@ def test_evaluate_conditions_source_id_in_accepts_string_values_from_ui():
     engine = RuleEngine()
     conditions = [{"field": "source_id", "operator": "in", "value": ["3"]}]
     alert_data = {"source_id": 3}
+
+    matched, reason, _ = engine.evaluate_conditions(conditions, "and", alert_data)
+
+    assert matched is True
+    assert reason is None
+
+
+def test_evaluate_conditions_legacy_source_field_with_numeric_id():
+    """去重/聚合 UI 曾存 field=source + 数字 ID，应匹配 source_id"""
+    engine = RuleEngine()
+    conditions = [{"field": "source", "operator": "in", "value": [3]}]
+    alert_data = {"source": "aliyun_cms", "source_id": 3}
 
     matched, reason, _ = engine.evaluate_conditions(conditions, "and", alert_data)
 
@@ -636,4 +648,123 @@ async def test_check_dedup_increments_match_count_when_establishing_window():
     assert is_duplicate is False
     assert rule.match_count == 3
     db.commit.assert_awaited()
+
+
+def _mock_dedup_rules_db(rules: list):
+    db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = rules
+    db.execute = AsyncMock(return_value=mock_result)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_find_matching_dedup_rules_condition_mode_ignores_rule_conditions():
+    """条件模式：不因 rule.conditions 不匹配而排除规则"""
+    engine = RuleEngine()
+    alert = _make_alert(severity="high")
+    rule = _make_dedup_rule(
+        {
+            "enabled": True,
+            "dedup_type": "condition",
+            "conditions": [{"field": "severity", "operator": "eq", "value": "high"}],
+            "condition_mode": "and",
+            "window_seconds": 300,
+        },
+        rule_id=1,
+    )
+    rule.conditions = [{"field": "severity", "operator": "eq", "value": "low"}]
+
+    matched = await engine._find_matching_dedup_rules(_mock_dedup_rules_db([rule]), alert)
+    assert len(matched) == 1
+    assert matched[0].id == 1
+
+
+@pytest.mark.asyncio
+async def test_find_matching_dedup_rules_fingerprint_mode_uses_rule_conditions():
+    """指纹模式：规则级触发条件仍生效"""
+    engine = RuleEngine()
+    alert = _make_alert(severity="high")
+    rule_match = _make_dedup_rule(
+        {
+            "enabled": True,
+            "dedup_type": "fingerprint",
+            "fingerprint_fields": ["alert_key"],
+            "window_seconds": 300,
+        },
+        rule_id=1,
+    )
+    rule_match.conditions = [{"field": "severity", "operator": "eq", "value": "high"}]
+    rule_no_match = _make_dedup_rule(
+        {
+            "enabled": True,
+            "dedup_type": "fingerprint",
+            "fingerprint_fields": ["alert_key"],
+            "window_seconds": 300,
+        },
+        rule_id=2,
+    )
+    rule_no_match.conditions = [{"field": "severity", "operator": "eq", "value": "low"}]
+
+    matched = await engine._find_matching_dedup_rules(
+        _mock_dedup_rules_db([rule_match, rule_no_match]), alert
+    )
+    assert len(matched) == 1
+    assert matched[0].id == 1
+
+
+@pytest.mark.asyncio
+async def test_find_matching_dedup_rules_condition_mode_empty_config_conditions_skipped():
+    """条件模式：config.conditions 为空时不进入候选"""
+    engine = RuleEngine()
+    alert = _make_alert()
+    rule = _make_dedup_rule(
+        {
+            "enabled": True,
+            "dedup_type": "condition",
+            "conditions": [],
+            "condition_mode": "and",
+            "window_seconds": 300,
+        },
+    )
+
+    matched = await engine._find_matching_dedup_rules(_mock_dedup_rules_db([rule]), alert)
+    assert matched == []
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_condition_mode_cohort_bucket():
+    """条件模式：满足同一组 config 条件的告警共用一个去重桶"""
+    engine = RuleEngine()
+    alert1 = _make_alert(id=1, alert_key="key-a", labels={"dedup_tag": "batch-a"})
+    alert2 = _make_alert(id=2, alert_key="key-b", labels={"dedup_tag": "batch-a"})
+    rule = _make_dedup_rule(
+        {
+            "enabled": True,
+            "dedup_type": "condition",
+            "conditions": [{"field": "labels.dedup_tag", "operator": "eq", "value": "batch-a"}],
+            "condition_mode": "and",
+            "window_seconds": 300,
+        },
+    )
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_dup1, _, _ = await engine._check_dedup(
+            db=db, redis=redis, alert=alert1, trace_id="trace-cohort-1"
+        )
+        assert is_dup1 is False
+
+        redis.get = AsyncMock(return_value=b"1")
+        is_dup2, _, duplicate_of = await engine._check_dedup(
+            db=db, redis=redis, alert=alert2, trace_id="trace-cohort-2"
+        )
+        assert is_dup2 is True
+        assert duplicate_of == "1"
 

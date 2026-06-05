@@ -89,7 +89,9 @@ export function DiagnosePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-sm text-gray-500">状态</div>
-                <div className="text-lg font-medium">{data.summary?.status}</div>
+                <div className="text-lg font-medium">
+                  <TraceStatusBadge status={data.summary?.status} />
+                </div>
               </div>
               {data.summary?.suppress_reason && (
                 <div className="col-span-2">
@@ -143,7 +145,7 @@ export function DiagnosePage() {
                       </div>
                     )}
                   </div>
-                  <StatusIndicator status={step.status} />
+                  <StatusIndicator status={step.status} stepType={step.type} />
                 </div>
               ))}
             </div>
@@ -154,7 +156,33 @@ export function DiagnosePage() {
   )
 }
 
-function StatusIndicator({ status }: { status: string }) {
+function TraceStatusBadge({ status }: { status?: string }) {
+  const config: Record<string, { className: string; label: string }> = {
+    duplicate: { className: 'bg-yellow-100 text-yellow-800', label: '已去重' },
+    dedup_skipped: { className: 'bg-yellow-100 text-yellow-800', label: '已去重' },
+    queued: { className: 'bg-green-100 text-green-800', label: '已入队' },
+    suppressed: { className: 'bg-gray-100 text-gray-800', label: '已抑制' },
+    failed: { className: 'bg-red-100 text-red-800', label: '失败' },
+    no_channels: { className: 'bg-gray-100 text-gray-800', label: '无通知渠道' },
+  }
+  if (!status) return <span className="text-gray-500">-</span>
+  const item = config[status] || { className: 'bg-gray-100 text-gray-800', label: status }
+  return (
+    <span className={`inline-flex px-2 py-1 text-sm rounded ${item.className}`}>
+      {item.label}
+    </span>
+  )
+}
+
+function StatusIndicator({ status, stepType }: { status: string; stepType?: string }) {
+  if (stepType === 'dedup_result' && status === 'blocked') {
+    return (
+      <span className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-600">
+        已去重
+      </span>
+    )
+  }
+
   const config: Record<string, { bg: string; text: string; label: string }> = {
     success: { bg: 'bg-green-100', text: 'text-green-600', label: '成功' },
     passed: { bg: 'bg-blue-100', text: 'text-blue-600', label: '通过' },
@@ -165,6 +193,7 @@ function StatusIndicator({ status }: { status: string }) {
     aggregated: { bg: 'bg-purple-100', text: 'text-purple-600', label: '已聚合' },
     new_group: { bg: 'bg-indigo-100', text: 'text-indigo-600', label: '新组' },
     fallback: { bg: 'bg-gray-100', text: 'text-gray-600', label: '回退' },
+    dedup_skipped: { bg: 'bg-yellow-100', text: 'text-yellow-600', label: '已去重' },
   }
 
   const statusConfig = config[status] || config.skipped

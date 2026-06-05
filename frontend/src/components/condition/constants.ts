@@ -21,6 +21,7 @@ export const STATUS_OPTIONS = [
   { value: 'resolved', label: '已恢复' },
   { value: 'suppressed', label: '已抑制' },
   { value: 'acknowledged', label: '已确认' },
+  { value: 'deduplicated', label: '已去重' },
 ]
 
 // 需要从 API 加载值的字段
@@ -175,7 +176,7 @@ export const DEDUP_AGG_FIELD_CONFIGS: FieldConfig[] = [
     apiField: 'alert_key',
   },
   {
-    value: 'source',
+    value: 'source_id',
     label: '告警来源',
     type: 'enum',
     operators: ENUM_OPERATORS,
