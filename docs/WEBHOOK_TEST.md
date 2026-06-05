@@ -6,15 +6,13 @@
 
 1. 后端服务已启动（Docker 默认映射为 `http://localhost:8001`，直连一般为 `http://localhost:8000`）。
 2. 已在「告警提供商」中创建对应类型的告警源，并记下 `client_id`。
-3. 若租户配置了 Webhook API Key，请求需携带 `X-API-Key` Header。
 
 ### 环境变量（可选）
 
 ```bash
 export BASE_URL="http://localhost:8001"
 export TENANT_SLUG="sentinelx"
-export CLIENT_ID="a1b2c3d4"          # 告警源 client_id
-export API_KEY="your-webhook-api-key" # 未配置 Key 时可省略对应 -H
+export CLIENT_ID="a1b2c3d4"  # 告警源 client_id
 ```
 
 ### Webhook URL 格式
@@ -27,8 +25,6 @@ POST {BASE_URL}/api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}
 |---------------|----------------------|---------------------------------------|
 | `aliyun_cms`  | 阿里云云监控 1.0     | `application/x-www-form-urlencoded` 或 JSON |
 | `aliyun_cms2` | 阿里云云监控 2.0     | `application/json`                    |
-
-认证：Header `X-API-Key: <WEBHOOK_API_KEY>`（租户已配置时必填）。
 
 ---
 
@@ -47,7 +43,6 @@ CMS 1.0 真实回调为 URL-encoded 表单；统一 Webhook 端点也支持 JSON
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT_ID}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-API-Key: ${API_KEY}" \
   --data-urlencode "alertState=ALERT" \
   --data-urlencode "triggerLevel=WARN" \
   --data-urlencode "alertName=ECS-CPU高使用率" \
@@ -66,7 +61,6 @@ curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT_ID}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-API-Key: ${API_KEY}" \
   --data-urlencode "alertState=OK" \
   --data-urlencode "triggerLevel=INFO" \
   --data-urlencode "alertName=ECS-CPU高使用率" \
@@ -85,7 +79,6 @@ curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT_ID}" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "alertState": "ALERT",
     "triggerLevel": "CRITICAL",
@@ -108,7 +101,6 @@ curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/${CLIENT
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms/form" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-API-Key: ${API_KEY}" \
   --data-urlencode "alertState=ALERT" \
   --data-urlencode "alertName=测试告警" \
   --data-urlencode "rawMetricName=CPUUtilization" \
@@ -144,7 +136,6 @@ CMS 2.0 使用 JSON 格式。
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms2/${CLIENT_ID}" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "alertName": "SLB-后端健康检查异常",
     "metricName": "UnhealthyServerCount",
@@ -164,7 +155,6 @@ curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms2/${CLIEN
 ```bash
 curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms2/${CLIENT_ID}" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "alertName": "SLB-后端健康检查异常",
     "metricName": "UnhealthyServerCount",
@@ -187,7 +177,6 @@ curl -sS -X POST "${BASE_URL}/api/v1/webhooks/${TENANT_SLUG}/aliyun_cms2/${CLIEN
 
 1. 先执行**触发**命令，在告警列表确认状态为 `firing`。
 2. 再执行**恢复**命令（字段与触发保持一致），确认同指纹告警变为 `resolved`。
-3. 未配置 Webhook API Key 时，删除各命令中的 `-H "X-API-Key: ..."` 行即可。
 
 ## 相关文档
 
