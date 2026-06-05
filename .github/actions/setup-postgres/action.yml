@@ -1,0 +1,30 @@
+name: Setup Postgres
+description: Build postgres test image with GHA cache and start container
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build postgres image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./docker
+        file: ./docker/Dockerfile.pg
+        load: true
+        push: false
+        tags: sentinelx/postgres:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Start postgres container
+      shell: bash
+      run: |
+        docker run -d --name postgres \
+          -e POSTGRES_USER=postgres \
+          -e POSTGRES_PASSWORD=postgres \
+          -e POSTGRES_DB=sentinelx_test \
+          -p 5432:5432 \
+          sentinelx/postgres:test
+        until docker exec postgres pg_isready -U postgres; do sleep 1; done
