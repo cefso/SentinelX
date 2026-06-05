@@ -489,3 +489,73 @@ def test_strategy_rule_response_suppress_expired():
     resp = StrategyRuleResponse.from_alert_rule(rule, config_field="suppress_config")
     assert resp.suppress_in_effect is False
 
+
+def _make_dedup_rule(dedup_config: dict, name: str = "dedup-test", rule_id: int = 20):
+    rule = SimpleNamespace(
+        id=rule_id,
+        name=name,
+        deduplication_config=dedup_config,
+        conditions=[],
+        condition_mode="and",
+    )
+    return rule
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_blocks_second_alert_with_same_fingerprint_fields():
+    """窗口内第二条相同指纹告警应被去重"""
+    engine = RuleEngine()
+    alert = _make_alert(id=2, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"1")
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, duplicate_of = await engine._check_dedup(
+            db=None, redis=redis, alert=alert, trace_id="trace-dedup-1"
+        )
+
+    assert is_duplicate is True
+    assert duplicate_of == "1"
+
+
+@pytest.mark.asyncio
+async def test_check_dedup_allows_mq_redelivery_of_same_alert():
+    """MQ 重投同一告警时不应因 Redis 键指向自身而误判重复"""
+    engine = RuleEngine()
+    alert = _make_alert(id=42, alert_key="same-key")
+    rule = _make_dedup_rule({
+        "enabled": True,
+        "dedup_type": "fingerprint",
+        "fingerprint_fields": ["alert_key"],
+        "window_seconds": 300,
+    })
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=b"42")
+    redis.set = AsyncMock()
+
+    with patch.object(engine, "_find_matching_dedup_rules", new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [rule]
+        is_duplicate, _, duplicate_of = await engine._check_dedup(
+            db=None, redis=redis, alert=alert, trace_id="trace-dedup-redelivery"
+        )
+
+    assert is_duplicate is False
+    assert duplicate_of is None
+    redis.set.assert_awaited_once()
+
+
+def test_stable_hash_is_deterministic():
+    from apps.rule.engine import _stable_hash
+
+    assert _stable_hash("severity:eq:high") == _stable_hash("severity:eq:high")
+    assert _stable_hash("a") != _stable_hash("b")
+

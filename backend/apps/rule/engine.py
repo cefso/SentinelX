@@ -2,6 +2,7 @@
 SentinelX - 规则引擎
 基于条件的告警路由匹配
 """
+import hashlib
 import re
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
@@ -24,10 +25,16 @@ logger = structlog.get_logger()
 _STRATEGY_CODE_PREFIXES = ("_dedup_%", "_suppress_%", "_aggregate_%")
 
 
+def _stable_hash(value: str) -> str:
+    """跨进程稳定的短哈希，用于 Redis 去重/聚合键。"""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
 @dataclass
 class AlertProcessResult:
     """告警处理结果"""
     is_duplicate: bool = False
+    duplicate_of_alert_id: Optional[str] = None
     is_suppressed: bool = False
     suppress_reason: Optional[str] = None
     aggregated_info: Optional[Dict[str, Any]] = None
@@ -199,9 +206,12 @@ class RuleEngine:
         result = AlertProcessResult()
 
         # 1. 去重检查
-        is_duplicate, dedup_result = await self._check_dedup(db, redis, alert, trace_id, add_trace_step)
+        is_duplicate, dedup_result, duplicate_of_alert_id = await self._check_dedup(
+            db, redis, alert, trace_id, add_trace_step
+        )
         if is_duplicate:
             result.is_duplicate = True
+            result.duplicate_of_alert_id = duplicate_of_alert_id
             result.trace_steps = dedup_result
             return result
 
@@ -235,7 +245,7 @@ class RuleEngine:
         alert: Alert,
         trace_id: str,
         add_trace_step: Callable = None
-    ) -> tuple[bool, List[Dict]]:
+    ) -> tuple[bool, List[Dict], Optional[str]]:
         """去重检查 — 支持多规则"""
         trace_steps = []
 
@@ -259,7 +269,7 @@ class RuleEngine:
 
         if not dedup_rules:
             await _add_step("dedup_result", "去重检查", "passed", {"description": "未配置去重规则，跳过"})
-            return False, trace_steps
+            return False, trace_steps, None
 
         # 遍历所有匹配的去重规则，任一 Redis 命中即去重
         for dedup_rule in dedup_rules:
@@ -312,21 +322,34 @@ class RuleEngine:
                     f"{c.get('field')}:{c.get('operator')}:{c.get('value')}"
                     for c in conditions
                 )
-                dedup_key = f"dedup:cond:{hash(cond_sig)}:{alert.tenant_id}"
+                dedup_key = f"dedup:cond:{_stable_hash(cond_sig)}:{alert.tenant_id}"
             else:
                 continue
 
             existing = await redis.get(dedup_key)
             if existing:
-                logger.info("dedup_blocked", alert_id=alert.id, trace_id=trace_id, dedup_key=dedup_key, rule_name=dedup_rule.name)
+                existing_id = existing.decode("utf-8") if isinstance(existing, bytes) else str(existing)
+                # MQ 重投同一告警时，Redis 键可能指向自身，不应误判为重复
+                if existing_id == str(alert.id):
+                    continue
+
+                logger.info(
+                    "dedup_blocked",
+                    alert_id=alert.id,
+                    trace_id=trace_id,
+                    dedup_key=dedup_key,
+                    rule_name=dedup_rule.name,
+                    duplicate_of=existing_id,
+                )
                 await _add_step("dedup_result", "去重检查", "blocked", {
-                    "description": f"触发去重，已存在告警: {existing}",
+                    "description": f"触发去重，已存在告警: {existing_id}",
                     "details": {
                         "matched_rules": matched_rule_names,
                         "blocked_by_rule": dedup_rule.name,
+                        "duplicate_of_alert_id": existing_id,
                     },
                 })
-                return True, trace_steps
+                return True, trace_steps, existing_id
 
             await redis.set(dedup_key, str(alert.id), ex=window_seconds)
 
@@ -334,7 +357,7 @@ class RuleEngine:
             "description": "未触发去重",
             "details": {"matched_rules": matched_rule_names} if matched_rule_names else None,
         })
-        return False, trace_steps
+        return False, trace_steps, None
 
     def _alert_to_dict(self, alert: Alert) -> Dict[str, Any]:
         """将告警转换为字典"""
