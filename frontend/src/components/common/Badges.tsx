@@ -23,6 +23,7 @@ const statusVariants: Record<string, string> = {
   suppressed: "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100",
   acknowledged: "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100",
   deduplicated: "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100",
+  aggregated: "bg-violet-100 text-violet-800 border-violet-200 hover:bg-violet-100",
 }
 
 const statusLabels: Record<string, string> = {
@@ -31,6 +32,7 @@ const statusLabels: Record<string, string> = {
   suppressed: "已抑制",
   acknowledged: "已确认",
   deduplicated: "已去重",
+  aggregated: "已聚合",
 }
 
 export function StatusBadge({ status }: { status: string }) {

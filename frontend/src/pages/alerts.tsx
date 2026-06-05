@@ -18,7 +18,7 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 
 export function AlertsPage() {
@@ -104,6 +104,7 @@ export function AlertsPage() {
       keyword: filters.keyword || undefined,
       fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
+      hide_aggregated_children: false,
     }),
   })
 
@@ -192,12 +193,12 @@ export function AlertsPage() {
           </div>
 
           <div className="flex gap-2 flex-wrap items-center">
-            {/* 聚合模式切换 */}
+            {/* 列表视图切换（按 fingerprint 分组，与策略聚合规则无关） */}
             <span className="text-sm text-gray-500 py-1.5">视图:</span>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
               {[
-                { value: true, label: '聚合' },
-                { value: false, label: '列表' },
+                { value: true, label: '指纹视图' },
+                { value: false, label: '明细视图' },
               ].map(opt => (
                 <button
                   key={String(opt.value)}
@@ -221,6 +222,7 @@ export function AlertsPage() {
                 { value: 'resolved', label: '已恢复' },
                 { value: 'suppressed', label: '已抑制' },
                 { value: 'deduplicated', label: '已去重' },
+                { value: 'aggregated', label: '已聚合' },
                 { value: 'acknowledged', label: '已确认' },
               ].map(opt => (
                 <button
@@ -326,22 +328,44 @@ export function AlertsPage() {
                   <td colSpan={8} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
                 </tr>
               ) : aggregateMode ? (
-                (alerts?.items as unknown as AlertAggregatedItem[] || []).map((item, idx) => (
+                (alerts?.items as unknown as AlertAggregatedItem[] || []).map((item, idx) => {
+                  const isStrategyGroup = item.row_type === 'strategy_group'
+                  return (
                   <tr
-                    key={item.fingerprint}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    key={isStrategyGroup ? `strategy-group-${item.aggregate_group_id}` : item.fingerprint}
+                    className={`hover:bg-gray-50 cursor-pointer ${isStrategyGroup ? 'bg-violet-50/20' : ''}`}
                     onClick={() => navigate(`/alerts/${item.latest.id}`)}
                   >
                     <td className="px-3 py-2 text-sm text-gray-400">{(page - 1) * pageSize + idx + 1}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900 truncate max-w-md">{item.latest.title}</span>
-                        <span className="flex items-center gap-0.5 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
-                          <Fingerprint className="w-3 h-3" />
+                        <span className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${
+                          isStrategyGroup
+                            ? 'bg-violet-100 text-violet-700'
+                            : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {isStrategyGroup ? <Layers className="w-3 h-3" /> : <Fingerprint className="w-3 h-3" />}
                           ×{item.count}
                         </span>
+                        {isStrategyGroup && (
+                          <span className="flex items-center gap-0.5 text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">
+                            <Layers className="w-3 h-3" />
+                            策略×{item.count}
+                          </span>
+                        )}
+                        {!isStrategyGroup && (item.latest.aggregate_group_count ?? 0) > 1 && (
+                          <span className="flex items-center gap-0.5 text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">
+                            <Layers className="w-3 h-3" />
+                            策略×{item.latest.aggregate_group_count}
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5 font-mono">{item.fingerprint}</div>
+                      <div className="text-xs text-gray-400 mt-0.5 font-mono truncate max-w-md">
+                        {isStrategyGroup
+                          ? (item.group_label ? `策略聚合组 · ${item.group_label}` : '策略聚合组 · 含多个指纹')
+                          : item.fingerprint}
+                      </div>
                     </td>
                     <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
                     <td className="px-3 py-2 text-sm text-gray-500">{getSourceDisplayName(item.latest)}</td>
@@ -352,7 +376,8 @@ export function AlertsPage() {
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
                   </tr>
-                ))
+                  )
+                })
               ) : (
                 alerts?.items?.map((alert, idx) => (
                   <tr
@@ -366,6 +391,12 @@ export function AlertsPage() {
                         <span className="text-sm font-medium text-gray-900 truncate max-w-md">{alert.title}</span>
                         {alert.fire_count > 1 && (
                           <span className="text-xs text-orange-500 font-medium">×{alert.fire_count}</span>
+                        )}
+                        {(alert.aggregate_group_count ?? 0) > 1 && (
+                          <span className="flex items-center gap-0.5 text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">
+                            <Layers className="w-3 h-3" />
+                            策略×{alert.aggregate_group_count}
+                          </span>
                         )}
                       </div>
                     </td>

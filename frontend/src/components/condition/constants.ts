@@ -22,6 +22,7 @@ export const STATUS_OPTIONS = [
   { value: 'suppressed', label: '已抑制' },
   { value: 'acknowledged', label: '已确认' },
   { value: 'deduplicated', label: '已去重' },
+  { value: 'aggregated', label: '已聚合' },
 ]
 
 // 需要从 API 加载值的字段

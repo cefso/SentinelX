@@ -9,12 +9,18 @@ if TYPE_CHECKING:
 from apps.alert.schemas import AlertResponse
 
 
-def build_alert_response(alert: "Alert", source_name: Optional[str] = None) -> AlertResponse:
+def build_alert_response(
+    alert: "Alert",
+    source_name: Optional[str] = None,
+    aggregate_group_count: Optional[int] = None,
+) -> AlertResponse:
     """将 Alert 模型转换为响应，附带告警源显示名称"""
-    response = AlertResponse.model_validate(alert)
+    data = AlertResponse.model_validate(alert).model_dump()
     if source_name:
-        return response.model_copy(update={"source_name": source_name})
-    return response
+        data["source_name"] = source_name
+    if aggregate_group_count is not None:
+        data["aggregate_group_count"] = aggregate_group_count
+    return AlertResponse(**data)
 
 
 def alert_to_dict(alert: "Alert") -> dict:

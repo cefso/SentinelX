@@ -113,6 +113,10 @@ class Alert(Base):
     matched_rules = Column(JSON, default=list)  # 匹配的规则列表
     notification_channels = Column(JSON, default=list)  # 通知渠道列表
 
+    # 策略聚合关系
+    aggregate_parent_id = Column(Integer, nullable=True, index=True)
+    aggregate_group_id = Column(Integer, ForeignKey("alert_aggregate_groups.id"), nullable=True, index=True)
+
     # 回调认证
     callback_token = Column(String(64), nullable=False, default=lambda: secrets.token_urlsafe(32), index=True)
 

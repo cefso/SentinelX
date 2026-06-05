@@ -4,7 +4,14 @@ import { apiClient } from '@/services/api'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
-import { AggregateConfigForm, aggregateConfigToPayload, DEFAULT_AGGREGATE_CONFIG, AggregateConfig } from '@/components/strategy/AggregateConfigForm'
+import {
+  AggregateConfigForm,
+  aggregateConfigToPayload,
+  DEFAULT_AGGREGATE_CONFIG,
+  AggregateConfig,
+  mergeLegacyAggregateConditions,
+  buildAggregateConfigFromApi,
+} from '@/components/strategy/AggregateConfigForm'
 import { Modal } from '@/components/common/Modal'
 
 interface StrategyRule {
@@ -27,12 +34,46 @@ function getAggregateSummary(config: any): string {
   if (!config) return ''
   const mode = config.mode || 'group_by'
   const window = config.window_seconds || 300
-  const max = config.max_count || 10
+  const max = config.max_count ?? 100
+  const store = config.store_original_alerts !== false ? '保留成员' : '不保留成员'
   if (mode === 'group_by') {
-    const fields = (config.group_by || []).join(', ') || '默认'
-    return `分组: ${fields} / ${window}s / 最多${max}条`
+    const fields = (config.group_by || []).join(', ') || 'source, fingerprint（后端默认）'
+    return `分组: ${fields} / ${window}s / 最多${max}条 / ${store}`
   }
-  return `条件: ${(config.conditions || []).length} 个 / ${window}s / 最多${max}条`
+  return `条件: ${(config.conditions || []).length} 个 / ${window}s / 最多${max}条 / ${store}`
+}
+
+function getTriggerConditionSummary(rule: StrategyRule): string {
+  const type = rule.config?.mode || 'group_by'
+  if (type === 'condition') {
+    const count = (rule.config?.conditions || []).length
+    return count > 0 ? `见聚合配置（${count} 个条件）` : '见聚合配置（无条件）'
+  }
+  if (rule.conditions.length > 0) {
+    return `${rule.conditions.length} 个条件 (${rule.condition_mode})`
+  }
+  return '无条件（全局生效）'
+}
+
+function initAggregateModalState(rule: StrategyRule | null, initialConditions?: Condition[]) {
+  if (rule) {
+    const baseConfig = buildAggregateConfigFromApi(rule.config)
+    const merged = mergeLegacyAggregateConditions(rule.conditions, rule.config, baseConfig.mode)
+    return {
+      conditions: merged.ruleConditions,
+      conditionMode: rule.condition_mode || 'and',
+      config: {
+        ...baseConfig,
+        conditions: merged.configConditions,
+        condition_mode: merged.configConditionMode || baseConfig.condition_mode,
+      },
+    }
+  }
+  return {
+    conditions: initialConditions || [],
+    conditionMode: 'and',
+    config: DEFAULT_AGGREGATE_CONFIG,
+  }
 }
 
 export function AggregateRulesPage() {
@@ -70,7 +111,7 @@ export function AggregateRulesPage() {
     <RulesLayout>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          聚合规则将时间窗口内的相似告警合并为一条，减少告警数量
+          策略聚合规则在时间窗口内将相似告警合并为组，子告警默认不再重复通知
         </p>
         <button
           onClick={handleCreate}
@@ -117,13 +158,7 @@ export function AggregateRulesPage() {
                     <div className="text-sm text-gray-600">{getAggregateSummary(rule.config)}</div>
                   </td>
                   <td className="px-4 py-3">
-                    {rule.conditions.length > 0 ? (
-                      <div className="text-sm text-gray-600">
-                        {rule.conditions.length} 个条件 ({rule.condition_mode})
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">无条件（全局生效）</span>
-                    )}
+                    <div className="text-sm text-gray-600">{getTriggerConditionSummary(rule)}</div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 text-sm bg-violet-100 text-violet-800 rounded">
@@ -183,27 +218,15 @@ export function AggregateRulesPage() {
 }
 
 export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess }: { rule: StrategyRule | null; initialConditions?: Condition[]; onClose: () => void; onSuccess: () => void }) {
+  const initial = initAggregateModalState(rule, initialConditions)
   const [name, setName] = useState(rule?.name || '')
   const [description, setDescription] = useState(rule?.description || '')
   const [priority, setPriority] = useState(rule?.priority || 0)
-  const [conditions, setConditions] = useState<Condition[]>(rule?.conditions || initialConditions || [])
-  const [conditionMode, setConditionMode] = useState(rule?.condition_mode || 'and')
-  const [config, setConfig] = useState<AggregateConfig>(() => {
-    if (rule?.config) {
-      const c = rule.config
-      return {
-        enabled: c.enabled ?? true,
-        mode: c.mode ?? 'group_by',
-        window_seconds: c.window_seconds ?? 300,
-        group_by: c.group_by ?? [],
-        max_count: c.max_count ?? 10,
-        store_original_alerts: c.store_original_alerts ?? false,
-        condition_mode: c.condition_mode ?? 'and',
-        conditions: c.conditions ?? [],
-      }
-    }
-    return DEFAULT_AGGREGATE_CONFIG
-  })
+  const [conditions, setConditions] = useState<Condition[]>(initial.conditions)
+  const [conditionMode, setConditionMode] = useState(initial.conditionMode)
+  const [config, setConfig] = useState<AggregateConfig>(initial.config)
+
+  const isGroupByMode = config.mode === 'group_by'
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiClient.post('/rules/aggregate-rules', data),
@@ -215,17 +238,44 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
     onSuccess,
   })
 
+  const handleModeChange = (mode: AggregateConfig['mode']) => {
+    if (mode === 'condition') {
+      setConfig((prev) => ({
+        ...prev,
+        mode,
+        conditions: prev.conditions.length > 0 ? prev.conditions : conditions,
+        condition_mode: prev.conditions.length > 0 ? prev.condition_mode : conditionMode,
+      }))
+    } else if (mode === 'group_by' && config.conditions.length > 0 && conditions.length === 0) {
+      setConditions(config.conditions)
+      setConditionMode(config.condition_mode)
+      setConfig((prev) => ({ ...prev, mode, conditions: [], condition_mode: 'and' }))
+    } else {
+      setConfig((prev) => ({ ...prev, mode }))
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = {
-      name,
-      description: description || null,
-      priority,
-      is_active: true,
-      conditions,
-      condition_mode: conditionMode,
-      config: aggregateConfigToPayload(config),
-    }
+    const payload = isGroupByMode
+      ? {
+          name,
+          description: description || null,
+          priority,
+          is_active: true,
+          conditions,
+          condition_mode: conditionMode,
+          config: aggregateConfigToPayload(config),
+        }
+      : {
+          name,
+          description: description || null,
+          priority,
+          is_active: true,
+          conditions: [],
+          condition_mode: 'and',
+          config: aggregateConfigToPayload(config),
+        }
     if (rule) {
       updateMutation.mutate(payload)
     } else {
@@ -262,18 +312,20 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">条件组合方式</label>
-              <select
-                value={conditionMode}
-                onChange={(e) => setConditionMode(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md"
-              >
-                <option value="and">AND (全部满足)</option>
-                <option value="or">OR (任一满足)</option>
-              </select>
-            </div>
+          <div className={`grid gap-4 ${isGroupByMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {isGroupByMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">条件组合方式</label>
+                <select
+                  value={conditionMode}
+                  onChange={(e) => setConditionMode(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                >
+                  <option value="and">AND (全部满足)</option>
+                  <option value="or">OR (任一满足)</option>
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">优先级</label>
               <input
@@ -287,18 +339,20 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">触发条件（可选，仅当条件满足时此规则才生效）</label>
-            <ConditionEditor
-              conditions={conditions}
-              onChange={setConditions}
-              fields={FIELD_CONFIGS}
-            />
-          </div>
+          {isGroupByMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">触发条件（可选，仅当条件满足时此规则才生效）</label>
+              <ConditionEditor
+                conditions={conditions}
+                onChange={setConditions}
+                fields={FIELD_CONFIGS}
+              />
+            </div>
+          )}
 
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">聚合配置</label>
-            <AggregateConfigForm config={config} onChange={setConfig} />
+            <AggregateConfigForm config={config} onChange={setConfig} onModeChange={handleModeChange} />
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">

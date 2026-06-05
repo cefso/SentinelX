@@ -162,6 +162,7 @@ function TraceStatusBadge({ status }: { status?: string }) {
     dedup_skipped: { className: 'bg-yellow-100 text-yellow-800', label: '已去重' },
     queued: { className: 'bg-green-100 text-green-800', label: '已入队' },
     suppressed: { className: 'bg-gray-100 text-gray-800', label: '已抑制' },
+    aggregated: { className: 'bg-violet-100 text-violet-800', label: '已聚合' },
     failed: { className: 'bg-red-100 text-red-800', label: '失败' },
     no_channels: { className: 'bg-gray-100 text-gray-800', label: '无通知渠道' },
   }
