@@ -18,8 +18,9 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
+import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
 export function AlertsPage() {
   const navigate = useNavigate()
@@ -34,6 +35,14 @@ export function AlertsPage() {
     fingerprint: '',
   })
   const [aggregateMode, setAggregateMode] = useState(true)
+  const [showWebhookLogModal, setShowWebhookLogModal] = useState(false)
+
+  // 查询未忽略的 Webhook 错误日志数量
+  const { data: webhookLogCountData } = useQuery({
+    queryKey: ['webhook-logs-count'],
+    queryFn: () => apiClient.getWebhookLogs({ dismissed: false, page_size: 1 }),
+    refetchInterval: 30000, // 30秒轮询
+  })
 
   // 初始化从 URL 参数
   useEffect(() => {
@@ -124,7 +133,21 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">告警列表</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">告警列表</h1>
+        <button
+          onClick={() => setShowWebhookLogModal(true)}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+        >
+          <ScrollText className="w-4 h-4" />
+          Webhook 日志
+          {(webhookLogCountData?.total || 0) > 0 && (
+            <span className="px-2 py-0.5 text-xs font-medium text-white bg-orange-500 rounded-full">
+              {webhookLogCountData?.total}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* 统计卡片 - 5个带渐变和图标 */}
       <div className="grid grid-cols-5 gap-4">
@@ -465,6 +488,12 @@ export function AlertsPage() {
           </div>
         )}
       </div>
+
+      {/* Webhook 日志弹窗 */}
+      <WebhookLogModal
+        open={showWebhookLogModal}
+        onOpenChange={setShowWebhookLogModal}
+      />
     </div>
   )
 }

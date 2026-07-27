@@ -217,3 +217,29 @@ class CloudProductMetric(Base):
     is_active = Column(Integer, default=1)  # 启用状态
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class WebhookLog(Base):
+    """Webhook 接收日志"""
+
+    __tablename__ = "webhook_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    source_type = Column(String(32), nullable=False)  # prometheus/zabbix/custom 等
+    source_id = Column(Integer, nullable=True)  # 关联的 AlertSource ID
+    client_id = Column(String(32), nullable=True)  # 告警源 client_id
+
+    # 原始数据
+    raw_data = Column(JSON, nullable=False)  # 原始请求体完整保存
+    content_type = Column(String(64), nullable=True)  # Content-Type
+
+    # 处理结果
+    status = Column(String(16), nullable=False)  # success / parse_error / format_error / server_error
+    error_message = Column(Text, nullable=True)  # 错误详情 (含 traceback)
+    alert_id = Column(Integer, nullable=True)  # 成功时关联的告警 ID
+
+    # 管理
+    is_dismissed = Column(Integer, default=0)  # 是否已忽略
+
+    created_at = Column(DateTime(timezone=True), default=utc_now, index=True)

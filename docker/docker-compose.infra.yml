@@ -1,19 +1,23 @@
 # =============================================================================
-# SentinelX 基础设施 - PostgreSQL + Redis
+# SentinelX 基础设施 - GitHub 预构建镜像
 # =============================================================================
-# 使用说明:
-#   1. 启动基础设施: docker compose -f docker-compose.infra.yml up -d
-#   2. 查看日志: docker compose -f docker-compose.infra.yml logs -f
-#   3. 停止服务: docker compose -f docker-compose.infra.yml down
-#   4. 清理数据: docker compose -f docker-compose.infra.yml down -v
+# 场景: 仅启动 PostgreSQL + Redis，后端和前端在本地运行
 #
-# 此配置文件仅启动 PostgreSQL 和 Redis，用于本地开发时连接外部依赖
+# 使用方式:
+#   启动:       docker compose -f docker/docker-compose.infra.yml up -d
+#   查看日志:   docker compose -f docker/docker-compose.infra.yml logs -f
+#   停止:       docker compose -f docker/docker-compose.infra.yml down
+#   清理数据:   docker compose -f docker/docker-compose.infra.yml down -v
+#
+# 启动后在本地运行后端和前端:
+#   后端: cd backend && alembic upgrade head && uvicorn main:app --reload
+#   前端: cd frontend && npm run dev
 # =============================================================================
 
 services:
-  # ============================================================================
+  # ---------------------------------------------------------------------------
   # PostgreSQL + PGMQ 数据库
-  # ============================================================================
+  # ---------------------------------------------------------------------------
   postgres:
     image: ghcr.io/cefso/sentinelx/postgres:latest
     container_name: sentinelx-postgres
@@ -33,9 +37,9 @@ services:
     networks:
       - sentinelx-network
 
-  # ============================================================================
+  # ---------------------------------------------------------------------------
   # Redis 缓存服务器
-  # ============================================================================
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: sentinelx-redis
@@ -51,16 +55,10 @@ services:
     networks:
       - sentinelx-network
 
-# =============================================================================
-# Docker 网络配置
-# =============================================================================
 networks:
   sentinelx-network:
     driver: bridge
 
-# =============================================================================
-# Docker 卷配置
-# =============================================================================
 volumes:
   postgres_data:
     driver: local
