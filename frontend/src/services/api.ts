@@ -343,4 +343,54 @@ export interface AITaskStatusResponse {
   updated_at?: string
 }
 
+// ============ Webhook Log Types ============
+
+export interface WebhookLog {
+  id: number
+  tenant_id: string
+  source_type: string
+  source_id?: number
+  client_id?: string
+  raw_data: Record<string, any>
+  content_type?: string
+  status: 'success' | 'parse_error' | 'format_error' | 'server_error'
+  error_message?: string
+  alert_id?: number
+  is_dismissed: number
+  created_at?: string
+}
+
+export interface WebhookLogsResponse {
+  items: WebhookLog[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface WebhookLogDismissResponse {
+  message: string
+  count?: number
+}
+
+// ============ Extend ApiClient ============
+
+Object.assign(ApiClient.prototype, {
+  async getWebhookLogs(params?: {
+    status?: string
+    source_type?: string
+    dismissed?: boolean
+    page?: number
+    page_size?: number
+  }): Promise<WebhookLogsResponse> {
+    return this.get('/webhook-logs', params)
+  },
+
+  async dismissWebhookLogs(data: {
+    id?: number
+    dismiss_all?: boolean
+  }): Promise<WebhookLogDismissResponse> {
+    return this.post('/webhook-logs/dismiss', data)
+  },
+})
+
 export const apiClient = new ApiClient()

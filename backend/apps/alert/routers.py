@@ -4,10 +4,12 @@ SentinelX - 告警管理路由
 import asyncio
 import hashlib
 import json
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Union
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header, Request, Body
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text, Integer, case, distinct, cast, Date
 import structlog
@@ -19,7 +21,7 @@ from apps.core.security import verify_password
 
 logger = structlog.get_logger()
 from apps.auth.dependencies import get_current_user, get_current_tenant_id
-from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember
+from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember, WebhookLog
 from apps.tenant.models import Tenant
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
@@ -559,33 +561,101 @@ async def receive_webhook_by_source(
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 4. 根据 Content-Type 解析请求数据
-    content_type = request.headers.get("content-type", "").lower()
+    content_type_header = request.headers.get("content-type", "").lower()
+    raw_data = None
+    parse_error = None
 
-    if "application/x-www-form-urlencoded" in content_type:
-        form_data = await request.form()
-        raw_data = {}
-        for key, value in form_data.items():
-            if isinstance(value, bytes):
-                value = unquote_plus(value.decode('utf-8'))
-            raw_data[key] = value
-    else:
-        raw_data = await request.json()
+    try:
+        if "application/x-www-form-urlencoded" in content_type_header:
+            form_data = await request.form()
+            raw_data = {}
+            for key, value in form_data.items():
+                if isinstance(value, bytes):
+                    value = unquote_plus(value.decode('utf-8'))
+                raw_data[key] = value
+        else:
+            raw_data = await request.json()
+    except Exception as e:
+        parse_error = f"JSON parse error: {str(e)}\n{traceback.format_exc()}"
+        logger.warning("webhook_parse_error", tenant_slug=tenant_slug, source_type=source_type, error=str(e))
 
-    logger.debug("webhook_received", tenant_slug=tenant_slug, source_type=source_type, identifier=identifier, content_type=content_type)
+    # 5. 如果 JSON 解析失败，记录日志并返回错误
+    if parse_error:
+        webhook_log = WebhookLog(
+            tenant_id=tenant_id,
+            source_type=source_type,
+            source_id=alert_source.id,
+            client_id=identifier,
+            raw_data={"_parse_error": parse_error},
+            content_type=content_type_header,
+            status="parse_error",
+            error_message=parse_error,
+        )
+        db.add(webhook_log)
+        await db.commit()
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
 
-    # 5. 获取适配器
+    logger.debug("webhook_received", tenant_slug=tenant_slug, source_type=source_type, identifier=identifier, content_type=content_type_header)
+
+    # 6. 获取适配器
     adapter = AdapterFactory.get_adapter(source_type)
 
-    # 6. 解析告警
-    parsed_alert = await adapter.parse(raw_data, tenant_id)
+    # 7. 解析告警
+    try:
+        parsed_alert = await adapter.parse(raw_data, tenant_id)
+    except Exception as e:
+        error_msg = f"Adapter parse error: {str(e)}\n{traceback.format_exc()}"
+        logger.warning("webhook_adapter_error", tenant_slug=tenant_slug, source_type=source_type, error=str(e))
+        webhook_log = WebhookLog(
+            tenant_id=tenant_id,
+            source_type=source_type,
+            source_id=alert_source.id,
+            client_id=identifier,
+            raw_data=raw_data,
+            content_type=content_type_header,
+            status="server_error",
+            error_message=error_msg,
+        )
+        db.add(webhook_log)
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"Error processing alert: {str(e)}")
 
     if not parsed_alert:
+        webhook_log = WebhookLog(
+            tenant_id=tenant_id,
+            source_type=source_type,
+            source_id=alert_source.id,
+            client_id=identifier,
+            raw_data=raw_data,
+            content_type=content_type_header,
+            status="format_error",
+            error_message=f"Unsupported alert format for source: {source_type}",
+        )
+        db.add(webhook_log)
+        await db.commit()
         raise HTTPException(status_code=400, detail=f"Unsupported alert format for source: {source_type}")
 
-    # 7. 处理告警
-    return await _create_alerts_from_parsed(
+    # 8. 处理告警
+    result = await _create_alerts_from_parsed(
         parsed_alert, tenant_id, db, redis, source_id=alert_source.id
     )
+
+    # 9. 记录成功的 Webhook 日志
+    alert_id = result.get("id") if isinstance(result, dict) else None
+    webhook_log = WebhookLog(
+        tenant_id=tenant_id,
+        source_type=source_type,
+        source_id=alert_source.id,
+        client_id=identifier,
+        raw_data=raw_data,
+        content_type=content_type_header,
+        status="success",
+        alert_id=alert_id,
+    )
+    db.add(webhook_log)
+    await db.commit()
+
+    return result
 
 
 @router.post("/webhooks/{tenant_slug}/aliyun_cms/form")
@@ -1381,3 +1451,97 @@ def _get_step_title(step_type: str) -> str:
         "notification_failed": "发送失败",
     }
     return titles.get(step_type, step_type)
+
+
+# ============ Webhook 日志 ============
+
+@router.get("/webhook-logs")
+async def list_webhook_logs(
+    status: Optional[str] = Query(None, description="筛选状态: success/parse_error/format_error/server_error"),
+    source_type: Optional[str] = Query(None, description="筛选来源类型"),
+    dismissed: Optional[bool] = Query(None, description="是否已忽略"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取 Webhook 接收日志列表"""
+    query = select(WebhookLog).where(WebhookLog.tenant_id == str(tenant_id))
+
+    if status:
+        query = query.where(WebhookLog.status == status)
+    if source_type:
+        query = query.where(WebhookLog.source_type == source_type)
+    if dismissed is not None:
+        query = query.where(WebhookLog.is_dismissed == (1 if dismissed else 0))
+
+    # 总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    # 分页
+    query = query.order_by(WebhookLog.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    logs = result.scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": log.id,
+                "tenant_id": log.tenant_id,
+                "source_type": log.source_type,
+                "source_id": log.source_id,
+                "client_id": log.client_id,
+                "raw_data": log.raw_data,
+                "content_type": log.content_type,
+                "status": log.status,
+                "error_message": log.error_message,
+                "alert_id": log.alert_id,
+                "is_dismissed": log.is_dismissed,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+class WebhookLogDismissRequest(BaseModel):
+    id: Optional[int] = None
+    dismiss_all: Optional[bool] = False
+
+
+@router.post("/webhook-logs/dismiss")
+async def dismiss_webhook_logs(
+    request: WebhookLogDismissRequest,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """忽略 Webhook 日志"""
+    if request.dismiss_all:
+        # 忽略所有未忽略的日志
+        result = await db.execute(
+            select(WebhookLog).where(
+                WebhookLog.tenant_id == str(tenant_id),
+                WebhookLog.is_dismissed == 0,
+            )
+        )
+        logs = result.scalars().all()
+        for log in logs:
+            log.is_dismissed = 1
+        await db.commit()
+        return {"message": f"Dismissed {len(logs)} webhook logs", "count": len(logs)}
+    elif request.id:
+        # 忽略单条日志
+        log = await db.get(WebhookLog, request.id)
+        if not log or str(log.tenant_id) != str(tenant_id):
+            raise HTTPException(status_code=404, detail="Webhook log not found")
+        log.is_dismissed = 1
+        await db.commit()
+        return {"message": "Webhook log dismissed"}
+    else:
+        raise HTTPException(status_code=400, detail="Either id or dismiss_all must be provided")

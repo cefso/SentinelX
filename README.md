@@ -92,7 +92,78 @@ npm run dev
 - 前端: http://localhost:3000
 - API 文档: http://localhost:8001/docs
 
-### 5. 默认账号
+### 5. Docker Compose 使用指南
+
+Docker Compose 文件分为两类镜像来源，每类支持 3 种部署范围：
+
+| 场景 | 文件 | 说明 |
+|------|------|------|
+| **预构建镜像 + 全栈** | `docker-compose.yml` | 使用 ghcr.io 镜像，启动所有服务 |
+| **预构建镜像 + 仅应用** | `docker-compose.yml` | 使用 ghcr.io 镜像，仅启动 backend + frontend |
+| **预构建镜像 + 仅基础设施** | `docker-compose.infra.yml` | 使用 ghcr.io 镜像，仅启动 postgres + redis |
+| **本地构建 + 全栈** | `docker-compose.build.yml` | 从 Dockerfile 构建，启动所有服务 |
+| **本地构建 + 仅应用** | `docker-compose.build.yml` | 从 Dockerfile 构建，仅启动 backend + frontend |
+| **本地构建 + 仅基础设施** | `docker-compose.infra.build.yml` | 从 Dockerfile 构建，仅启动 postgres + redis |
+
+> **Apple Silicon (M1/M2/M3) 用户**: 预构建镜像不支持 ARM64，请使用本地构建版本。
+
+#### 场景 1: 预构建镜像 + 全栈
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+#### 场景 2: 预构建镜像 + 仅应用 (后端+前端)
+
+```bash
+docker compose -f docker/docker-compose.yml up -d backend frontend
+```
+
+#### 场景 3: 预构建镜像 + 仅基础设施
+
+```bash
+docker compose -f docker/docker-compose.infra.yml up -d
+# 启动后在本地运行后端和前端 (参见"本地开发"章节)
+```
+
+#### 场景 4: 本地构建 + 全栈
+
+```bash
+cd docker && docker compose -f docker-compose.build.yml up -d --build
+```
+
+#### 场景 5: 本地构建 + 仅应用
+
+```bash
+cd docker && docker compose -f docker-compose.build.yml up -d --build backend frontend
+```
+
+#### 场景 6: 本地构建 + 仅基础设施
+```bash
+cd docker && docker compose -f docker-compose.infra.build.yml up -d --build
+# 启动后在本地运行后端和前端 (参见"本地开发"章节)
+```
+
+#### 通用命令
+
+```bash
+# 查看日志 (替换为对应文件名)
+docker compose -f docker/<文件名>.yml logs -f
+
+# 仅查看后端日志
+docker compose -f docker/<文件名>.yml logs -f backend
+
+# 停止服务
+docker compose -f docker/<文件名>.yml down
+
+# 停止并清理数据 (会删除数据库!)
+docker compose -f docker/<文件名>.yml down -v
+
+# 带管理工具 (pgAdmin + Redis Commander)
+docker compose -f docker/<文件名>.yml --profile tools up -d
+```
+
+### 6. 默认账号
 
 应用首次启动时会自动创建默认租户和超级管理员账号：
 
@@ -108,18 +179,14 @@ npm run dev
 
 ## Docker 部署
 
-使用 Docker 运行完整服务（包括后端和前端）：
+详见 [5. Docker Compose 使用指南](#5-docker-compose-使用指南)，快速开始：
 
 ```bash
-# 启动所有服务（后端、前端、PostgreSQL、Redis）
+# 预构建镜像 (仅支持 x86_64)
 docker compose -f docker/docker-compose.yml up -d
 
-# 启动带管理工具 (pgAdmin, Redis Commander)
-docker compose -f docker/docker-compose.yml --profile tools up -d
-
-# 本地构建镜像后启动
-cd docker
-docker compose up -d --build
+# 本地构建 (支持 Apple Silicon)
+cd docker && docker compose -f docker-compose.build.yml up -d --build
 ```
 
 管理工具地址:
