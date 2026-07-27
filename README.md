@@ -92,7 +92,78 @@ npm run dev
 - 前端: http://localhost:3000
 - API 文档: http://localhost:8001/docs
 
-### 5. 默认账号
+### 5. Docker Compose 使用指南
+
+Docker Compose 文件分为两类镜像来源，每类支持 3 种部署范围：
+
+| 场景 | 文件 | 说明 |
+|------|------|------|
+| **预构建镜像 + 全栈** | `docker-compose.yml` | 使用 ghcr.io 镜像，启动所有服务 |
+| **预构建镜像 + 仅应用** | `docker-compose.yml` | 使用 ghcr.io 镜像，仅启动 backend + frontend |
+| **预构建镜像 + 仅基础设施** | `docker-compose.infra.yml` | 使用 ghcr.io 镜像，仅启动 postgres + redis |
+| **本地构建 + 全栈** | `docker-compose.build.yml` | 从 Dockerfile 构建，启动所有服务 |
+| **本地构建 + 仅应用** | `docker-compose.build.yml` | 从 Dockerfile 构建，仅启动 backend + frontend |
+| **本地构建 + 仅基础设施** | `docker-compose.infra.build.yml` | 从 Dockerfile 构建，仅启动 postgres + redis |
+
+> **Apple Silicon (M1/M2/M3) 用户**: 预构建镜像不支持 ARM64，请使用本地构建版本。
+
+#### 场景 1: 预构建镜像 + 全栈
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+#### 场景 2: 预构建镜像 + 仅应用 (后端+前端)
+
+```bash
+docker compose -f docker/docker-compose.yml up -d backend frontend
+```
+
+#### 场景 3: 预构建镜像 + 仅基础设施
+
+```bash
+docker compose -f docker/docker-compose.infra.yml up -d
+# 启动后在本地运行后端和前端 (参见"本地开发"章节)
+```
+
+#### 场景 4: 本地构建 + 全栈
+
+```bash
+cd docker && docker compose -f docker-compose.build.yml up -d --build
+```
+
+#### 场景 5: 本地构建 + 仅应用
+
+```bash
+cd docker && docker compose -f docker-compose.build.yml up -d --build backend frontend
+```
+
+#### 场景 6: 本地构建 + 仅基础设施
+```bash
+cd docker && docker compose -f docker-compose.infra.build.yml up -d --build
+# 启动后在本地运行后端和前端 (参见"本地开发"章节)
+```
+
+#### 通用命令
+
+```bash
+# 查看日志 (替换为对应文件名)
+docker compose -f docker/<文件名>.yml logs -f
+
+# 仅查看后端日志
+docker compose -f docker/<文件名>.yml logs -f backend
+
+# 停止服务
+docker compose -f docker/<文件名>.yml down
+
+# 停止并清理数据 (会删除数据库!)
+docker compose -f docker/<文件名>.yml down -v
+
+# 带管理工具 (pgAdmin + Redis Commander)
+docker compose -f docker/<文件名>.yml --profile tools up -d
+```
+
+### 6. 默认账号
 
 应用首次启动时会自动创建默认租户和超级管理员账号：
 
@@ -100,26 +171,25 @@ npm run dev
 |------|------|
 | 租户 Slug | `sentinelx` |
 | 用户名 | `admin` |
-| 密码 | 启动日志中打印，或通过 `DEFAULT_ADMIN_PASSWORD` 环境变量设置 |
+| 密码 | `Admin@123456`（Docker Compose 已通过 `DEFAULT_ADMIN_PASSWORD` 预设） |
 
-> **注意**: 登录时使用 **用户名** `admin`，不是邮箱。首次启动时若未设置 `DEFAULT_ADMIN_PASSWORD`，系统会自动生成随机密码并打印在后端启动日志中（搜索 `default_admin_password_generated`）。
+> **注意**:
+> - 登录时使用 **用户名** `admin`，不是邮箱。
+> - Docker Compose 文件（`.env.docker`、`docker-compose.yml`、`docker-compose.build.yml`）均已预设 `DEFAULT_ADMIN_PASSWORD=Admin@123456`。
+> - 若本地开发未设置该环境变量，系统会自动生成随机密码并打印在后端启动日志中（搜索 `default_password`）。
 
 ---
 
 ## Docker 部署
 
-使用 Docker 运行完整服务（包括后端和前端）：
+详见 [5. Docker Compose 使用指南](#5-docker-compose-使用指南)，快速开始：
 
 ```bash
-# 启动所有服务（后端、前端、PostgreSQL、Redis）
+# 预构建镜像 (仅支持 x86_64)
 docker compose -f docker/docker-compose.yml up -d
 
-# 启动带管理工具 (pgAdmin, Redis Commander)
-docker compose -f docker/docker-compose.yml --profile tools up -d
-
-# 本地构建镜像后启动
-cd docker
-docker compose up -d --build
+# 本地构建 (支持 Apple Silicon)
+cd docker && docker compose -f docker-compose.build.yml up -d --build
 ```
 
 管理工具地址:
@@ -568,6 +638,72 @@ POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API
 
 **认证方式:** 通过 `X-API-Key` Header 传递 Webhook API Key
 
+### Webhook 日志
+
+每次 Webhook 请求都会记录日志（`webhook_logs` 表），可通过 API 或前端查看。
+
+```
+GET    /api/v1/webhook-logs                  # 查询日志（支持 status/source_type/dismissed 筛选）
+POST   /api/v1/webhook-logs/dismiss          # 忽略日志（单条或全部）
+```
+
+**日志状态说明:**
+
+| status | 含义 | 触发条件 |
+|--------|------|---------|
+| `success` | 成功 | 告警正常创建 |
+| `parse_error` | 解析失败 | 请求体不是合法 JSON |
+| `format_error` | 格式不匹配 | 数据无法被适配器识别（适配器返回 `None`） |
+| `server_error` | 服务器错误 | 适配器内部异常 |
+
+**适配器校验行为差异:**
+
+| 适配器 | 校验行为 |
+|--------|---------|
+| `custom` | **不校验格式**，接受任何 JSON，用默认值填充缺失字段，不会触发 `format_error` |
+| `prometheus` / `alertmanager` | 校验 `alerts` 数组结构 |
+| `aliyun_cms` / `aliyun_cms2` | 校验阿里云云监控字段 |
+| `zabbix` | 校验 Zabbix 告警格式 |
+| `tencent` | 校验腾讯云告警字段 |
+
+> **注意**: `custom` 适配器是兜底设计，不会因数据格式问题返回 `format_error`。如需测试 `format_error`，请使用 `prometheus`、`zabbix` 等结构化适配器。
+
+**测试示例:**
+
+```bash
+# 前提：已有告警源（client_id 从告警源管理页面获取）
+CLIENT_ID="your_client_id"
+TENANT_SLUG="sentinelx"
+
+# 1. parse_error — 发送非法 JSON（任意适配器均可触发）
+curl -X POST "http://localhost:8001/api/v1/webhooks/$TENANT_SLUG/custom/$CLIENT_ID" \
+  -H "Content-Type: application/json" -d 'bad json'
+
+# 2. format_error — 发送不符合格式的数据（需用结构化适配器，custom 不会触发）
+curl -X POST "http://localhost:8001/api/v1/webhooks/$TENANT_SLUG/prometheus/$CLIENT_ID" \
+  -H "Content-Type: application/json" -d '{"wrong":"format"}'
+
+# 3. success — 正常告警
+curl -X POST "http://localhost:8001/api/v1/webhooks/$TENANT_SLUG/custom/$CLIENT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test Alert","severity":"critical","content":"test"}'
+
+# 查询日志
+curl "http://localhost:8001/api/v1/webhook-logs" -H "Authorization: Bearer $TOKEN"
+
+# 忽略单条日志
+curl -X POST "http://localhost:8001/api/v1/webhook-logs/dismiss" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+
+# 忽略全部日志
+curl -X POST "http://localhost:8001/api/v1/webhook-logs/dismiss" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"dismiss_all": true}'
+```
+
+**前端查看**: 告警列表页顶部有 Webhook 日志按钮，当存在未忽略的错误日志时显示红点 badge，点击打开日志弹窗。
+
 ### 用户管理
 ```
 GET    /api/v1/users                       # 获取用户列表（租户管理员）
@@ -869,7 +1005,8 @@ GitHub Actions 自动处理:
 ### 常见问题
 
 #### 1. 登录失败，提示 "Invalid credentials"
-- 检查默认账号: 用户名 `admin`，密码见启动日志或 `DEFAULT_ADMIN_PASSWORD` 环境变量
+- Docker 部署: 用户名 `admin`，密码 `Admin@123456`（已预设在 Compose 文件中）
+- 本地开发: 用户名 `admin`，密码见后端启动日志（搜索 `default_password`），或设置 `DEFAULT_ADMIN_PASSWORD` 环境变量
 - 检查数据库是否正确初始化: `alembic upgrade head`
 - 检查 Redis 是否运行: `docker compose -f docker/docker-compose.yml ps redis`
 

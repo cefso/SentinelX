@@ -40,3 +40,6 @@ dist/
 .dockerignore
 backend/build-info.json
 frontend/public/build-info.json
+
+# MiMoCode
+.mimocode/
