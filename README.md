@@ -46,7 +46,8 @@
 ### 1. 克隆项目
 
 ```bash
-cd /Users/cefso/code/SentinelX
+git clone https://github.com/cefso/SentinelX.git
+cd SentinelX
 ```
 
 ### 2. 启动外部依赖
@@ -90,7 +91,7 @@ npm run dev
 ### 4. 访问应用
 
 - 前端: http://localhost:3000
-- API 文档: http://localhost:8001/docs
+- API 文档: http://localhost:8001/docs（需 `DEBUG=true`，生产环境默认关闭）
 
 ### 5. Docker Compose 使用指南
 
@@ -246,10 +247,13 @@ SentinelX/
 ├── frontend/                  # React前端
 │   ├── src/
 │   │   ├── pages/            # 页面组件
-│   │   │   ├── alerts/       # 告警列表与详情
-│   │   │   ├── rules/        # 规则管理
+│   │   │   ├── alerts.tsx    # 告警列表主页
+│   │   │   ├── alerts/       # 告警子页面（详情、告警源等）
+│   │   │   ├── rules.tsx     # 规则管理主页
+│   │   │   ├── rules/        # 规则子页面（去重、抑制、聚合）
 │   │   │   ├── channels/     # 通知渠道
-│   │   │   ├── templates/    # 通知模板
+│   │   │   ├── templates.tsx # 通知模板主页
+│   │   │   ├── templates/    # 通知模板子页面
 │   │   │   ├── settings/     # 系统设置
 │   │   │   ├── cloud-metrics/# 云产品指标
 │   │   │   ├── login.tsx     # 登录
@@ -274,8 +278,10 @@ SentinelX/
 │   └── package.json
 ├── agent/                     # 内网 Agent（Python）
 ├── docker/                    # Docker 配置
-│   ├── docker-compose.yml    # 完整服务
-│   ├── docker-compose.infra.yml # 基础设施
+│   ├── docker-compose.yml    # 预构建镜像，全栈
+│   ├── docker-compose.infra.yml # 预构建镜像，仅基础设施
+│   ├── docker-compose.build.yml # 本地构建，全栈
+│   ├── docker-compose.infra.build.yml # 本地构建，仅基础设施
 │   ├── Dockerfile             # 后端镜像
 │   ├── Dockerfile.frontend   # 前端镜像
 │   ├── Dockerfile.pg          # PostgreSQL + PGMQ 镜像
@@ -292,7 +298,10 @@ SentinelX/
 ├── docs/                      # 详细文档
 │   ├── API.md                 # API 文档
 │   ├── DEPLOYMENT.md          # 部署指南
-│   └── README.md              # 文档目录说明
+│   ├── README.md              # 文档目录说明
+│   ├── project-intro.html     # 项目介绍页面
+│   ├── RULE_ENGINE_TEST.md    # 规则引擎测试指南
+│   └── WEBHOOK_TEST.md        # Webhook 测试指南
 ├── .github/workflows/          # CI/CD配置
 │   ├── ci.yml                # 持续集成
 │   └── cd.yml                # 持续部署
