@@ -10,6 +10,7 @@ from .aliyun_cms import AliyunCmsAdapter
 from .aliyun_cms2 import AliyunCms2Adapter
 from .tencent import TencentCloudAdapter
 from .custom import CustomWebhookAdapter
+from .lcmdb import LcmdbAdapter
 
 __all__ = [
     "AlertAdapter",
@@ -22,4 +23,5 @@ __all__ = [
     "AliyunCms2Adapter",
     "TencentCloudAdapter",
     "CustomWebhookAdapter",
+    "LcmdbAdapter",
 ]

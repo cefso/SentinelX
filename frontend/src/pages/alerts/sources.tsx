@@ -117,6 +117,18 @@ const alertSourceTypes: AlertSourceConfig[] = [
     ],
   },
   {
+    id: 'lcmdb',
+    name: '绿城CMDB',
+    description: '接入绿城CMDB告警，支持markdown格式的Webhook推送',
+    icon: Server,
+    接入方式: 'Webhook',
+    配置说明: [
+      '在绿城CMDB中配置告警通知',
+      '选择Webhook推送方式',
+      '填入平台的Webhook地址',
+    ],
+  },
+  {
     id: 'custom',
     name: '自定义',
     description: '通过 Webhook API 接入任意数据源的告警',
