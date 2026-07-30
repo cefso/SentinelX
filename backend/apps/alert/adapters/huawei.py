@@ -1,11 +1,16 @@
 """
 SentinelX - 华为云 SMN 告警适配器
 解析华为云云监控通过 SMN 推送的 CES 告警
+自动处理 SMN 订阅确认（SubscriptionConfirmation）
 """
 import re
 from typing import Dict, Any, Optional
+import httpx
+import structlog
 from .base import AlertAdapter
 from apps.alert.schemas import AlertCreate
+
+logger = structlog.get_logger()
 
 
 class HuaweiAdapter(AlertAdapter):
@@ -21,8 +26,30 @@ class HuaweiAdapter(AlertAdapter):
         if not self.validate(raw_data):
             return None
 
+        msg_type = raw_data.get("type")
+
+        # SMN 订阅确认：自动访问 subscribe_url
+        if msg_type == "SubscriptionConfirmation":
+            subscribe_url = raw_data.get("subscribe_url")
+            if subscribe_url:
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        resp = await client.get(subscribe_url)
+                        logger.info("smn_subscription_confirmed", url=subscribe_url, status=resp.status_code)
+                except Exception as e:
+                    logger.error("smn_subscription_confirm_failed", url=subscribe_url, error=str(e))
+            return None
+
+        # SMN 取消订阅：仅记录日志
+        if msg_type == "UnsubscribeConfirmation":
+            logger.warning("smn_unsubscribe_received", topic=raw_data.get("topic_urn"))
+            return None
+
+        # 正常告警处理
         subject = raw_data.get("subject", "")
         message = raw_data.get("message", "")
+        if not subject or not message:
+            return None
 
         # 从 subject 提取告警级别和资源描述
         severity = "medium"
@@ -144,8 +171,8 @@ class HuaweiAdapter(AlertAdapter):
         return fields
 
     async def validate(self, raw_data: Dict[str, Any]) -> bool:
-        return (
-            raw_data.get("type") == "Notification"
-            and bool(raw_data.get("subject"))
-            and bool(raw_data.get("message"))
+        return raw_data.get("type") in (
+            "Notification",
+            "SubscriptionConfirmation",
+            "UnsubscribeConfirmation",
         )
