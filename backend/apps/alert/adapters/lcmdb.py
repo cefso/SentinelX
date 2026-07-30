@@ -63,8 +63,8 @@ class LcmdbAdapter(AlertAdapter):
         else:
             short_name = title[:20]
 
-        device_id = fields.get("设备ID", "unknown")
-        alert_key = f"lcmdb-{device_id}-{short_name}"
+        ip = fields.get("IP地址", "unknown")
+        alert_key = f"lcmdb-{ip}-{short_name}"
 
         # 当前指标：从独立描述行提取，如 "当前:5分平均值=[22.95];"
         metric_name = None
@@ -99,14 +99,16 @@ class LcmdbAdapter(AlertAdapter):
         if is_recovery:
             annotations["alert_state"] = "OK"
 
-        # labels
+        # labels（只放稳定标识，不参与指纹变化的字段）
         labels: Dict[str, Any] = {}
-        if fields.get("设备ID"):
-            labels["device_id"] = fields["设备ID"]
         if fields.get("IP地址"):
             labels["ip"] = fields["IP地址"]
         if fields.get("设备类型"):
             labels["device_type"] = fields["设备类型"]
+
+        # device_id 放入 annotations（同一台机器的设备ID可能不同，不参与指纹）
+        if fields.get("设备ID"):
+            annotations["device_id"] = fields["设备ID"]
 
         # 未识别的字段兜底存入 annotations
         known_keys = {"告警编号", "恢复编号", "告警对象", "恢复对象", "设备ID", "当前状态", "状态", "IP地址", "持续时间", "设备类型", "开始时间", "恢复时间"}
