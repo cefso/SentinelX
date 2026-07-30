@@ -11,6 +11,7 @@ from .aliyun_cms2 import AliyunCms2Adapter
 from .tencent import TencentCloudAdapter
 from .custom import CustomWebhookAdapter
 from .lcmdb import LcmdbAdapter
+from .huawei import HuaweiAdapter
 
 
 class AdapterFactory:
@@ -25,7 +26,7 @@ class AdapterFactory:
         "aliyun_cms": AliyunCmsAdapter,
         "aliyun_cms2": AliyunCms2Adapter,
         "tencent": TencentCloudAdapter,
-        "huawei": CustomWebhookAdapter,  # 暂用通用解析，见文档 webhook 字段约定
+        "huawei": HuaweiAdapter,
         "lcmdb": LcmdbAdapter,
         "custom": CustomWebhookAdapter,
     }

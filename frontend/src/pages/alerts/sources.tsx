@@ -95,13 +95,14 @@ const alertSourceTypes: AlertSourceConfig[] = [
   {
     id: 'huawei',
     name: '华为云云监控',
-    description: '接入华为云云监控告警，支持阈值报警和事件告警',
+    description: '接入华为云CES告警，支持SMN消息通知服务推送的阈值报警和事件告警',
     icon: CloudCog,
-    接入方式: 'Webhook',
+    接入方式: 'Webhook (SMN)',
     配置说明: [
       '登录华为云云监控控制台',
-      '创建主题并设置 HTTP 订阅',
+      '创建SMN主题并添加HTTP/HTTPS订阅',
       '填入平台的 Webhook 地址',
+      '在告警规则中选择SMN通知方式',
     ],
   },
   {
