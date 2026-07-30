@@ -1,6 +1,7 @@
 """
 SentinelX - 绿城CMDB告警适配器
 解析 markdown 格式的 webhook，text 字段为换行分隔的 key：value 对
+支持告警和恢复两种模板格式
 """
 import re
 from typing import Dict, Any, Optional, List
@@ -17,6 +18,7 @@ class LcmdbAdapter(AlertAdapter):
         "提示": "medium",
         "信息": "info",
         "恢复": "info",
+        "正常": "info",
     }
 
     async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
@@ -26,23 +28,32 @@ class LcmdbAdapter(AlertAdapter):
         markdown = raw_data["markdown"]
         text = markdown.get("text", "")
 
-        # 解析 key：value 对（中文冒号）
+        # 全局去除 HTML 标签（如 <font color='green'>正常</font>）
+        text = re.sub(r"<[^>]+>", "", text)
+
+        # 解析 key：value 对（中文冒号）+ 收集独立描述行
         fields: Dict[str, str] = {}
+        desc_lines: list[str] = []
         for line in text.split("\n"):
-            match = re.match(r"^(.+?)：(.+)$", line.strip())
+            stripped = line.strip()
+            if not stripped:
+                continue
+            match = re.match(r"^(.+?)：(.+)$", stripped)
             if match:
                 fields[match.group(1).strip()] = match.group(2).strip()
+            else:
+                desc_lines.append(stripped)
 
-        if not fields:
+        if not fields and not desc_lines:
             return None
 
-        # severity：去HTML标签后映射
-        raw_status = re.sub(r"<[^>]+>", "", fields.get("当前状态", ""))
+        # severity：兼容 当前状态 / 状态
+        raw_status = fields.get("当前状态") or fields.get("状态") or ""
         severity = self.SEVERITY_MAP.get(raw_status, "medium")
-        is_recovery = raw_status == "恢复"
+        is_recovery = raw_status in ("恢复", "正常") or markdown.get("title") == "恢复通知"
 
-        # 告警对象 → title
-        title = fields.get("告警对象", "CMDB Alert")
+        # 告警对象 / 恢复对象 → title
+        title = fields.get("告警对象") or fields.get("恢复对象") or "CMDB Alert"
 
         # 从告警对象提取简称用于 alert_key，如 "企业知识库-测试环境 的 [磁盘:Disk]" → "磁盘"
         short_name = ""
@@ -55,18 +66,23 @@ class LcmdbAdapter(AlertAdapter):
         device_id = fields.get("设备ID", "unknown")
         alert_key = f"lcmdb-{device_id}-{short_name}"
 
-        # 当前指标：磁盘使用率=[5.89%] → metric_name + metric_value
+        # 当前指标：从独立描述行提取，如 "当前:5分平均值=[22.95];"
         metric_name = None
         metric_value = None
-        current = fields.get("当前", "")
-        metric_match = re.match(r"(.+?)=\[(.+?)\]", current)
-        if metric_match:
-            metric_name = metric_match.group(1).strip()
-            metric_value = metric_match.group(2).strip()
+        for line in desc_lines:
+            metric_match = re.match(r"当前[:：](.+?)=\[(.+?)\]", line)
+            if metric_match:
+                metric_name = metric_match.group(1).strip()
+                metric_value = metric_match.group(2).strip()
+                break
 
-        # 阈值：去方括号
-        threshold = fields.get("阈值", "")
-        threshold = threshold.strip("[]")
+        # 阈值：从独立描述行提取，如 "阈值:[5分平均值 > 20]"
+        threshold = ""
+        for line in desc_lines:
+            threshold_match = re.match(r"阈值[:：]\[(.+?)\]", line)
+            if threshold_match:
+                threshold = threshold_match.group(1).strip()
+                break
 
         # annotations
         annotations: Dict[str, Any] = {}
@@ -74,10 +90,12 @@ class LcmdbAdapter(AlertAdapter):
             annotations["threshold"] = threshold
         if fields.get("持续时间"):
             annotations["duration"] = fields["持续时间"]
-        if fields.get("开始时间"):
-            annotations["start_time"] = fields["开始时间"]
-        if fields.get("告警编号"):
-            annotations["alert_id"] = fields["告警编号"]
+        start_time = fields.get("开始时间") or fields.get("恢复时间")
+        if start_time:
+            annotations["start_time"] = start_time
+        alert_id = fields.get("告警编号") or fields.get("恢复编号")
+        if alert_id:
+            annotations["alert_id"] = alert_id
         if is_recovery:
             annotations["alert_state"] = "OK"
 
@@ -91,7 +109,7 @@ class LcmdbAdapter(AlertAdapter):
             labels["device_type"] = fields["设备类型"]
 
         # 未识别的字段兜底存入 annotations
-        known_keys = {"告警编号", "告警对象", "设备ID", "当前", "阈值", "当前状态", "IP地址", "持续时间", "设备类型", "开始时间"}
+        known_keys = {"告警编号", "恢复编号", "告警对象", "恢复对象", "设备ID", "当前状态", "状态", "IP地址", "持续时间", "设备类型", "开始时间", "恢复时间"}
         for k, v in fields.items():
             if k not in known_keys:
                 annotations[k] = v
