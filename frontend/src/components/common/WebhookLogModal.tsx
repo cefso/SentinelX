@@ -124,7 +124,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
 
           {/* 详情卡片 */}
           {selectedLog && (
-            <div className="border rounded-lg p-4 space-y-4">
+            <div className="border rounded-lg p-4 space-y-4 overflow-y-auto max-h-[50vh]">
               {/* 基本信息 */}
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
