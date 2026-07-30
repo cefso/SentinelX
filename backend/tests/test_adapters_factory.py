@@ -1,7 +1,7 @@
 """AdapterFactory 与 AlertSourceType 一致性测试"""
 from apps.alert.adapters.factory import AdapterFactory
 from apps.alert.adapters.prometheus import PrometheusAdapter
-from apps.alert.adapters.custom import CustomWebhookAdapter
+from apps.alert.adapters.huawei import HuaweiAdapter
 from apps.alert.adapters.aliyun_cms2 import AliyunCms2Adapter
 from apps.core.constants import AlertSourceType
 
@@ -11,9 +11,9 @@ def test_grafana_uses_prometheus_adapter():
     assert isinstance(adapter, PrometheusAdapter)
 
 
-def test_huawei_uses_custom_adapter():
+def test_huawei_uses_huawei_adapter():
     adapter = AdapterFactory.get_adapter("huawei")
-    assert isinstance(adapter, CustomWebhookAdapter)
+    assert isinstance(adapter, HuaweiAdapter)
 
 
 def test_aliyun_cms2_adapter():
