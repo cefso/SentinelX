@@ -74,6 +74,12 @@ export function DashboardPage() {
     queryFn: () => apiClient.get('/alerts/stats/by-source'),
   })
 
+  // Aggregate data for unique fingerprint count
+  const { data: aggregateData } = useQuery<{ total: number; alert_total: number }>({
+    queryKey: ['alertAggregateSummary'],
+    queryFn: () => apiClient.get('/alerts?status=firing&aggregate=true&page_size=1'),
+  })
+
   const trendItems = trendData?.items || []
   const sourceItems = sourceStats?.items || []
 
@@ -181,7 +187,7 @@ export function DashboardPage() {
           </div>
           <div className="text-center py-6">
             <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.firing ?? 0}</p>
-            <p className="text-sm text-gray-500 mb-4">条未恢复告警</p>
+            <p className="text-sm text-gray-500 mb-4">条未恢复告警（{aggregateData?.total ?? 0} 个唯一指纹）</p>
             <div className="flex items-center justify-center gap-4 text-sm">
               <span className="text-red-600 font-medium">{stats?.critical ?? 0} 严重</span>
               <span className="text-amber-600 font-medium">{stats?.high ?? 0} 重要</span>
