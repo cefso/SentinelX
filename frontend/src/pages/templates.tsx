@@ -52,7 +52,7 @@ export function TemplatesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">通知模板</h1>
+          <h1 className="text-2xl font-bold text-gray-900">通知模板</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             管理各渠道的通知模板，支持 Jinja2 变量
           </p>

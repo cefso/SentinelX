@@ -7,6 +7,7 @@
 - **多租户管理**: 基于RBAC的租户隔离，支持资源配额控制，支持用户属于多个租户
 - **多源告警接入**: 支持 Prometheus、Alertmanager、阿里云云监控（1.0/2.0）、腾讯云、Zabbix、自定义 Webhook 等，通过适配器自动解析各类告警格式
 - **告警源管理**: 支持配置多个告警源（AlertSource），每个告警源有独立的 Webhook URL，支持启用/禁用和统计
+- **告警看板**: 未恢复告警统计、趋势折线图、按告警源分组、抖动告警检测、长时间未更新告警标识
 - **告警列表视图**: 支持按指纹（fingerprint）的「指纹视图」与「明细视图」；策略聚合规则命中后子告警标记为 `aggregated`
 - **智能规则引擎**: 基于标签的路由规则，支持 AND/OR 逻辑和正则匹配
 - **告警处理**: 去重、抑制、聚合、升级策略
@@ -247,6 +248,7 @@ SentinelX/
 ├── frontend/                  # React前端
 │   ├── src/
 │   │   ├── pages/            # 页面组件
+│   │   │   ├── dashboard.tsx # 告警看板（统计、趋势、异常检测）
 │   │   │   ├── alerts.tsx    # 告警列表主页
 │   │   │   ├── alerts/       # 告警子页面（详情、告警源等）
 │   │   │   ├── rules.tsx     # 规则管理主页
@@ -363,6 +365,17 @@ SentinelX/
 ```
 
 每个处理阶段仅在配置了对应规则时生效；未配置规则则跳过该阶段，告警继续向下流转。
+
+### 告警异常检测
+
+告警看板和告警列表支持两种异常标识：
+
+| 标识 | 条件 | 说明 |
+|------|------|------|
+| ⚡抖动（Flapping） | 条件A: 1小时内同 fingerprint 告警 >= 3 次；条件B: 最近 10 条告警中 firing→resolved 交替 >= 2 次且平均持续时间 < 10 分钟 | 短时间内反复触发和恢复的告警 |
+| 🕐长时间未更新（Stale） | 最新告警 status=firing 且距今 > 24 小时 | 未恢复且长时间没有收到新消息的告警 |
+
+满足任一条件即标记，在告警看板和告警列表的指纹视图中显示对应 Badge。
 
 ## 核心组件
 
@@ -739,6 +752,8 @@ POST   /api/v1/alerts/batch       # 批量接收告警
 POST   /api/v1/alerts/webhook/{source_type}  # Webhook接收告警
 GET    /api/v1/alerts             # 告警列表（支持 aggregate=true 聚合模式）
 GET    /api/v1/alerts/stats        # 告警统计
+GET    /api/v1/alerts/trend         # 告警趋势（按时间分桶，支持 days 参数）
+GET    /api/v1/alerts/stats/by-source # 按告警源分组统计未恢复告警
 GET    /api/v1/alerts/{id}         # 告警详情
 PUT    /api/v1/alerts/{id}        # 更新告警
 GET    /api/v1/alerts/{id}/aggregated-members  # 获取聚合组的告警列表

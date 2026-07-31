@@ -121,8 +121,8 @@ export function CloudMetricsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">云产品指标管理</h1>
-          <p className="text-gray-600">管理云产品监控指标的中文描述和启用状态</p>
+          <h1 className="text-2xl font-bold text-gray-900">云产品指标管理</h1>
+          <p className="text-sm text-gray-500 mt-0.5">管理云产品监控指标的中文描述和启用状态</p>
         </div>
         <div className="flex gap-2">
           {selectedIds.size > 0 && (

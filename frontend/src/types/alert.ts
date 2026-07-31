@@ -63,6 +63,8 @@ export interface AlertAggregatedItem {
   row_type?: 'fingerprint' | 'strategy_group'
   aggregate_group_id?: number
   group_label?: string
+  flapping?: boolean
+  stale?: boolean
 }
 
 export interface AlertFilter {

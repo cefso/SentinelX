@@ -123,6 +123,8 @@ class AlertAggregatedItem(BaseModel):
     row_type: Literal["fingerprint", "strategy_group"] = "fingerprint"
     aggregate_group_id: Optional[int] = Field(None, description="策略聚合组ID（虚拟指纹行）")
     group_label: Optional[str] = Field(None, description="策略聚合组展示标签")
+    flapping: bool = Field(False, description="是否为抖动告警(1小时内>=3次或交替模式+短持续时间)")
+    stale: bool = Field(False, description="是否为长时间未更新告警(最新消息超24h未恢复)")
 
     class Config:
         from_attributes = True
@@ -146,6 +148,8 @@ class AlertFilter(BaseModel):
     start_time: Optional[datetime] = Field(None, description="开始时间")
     end_time: Optional[datetime] = Field(None, description="结束时间")
     keyword: Optional[str] = Field(None, description="搜索关键词(标题/内容)")
+    max_fired_at: Optional[datetime] = Field(None, description="持续时长筛选: fired_at <= 该值")
+    flapping_only: Optional[bool] = Field(None, description="仅显示抖动告警")
 
 
 # ============ 告警统计Schema ============
@@ -167,6 +171,35 @@ class AlertStats(BaseModel):
     firing_critical: int = Field(..., description="触发中Critical告警数")
     firing_high: int = Field(..., description="触发中High告警数")
     aggregated: int = Field(0, description="已聚合子告警数")
+
+
+# ============ 告警趋势Schema ============
+
+class AlertTrendItem(BaseModel):
+    """告警趋势数据点"""
+    time: str = Field(..., description="时间桶(ISO格式)")
+    count: int = Field(..., description="该桶内告警数")
+
+
+class AlertTrendResponse(BaseModel):
+    """告警趋势响应"""
+    items: List[AlertTrendItem] = Field(..., description="趋势数据点列表")
+    days: int = Field(..., description="查询天数")
+
+
+class SourceAlertStats(BaseModel):
+    """按告警源统计"""
+    source: str = Field(..., description="告警源类型")
+    source_id: Optional[int] = Field(None, description="告警源ID")
+    source_name: Optional[str] = Field(None, description="告警源名称")
+    total: int = Field(..., description="未恢复告警总数")
+    critical: int = Field(0, description="严重级别数")
+    high: int = Field(0, description="重要级别数")
+
+
+class SourceAlertStatsResponse(BaseModel):
+    """按告警源统计响应"""
+    items: List[SourceAlertStats] = Field(..., description="告警源统计列表")
 
 
 # ============ 告警历史Schema ============

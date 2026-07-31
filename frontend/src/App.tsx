@@ -15,6 +15,7 @@ import { DiagnosePage } from './pages/diagnose'
 import { SettingsPage } from './pages/settings'
 import { CloudMetricsPage } from './pages/cloud-metrics'
 import { TemplatesPage } from './pages/templates'
+import { DashboardPage } from './pages/dashboard'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -39,7 +40,8 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/alerts" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="alerts/sources" element={<AlertSourcesPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />

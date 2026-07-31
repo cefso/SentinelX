@@ -5,10 +5,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useUIStore } from '@/stores/ui-store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3, FileText } from 'lucide-react'
+import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3, FileText, LayoutDashboard } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
 
 const navigation = [
+  { name: '告警看板', href: '/dashboard', icon: LayoutDashboard },
   { name: '告警', href: '/alerts', icon: Bell },
   { name: '规则', href: '/rules', icon: Settings2 },
   { name: '渠道', href: '/channels', icon: Send },

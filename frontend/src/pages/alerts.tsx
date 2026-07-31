@@ -18,7 +18,7 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
@@ -134,7 +134,10 @@ export function AlertsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">告警列表</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">告警列表</h1>
+          <p className="text-sm text-gray-500 mt-0.5">查看和管理所有告警，支持指纹视图和明细视图</p>
+        </div>
         <button
           onClick={() => setShowWebhookLogModal(true)}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
@@ -363,6 +366,18 @@ export function AlertsPage() {
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900 truncate max-w-md">{item.latest.title}</span>
+                        {item.flapping && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded animate-pulse shrink-0">
+                            <Zap className="w-3 h-3" />
+                            抖动
+                          </span>
+                        )}
+                        {item.stale && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded shrink-0">
+                            <Clock className="w-3 h-3" />
+                            长时间未更新
+                          </span>
+                        )}
                         <span className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${
                           isStrategyGroup
                             ? 'bg-violet-100 text-violet-700'

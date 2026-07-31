@@ -28,8 +28,8 @@ export function RulesLayout({ children }: RulesLayoutProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">规则管理</h1>
-        <p className="text-gray-600">配置告警路由、去重、抑制和聚合策略</p>
+        <h1 className="text-2xl font-bold text-gray-900">规则管理</h1>
+        <p className="text-sm text-gray-500 mt-0.5">配置告警路由、去重、抑制和聚合策略</p>
       </div>
 
       <div className="border-b border-gray-200">
