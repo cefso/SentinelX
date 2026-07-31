@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { AlertStats } from '@/types/alert'
 import { SeverityBadge } from '@/components/common/Badges'
 import { formatLocalDateTime } from '@/utils/datetime'
-import { Bell, AlertTriangle, XCircle, AlertCircle, Info, Clock, Zap } from 'lucide-react'
+import { Bell, AlertTriangle, XCircle, AlertCircle, Info, Clock, Zap, ArrowRight, ChevronDown, ArrowUpDown } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 // ============ Types ============
@@ -91,6 +91,11 @@ export function DashboardPage() {
   const [durationFilter, setDurationFilter] = useState<string | null>(null)
   const [severityFilter, setSeverityFilter] = useState<string | null>(null)
   const [flappingOnly, setFlappingOnly] = useState(false)
+  const [staleOnly, setStaleOnly] = useState(false)
+  const [sortBy, setSortBy] = useState<string | null>(null)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
 
   // Stats
   const { data: stats } = useQuery<AlertStats>({
@@ -110,28 +115,74 @@ export function DashboardPage() {
     queryFn: () => apiClient.get('/alerts/stats/by-source'),
   })
 
-  // Recent unresolved alerts
+  // Recent unresolved alerts — accumulate items across pages for "load more"
   const maxFiredAt = durationFilter
     ? new Date(Date.now() - parseInt(durationFilter) * 3600000).toISOString()
     : undefined
 
-  const { data: recentAlerts } = useQuery<{ items: AggregatedAlertItem[] }>({
-    queryKey: ['recentFiringAlerts', maxFiredAt, severityFilter, flappingOnly],
+  const filterKey = `${maxFiredAt ?? ''}|${severityFilter ?? ''}|${flappingOnly}|${staleOnly}|${sortBy ?? ''}|${sortOrder}`
+  const prevFilterKeyRef = useRef(filterKey)
+  const accumulatedRef = useRef<AggregatedAlertItem[]>([])
+
+  // Reset accumulated data when filters change
+  if (prevFilterKeyRef.current !== filterKey) {
+    prevFilterKeyRef.current = filterKey
+    accumulatedRef.current = []
+  }
+
+  const { data: recentAlerts, isLoading: alertsLoading } = useQuery<{ items: AggregatedAlertItem[]; total: number }>({
+    queryKey: ['recentFiringAlerts', maxFiredAt, severityFilter, flappingOnly, staleOnly, sortBy, sortOrder, page],
     queryFn: () => {
       const params = new URLSearchParams()
       params.set('status', 'firing')
       params.set('aggregate', 'true')
-      params.set('page_size', '10')
+      params.set('page_size', String(PAGE_SIZE))
+      params.set('page', String(page))
       if (maxFiredAt) params.set('max_fired_at', maxFiredAt)
       if (severityFilter) params.set('severity', severityFilter)
       if (flappingOnly) params.set('flapping_only', 'true')
+      if (staleOnly) params.set('stale_only', 'true')
+      if (sortBy) params.set('sort_by', sortBy)
+      params.set('sort_order', sortOrder)
       return apiClient.get(`/alerts?${params.toString()}`)
     },
+    placeholderData: (prev) => prev,
   })
 
   const trendItems = trendData?.items || []
   const sourceItems = sourceStats?.items || []
-  const alertItems = recentAlerts?.items || []
+
+  // Accumulate items across pages for "load more"
+  useEffect(() => {
+    if (recentAlerts?.items) {
+      if (page === 1) {
+        accumulatedRef.current = recentAlerts.items
+      } else {
+        // Append only new fingerprints not already in the list
+        const existing = new Set(accumulatedRef.current.map((i) => i.fingerprint))
+        const newItems = recentAlerts.items.filter((i) => !existing.has(i.fingerprint))
+        if (newItems.length > 0) {
+          accumulatedRef.current = [...accumulatedRef.current, ...newItems]
+        }
+      }
+    }
+  }, [recentAlerts, page])
+
+  const alertItems = page === 1 ? (recentAlerts?.items || []) : accumulatedRef.current
+  const alertTotal = recentAlerts?.total || 0
+  const hasMore = alertItems.length < alertTotal
+
+  const handleLoadMore = useCallback(() => {
+    setPage((p) => p + 1)
+  }, [])
+
+  const handleViewAll = useCallback(() => {
+    const params = new URLSearchParams()
+    params.set('status', 'firing')
+    params.set('aggregate', 'true')
+    if (severityFilter) params.set('severity', severityFilter)
+    navigate(`/alerts?${params.toString()}`)
+  }, [navigate, severityFilter])
 
   return (
     <div className="space-y-6">
@@ -226,44 +277,90 @@ export function DashboardPage() {
         {/* Recent Unresolved Alerts */}
         <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">最近未恢复告警</h2>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-gray-900">最近未恢复告警</h2>
+              <span className="text-sm text-gray-500">共 {alertTotal} 条</span>
+            </div>
+            <button
+              onClick={handleViewAll}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              查看全部
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select
+              value={severityFilter || ''}
+              onChange={(e) => { setSeverityFilter(e.target.value || null); setPage(1) }}
+              className="px-2 py-1 text-sm border rounded-md"
+            >
+              <option value="">全部级别</option>
+              <option value="critical">严重</option>
+              <option value="high">重要</option>
+              <option value="medium">次要</option>
+              <option value="low">提示</option>
+            </select>
+            <select
+              value={durationFilter || ''}
+              onChange={(e) => { setDurationFilter(e.target.value || null); setPage(1) }}
+              className="px-2 py-1 text-sm border rounded-md"
+            >
+              <option value="">全部时长</option>
+              <option value="1">&gt; 1小时</option>
+              <option value="6">&gt; 6小时</option>
+              <option value="24">&gt; 24小时</option>
+              <option value="72">&gt; 3天</option>
+              <option value="168">&gt; 7天</option>
+            </select>
+            <button
+              onClick={() => { setFlappingOnly(!flappingOnly); setPage(1) }}
+              className={`px-2 py-1 text-sm rounded-md flex items-center gap-1 transition-colors ${
+                flappingOnly ? 'bg-orange-100 text-orange-700 border border-orange-300' : 'border text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Zap className="w-3 h-3" />
+              仅抖动
+            </button>
+            <button
+              onClick={() => { setStaleOnly(!staleOnly); setPage(1) }}
+              className={`px-2 py-1 text-sm rounded-md flex items-center gap-1 transition-colors ${
+                staleOnly ? 'bg-gray-200 text-gray-700 border border-gray-400' : 'border text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Clock className="w-3 h-3" />
+              仅长时间未更新
+            </button>
+            <div className="flex items-center gap-1 ml-auto">
+              <ArrowUpDown className="w-3 h-3 text-gray-400" />
               <select
-                value={severityFilter || ''}
-                onChange={(e) => setSeverityFilter(e.target.value || null)}
+                value={sortBy ? `${sortBy}:${sortOrder}` : ''}
+                onChange={(e) => {
+                  if (!e.target.value) { setSortBy(null); setSortOrder('desc') }
+                  else {
+                    const [field, order] = e.target.value.split(':')
+                    setSortBy(field)
+                    setSortOrder(order as 'asc' | 'desc')
+                  }
+                  setPage(1)
+                }}
                 className="px-2 py-1 text-sm border rounded-md"
               >
-                <option value="">全部级别</option>
-                <option value="critical">严重</option>
-                <option value="high">重要</option>
-                <option value="medium">次要</option>
-                <option value="low">提示</option>
+                <option value="">默认排序</option>
+                <option value="duration:desc">持续时长 ↓</option>
+                <option value="duration:asc">持续时长 ↑</option>
+                <option value="severity:asc">严重级别 ↓</option>
+                <option value="severity:desc">严重级别 ↑</option>
+                <option value="count:desc">告警数量 ↓</option>
+                <option value="count:asc">告警数量 ↑</option>
               </select>
-              <select
-                value={durationFilter || ''}
-                onChange={(e) => setDurationFilter(e.target.value || null)}
-                className="px-2 py-1 text-sm border rounded-md"
-              >
-                <option value="">全部时长</option>
-                <option value="1">&gt; 1小时</option>
-                <option value="6">&gt; 6小时</option>
-                <option value="24">&gt; 24小时</option>
-                <option value="72">&gt; 3天</option>
-                <option value="168">&gt; 7天</option>
-              </select>
-              <button
-                onClick={() => setFlappingOnly(!flappingOnly)}
-                className={`px-2 py-1 text-sm rounded-md flex items-center gap-1 transition-colors ${
-                  flappingOnly ? 'bg-orange-100 text-orange-700 border border-orange-300' : 'border text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Zap className="w-3 h-3" />
-                仅抖动
-              </button>
             </div>
           </div>
 
-          {alertItems.length === 0 ? (
+          {/* Table */}
+          {alertItems.length === 0 && !alertsLoading ? (
             <p className="text-gray-400 text-sm py-8 text-center">暂无符合条件的未恢复告警</p>
           ) : (
             <div className="overflow-x-auto">
@@ -316,6 +413,25 @@ export function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Load More / Pagination */}
+          {(alertItems.length > 0 || page > 1) && (
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-xs text-gray-400">
+                已加载 {alertItems.length} / 共 {alertTotal} 条
+              </span>
+              {hasMore && (
+                <button
+                  onClick={handleLoadMore}
+                  disabled={alertsLoading}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors disabled:opacity-50"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                  加载更多
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -780,6 +780,11 @@ async def list_alerts(
     hide_aggregated_children: bool = Query(True),
     fingerprint: Optional[str] = None,
     source_id: Optional[int] = None,
+    max_fired_at: Optional[datetime] = Query(None, description="持续时长筛选: fired_at <= 该值"),
+    flapping_only: bool = Query(False, description="仅显示抖动告警"),
+    stale_only: bool = Query(False, description="仅显示长时间未更新告警"),
+    sort_by: Optional[str] = Query(None, description="排序字段: duration/severity/count"),
+    sort_order: str = Query("desc", description="排序方向: asc/desc"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -813,6 +818,10 @@ async def list_alerts(
         base_filter.append(Alert.source_id == source_id)
     if hide_aggregated_children and status != "aggregated":
         base_filter.append(Alert.status != "aggregated")
+    if max_fired_at:
+        if max_fired_at.tzinfo is None:
+            max_fired_at = max_fired_at.replace(tzinfo=timezone.utc)
+        base_filter.append(Alert.fired_at <= max_fired_at)
 
     # 聚合模式（指纹视图 + 虚拟策略聚合指纹行）
     if aggregate:
@@ -822,6 +831,10 @@ async def list_alerts(
             base_filter=base_filter,
             page=page,
             page_size=page_size,
+            flapping_only=flapping_only,
+            stale_only=stale_only,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     # 普通模式
