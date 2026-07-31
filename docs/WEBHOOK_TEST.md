@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-1. 后端服务已启动（Docker 默认映射为 `http://localhost:8001`，直连一般为 `http://localhost:8000`）。
+1. 后端服务已启动（`http://localhost:8001`）。
 2. 已在「告警提供商」中创建对应类型的告警源，并记下 `client_id`。
 
 ### 环境变量（可选）
@@ -23,8 +23,16 @@ POST {BASE_URL}/api/v1/webhooks/{tenant_slug}/{source_type}/{client_id}
 
 | source_type   | 说明                 | Content-Type                          |
 |---------------|----------------------|---------------------------------------|
+| `prometheus`  | Prometheus / Alertmanager | `application/json`                |
+| `grafana`     | Grafana（兼容 Prometheus）| `application/json`                |
+| `aliyun`      | 阿里云（通用）       | `application/json`                    |
 | `aliyun_cms`  | 阿里云云监控 1.0     | `application/x-www-form-urlencoded` 或 JSON |
 | `aliyun_cms2` | 阿里云云监控 2.0     | `application/json`                    |
+| `tencent`     | 腾讯云               | `application/json`                    |
+| `zabbix`      | Zabbix               | `application/json`                    |
+| `huawei`      | 华为云 SMN           | `application/json`                    |
+| `lcmdb`       | 绿城CMDB             | `application/json`                    |
+| `custom`      | 自定义 Webhook       | `application/json`                    |
 
 ---
 

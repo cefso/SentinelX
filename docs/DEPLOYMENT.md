@@ -14,7 +14,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/SentinelX.git
+git clone https://github.com/cefso/SentinelX.git
 cd SentinelX
 
 # 启动所有服务
@@ -35,7 +35,7 @@ docker compose -f docker/docker-compose.infra.yml up -d
 ### 带管理工具
 
 ```bash
-docker compose --profile tools up -d
+docker compose -f docker/docker-compose.yml --profile tools up -d
 ```
 
 访问地址：

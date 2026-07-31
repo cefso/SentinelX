@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-1. 后端服务已启动（Docker 默认映射为 `http://localhost:8001`，直连一般为 `http://localhost:8000`）。
+1. 后端服务已启动（`http://localhost:8001`）。
 2. PostgreSQL、Redis 已就绪；后端启动时会自动消费 `alerts_raw` 队列（无需单独启动 worker）。
 3. 已有可登录账号（默认超管 `admin` / `Admin@123456`）。
 4. 已在「告警提供商」中创建 **custom** 类型告警源，或按下方步骤创建。
