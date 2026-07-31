@@ -137,7 +137,7 @@ export function DashboardPage() {
       {/* Title */}
       <div className="flex items-center gap-3">
         <TrendingUp className="w-7 h-7 text-blue-600" />
-        <h1 className="text-2xl font-bold text-gray-900">未恢复告警 Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">告警看板</h1>
       </div>
 
       {/* Stat Cards */}

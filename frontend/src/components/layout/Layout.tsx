@@ -9,7 +9,7 @@ import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Searc
 import { Modal } from '@/components/common/Modal'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: '告警看板', href: '/dashboard', icon: LayoutDashboard },
   { name: '告警', href: '/alerts', icon: Bell },
   { name: '规则', href: '/rules', icon: Settings2 },
   { name: '渠道', href: '/channels', icon: Send },

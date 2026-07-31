@@ -134,7 +134,7 @@ export function AlertsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">告警列表</h1>
+        <h1 className="text-2xl font-bold text-gray-900">告警列表</h1>
         <button
           onClick={() => setShowWebhookLogModal(true)}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
