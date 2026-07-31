@@ -136,11 +136,18 @@ export function Layout() {
             }
 
             if (hasChildren) {
+              const handleParentClick = () => {
+                if (!isExpanded) {
+                  setExpandedItems((prev) => new Set(prev).add(item.name))
+                }
+              }
+
               return (
                 <div key={item.name}>
                   <div className="flex items-center">
                     <Link
                       to={item.href}
+                      onClick={handleParentClick}
                       className={`flex-1 flex items-center gap-3 px-4 py-2 rounded-md ${
                         isActive && !isChildActive ? 'bg-gray-800 text-white' : isChildActive ? 'text-white' : 'text-gray-300 hover:bg-gray-800'
                       } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
