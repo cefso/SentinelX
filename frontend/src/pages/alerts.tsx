@@ -18,7 +18,7 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
@@ -363,6 +363,12 @@ export function AlertsPage() {
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900 truncate max-w-md">{item.latest.title}</span>
+                        {item.flapping && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded animate-pulse shrink-0">
+                            <Zap className="w-3 h-3" />
+                            抖动
+                          </span>
+                        )}
                         <span className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${
                           isStrategyGroup
                             ? 'bg-violet-100 text-violet-700'
