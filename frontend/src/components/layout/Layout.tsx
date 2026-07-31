@@ -61,6 +61,23 @@ export function Layout() {
     }
     return initial
   })
+
+  // Auto-collapse when navigating away from parent/children routes
+  useEffect(() => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev)
+      for (const item of navigation) {
+        if (!item.children) continue
+        const onParentOrChild =
+          location.pathname.startsWith(item.href) ||
+          item.children.some((c) => location.pathname.startsWith(c.href))
+        if (!onParentOrChild && next.has(item.name)) {
+          next.delete(item.name)
+        }
+      }
+      return next
+    })
+  }, [location.pathname])
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
   const menuRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
