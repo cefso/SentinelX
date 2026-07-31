@@ -43,3 +43,8 @@ frontend/public/build-info.json
 
 # MiMoCode
 .mimocode/
+
+# AI coding tools
+.claude/
+.cursor/
+.codex/
