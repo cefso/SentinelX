@@ -133,7 +133,8 @@ class AlertAggregatedItem(BaseModel):
 class AlertAggregatedResponse(BaseModel):
     """聚合告警响应"""
     items: List[AlertAggregatedItem]
-    total: int
+    total: int = Field(..., description="聚合行数（唯一指纹数）")
+    alert_total: int = Field(0, description="实际告警总数（所有指纹的告警数之和）")
     page: int
     page_size: int
 

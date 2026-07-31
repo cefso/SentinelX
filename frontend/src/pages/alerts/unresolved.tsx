@@ -67,7 +67,7 @@ export function UnresolvedAlertsPage() {
     accumulatedRef.current = []
   }
 
-  const { data: recentAlerts, isLoading: alertsLoading } = useQuery<{ items: AggregatedAlertItem[]; total: number }>({
+  const { data: recentAlerts, isLoading: alertsLoading } = useQuery<{ items: AggregatedAlertItem[]; total: number; alert_total: number }>({
     queryKey: ['recentFiringAlerts', maxFiredAt, severityFilter, flappingOnly, staleOnly, sortBy, sortOrder, page],
     queryFn: () => {
       const params = new URLSearchParams()
@@ -101,8 +101,9 @@ export function UnresolvedAlertsPage() {
   }, [recentAlerts, page])
 
   const alertItems = page === 1 ? (recentAlerts?.items || []) : accumulatedRef.current
-  const alertTotal = recentAlerts?.total || 0
-  const hasMore = alertItems.length < alertTotal
+  const total = recentAlerts?.total || 0
+  const alertTotal = recentAlerts?.alert_total || 0
+  const hasMore = alertItems.length < total
 
   const handleLoadMore = useCallback(() => {
     setPage((p) => p + 1)
@@ -114,7 +115,7 @@ export function UnresolvedAlertsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">未恢复告警</h1>
-          <p className="text-sm text-gray-500 mt-0.5">共 {alertTotal} 条未恢复告警</p>
+          <p className="text-sm text-gray-500 mt-0.5">共 {alertTotal} 条未恢复告警（{total} 个唯一指纹）</p>
         </div>
         <button
           onClick={() => navigate('/dashboard')}
@@ -256,7 +257,7 @@ export function UnresolvedAlertsPage() {
       {(alertItems.length > 0 || page > 1) && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-400">
-            已加载 {alertItems.length} / 共 {alertTotal} 条
+            已加载 {alertItems.length} / 共 {total} 条
           </span>
           {hasMore && (
             <button

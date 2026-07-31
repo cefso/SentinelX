@@ -199,6 +199,12 @@ async def list_alerts_fingerprint_aggregate(
     total_result = await db.execute(select(func.count()).select_from(combined))
     total = total_result.scalar() or 0
 
+    # 计算实际告警总数（所有指纹的告警数之和）
+    alert_total_result = await db.execute(
+        select(func.sum(combined.c.row_count)).select_from(combined)
+    )
+    alert_total = int(alert_total_result.scalar() or 0)
+
     page_result = await db.execute(
         select(combined)
         .order_by(order_clause)
@@ -275,6 +281,7 @@ async def list_alerts_fingerprint_aggregate(
     return AlertAggregatedResponse(
         items=items,
         total=total,
+        alert_total=alert_total,
         page=page,
         page_size=page_size,
     )
