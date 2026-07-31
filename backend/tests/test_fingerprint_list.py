@@ -75,8 +75,16 @@ async def test_fingerprint_list_returns_strategy_group_and_fingerprint_rows():
         SimpleNamespace(Alert=alert2, source_name="cms"),
     ]
 
+    # Mock for flapping detection (condition A: frequency query returns empty)
+    flapping_freq_mock = MagicMock()
+    flapping_freq_mock.all.return_value = []
+
+    # Mock for flapping detection (condition B: recent alerts query per fingerprint)
+    flapping_recent_mock = MagicMock()
+    flapping_recent_mock.all.return_value = []
+
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[total_mock, page_mock, alerts_mock])
+    db.execute = AsyncMock(side_effect=[total_mock, page_mock, alerts_mock, flapping_freq_mock, flapping_recent_mock])
 
     result = await list_alerts_fingerprint_aggregate(
         db=db,
