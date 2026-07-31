@@ -37,6 +37,7 @@ interface AggregatedAlertItem {
     fingerprint: string
   }
   flapping: boolean
+  stale: boolean
 }
 
 // ============ Helpers ============
@@ -292,6 +293,12 @@ export function DashboardPage() {
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded animate-pulse shrink-0">
                               <Zap className="w-3 h-3" />
                               抖动
+                            </span>
+                          )}
+                          {item.stale && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded shrink-0">
+                              <Clock className="w-3 h-3" />
+                              长时间未更新
                             </span>
                           )}
                         </div>

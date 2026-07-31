@@ -198,6 +198,10 @@ async def list_alerts_fingerprint_aggregate(
     fp_list = [row.row_key for row in page_rows if row.row_type == "fingerprint"]
     flapping_fps = await _detect_flapping_fingerprints(db, tenant_str, fp_list)
 
+    # 检测长时间未更新告警（最新消息超24h且未恢复）
+    now = datetime.now(timezone.utc)
+    stale_threshold = now - timedelta(hours=24)
+
     items: List[AlertAggregatedItem] = []
     for row in page_rows:
         alert_row = alert_map.get(row.latest_id)
@@ -207,6 +211,14 @@ async def list_alerts_fingerprint_aggregate(
         row_type = row.row_type
         group_count = row.row_count
         is_strategy = row_type == "strategy_group"
+
+        # stale: 最新告警是 firing 且 sort_at 超过 24h
+        is_stale = (
+            not is_strategy
+            and alert_obj.status == "firing"
+            and row.sort_at is not None
+            and row.sort_at.replace(tzinfo=timezone.utc) < stale_threshold
+        )
 
         items.append(
             AlertAggregatedItem(
@@ -221,6 +233,7 @@ async def list_alerts_fingerprint_aggregate(
                 aggregate_group_id=row.group_id if is_strategy else None,
                 group_label=row.group_label if is_strategy else None,
                 flapping=row.row_key in flapping_fps,
+                stale=is_stale,
             )
         )
 

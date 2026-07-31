@@ -64,6 +64,7 @@ export interface AlertAggregatedItem {
   aggregate_group_id?: number
   group_label?: string
   flapping?: boolean
+  stale?: boolean
 }
 
 export interface AlertFilter {

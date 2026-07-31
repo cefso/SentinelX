@@ -124,6 +124,7 @@ class AlertAggregatedItem(BaseModel):
     aggregate_group_id: Optional[int] = Field(None, description="策略聚合组ID（虚拟指纹行）")
     group_label: Optional[str] = Field(None, description="策略聚合组展示标签")
     flapping: bool = Field(False, description="是否为抖动告警(1小时内>=3次或交替模式+短持续时间)")
+    stale: bool = Field(False, description="是否为长时间未更新告警(最新消息超24h未恢复)")
 
     class Config:
         from_attributes = True
