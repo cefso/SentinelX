@@ -134,7 +134,10 @@ export function AlertsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">告警列表</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">告警列表</h1>
+          <p className="text-sm text-gray-500 mt-0.5">查看和管理所有告警，支持指纹视图和明细视图</p>
+        </div>
         <button
           onClick={() => setShowWebhookLogModal(true)}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"

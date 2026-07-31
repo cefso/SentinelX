@@ -222,7 +222,7 @@ export function AlertSourcesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">告警提供商</h1>
-          <p className="text-gray-500 mt-1">配置和管理告警接入渠道</p>
+          <p className="text-sm text-gray-500 mt-0.5">配置和管理告警接入渠道</p>
           {currentTenant && (
             <div className="mt-2 text-sm text-blue-600">
               当前租户：{currentTenant.name} (Slug: {currentTenant.slug})

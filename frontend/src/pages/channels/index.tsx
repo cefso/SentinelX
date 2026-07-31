@@ -200,7 +200,7 @@ export function ChannelsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">通知渠道</h1>
-          <p className="text-gray-600">管理钉钉、飞书、企业微信等通知渠道</p>
+          <p className="text-sm text-gray-500 mt-0.5">管理钉钉、飞书、企业微信等通知渠道</p>
         </div>
         <button
           onClick={handleCreate}

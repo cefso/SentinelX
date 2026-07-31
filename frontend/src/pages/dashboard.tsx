@@ -137,6 +137,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Title */}
       <h1 className="text-2xl font-bold text-gray-900">告警看板</h1>
+      <p className="text-sm text-gray-500 mt-0.5">未恢复告警统计、趋势分析与异常检测</p>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-5 gap-4">
