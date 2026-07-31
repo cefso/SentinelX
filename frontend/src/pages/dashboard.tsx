@@ -5,7 +5,7 @@ import { apiClient } from '@/services/api'
 import { AlertStats } from '@/types/alert'
 import { SeverityBadge } from '@/components/common/Badges'
 import { formatLocalDateTime } from '@/utils/datetime'
-import { Bell, AlertTriangle, XCircle, AlertCircle, Info, Clock, TrendingUp, Zap } from 'lucide-react'
+import { Bell, AlertTriangle, XCircle, AlertCircle, Info, Clock, Zap } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 // ============ Types ============
@@ -136,10 +136,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="flex items-center gap-3">
-        <TrendingUp className="w-7 h-7 text-blue-600" />
-        <h1 className="text-2xl font-bold text-gray-900">告警看板</h1>
-      </div>
+      <h1 className="text-2xl font-bold text-gray-900">告警看板</h1>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-5 gap-4">
