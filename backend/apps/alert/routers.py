@@ -30,6 +30,7 @@ from apps.alert.schemas import (
     AlertAggregateMemberItem, AlertAggregateMembersResponse,
     CloudProductMetricCreate, CloudProductMetricUpdate, CloudProductMetricResponse,
     CloudMetricsListResponse,
+    AlertTrendItem, AlertTrendResponse, SourceAlertStats, SourceAlertStatsResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
@@ -936,6 +937,75 @@ async def get_alert_stats(
         firing_high=high,
         aggregated=aggregated,
     )
+
+
+@router.get("/alerts/trend", response_model=AlertTrendResponse)
+async def get_alert_trend(
+    days: int = Query(7, ge=1, le=90, description="查询天数"),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取告警趋势（按时间分桶）"""
+    tenant_filter = Alert.tenant_id == str(tenant_id)
+    now = datetime.now(timezone.utc)
+    start = now - __import__('datetime').timedelta(days=days)
+
+    # days=1 按小时分桶，>1 按天分桶
+    if days == 1:
+        bucket = func.date_trunc('hour', Alert.fired_at)
+    else:
+        bucket = func.date_trunc('day', Alert.fired_at)
+
+    result = await db.execute(
+        select(
+            bucket.label("time_bucket"),
+            func.count().label("count"),
+        )
+        .where(and_(tenant_filter, Alert.fired_at >= start))
+        .group_by("time_bucket")
+        .order_by("time_bucket")
+    )
+    items = [
+        AlertTrendItem(time=str(row.time_bucket), count=row.count)
+        for row in result.all()
+    ]
+    return AlertTrendResponse(items=items, days=days)
+
+
+@router.get("/alerts/stats/by-source", response_model=SourceAlertStatsResponse)
+async def get_alert_stats_by_source(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """按告警源统计未恢复告警"""
+    tenant_filter = Alert.tenant_id == str(tenant_id)
+
+    result = await db.execute(
+        select(
+            Alert.source,
+            Alert.source_id,
+            func.count().label("total"),
+            func.sum(case((Alert.severity == "critical", 1), else_=0)).label("critical"),
+            func.sum(case((Alert.severity == "high", 1), else_=0)).label("high"),
+            AlertSource.name.label("source_name"),
+        )
+        .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .where(and_(tenant_filter, Alert.status == "firing"))
+        .group_by(Alert.source, Alert.source_id, AlertSource.name)
+        .order_by(func.count().desc())
+    )
+    items = [
+        SourceAlertStats(
+            source=row.source,
+            source_id=row.source_id,
+            source_name=row.source_name,
+            total=row.total,
+            critical=row.critical or 0,
+            high=row.high or 0,
+        )
+        for row in result.all()
+    ]
+    return SourceAlertStatsResponse(items=items)
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
