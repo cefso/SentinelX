@@ -8,8 +8,25 @@ import { apiClient } from '@/services/api'
 import { Settings, LogOut, UserCircle, ChevronDown, Bell, Settings2, Send, Search, Plug, Check, Building2, Plus, PanelLeftClose, PanelLeft, BarChart3, FileText, LayoutDashboard } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
 
-const navigation = [
-  { name: '告警看板', href: '/dashboard', icon: LayoutDashboard },
+interface NavChild {
+  name: string
+  href: string
+}
+
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  children?: NavChild[]
+}
+
+const navigation: NavItem[] = [
+  {
+    name: '告警看板', href: '/dashboard', icon: LayoutDashboard,
+    children: [
+      { name: '未恢复告警', href: '/alerts/unresolved' },
+    ],
+  },
   { name: '告警', href: '/alerts', icon: Bell },
   { name: '规则', href: '/rules', icon: Settings2 },
   { name: '渠道', href: '/channels', icon: Send },
@@ -30,6 +47,16 @@ export function Layout() {
   const [showTenantMenu, setShowTenantMenu] = useState(false)
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
+    // Auto-expand parent if current route matches a child
+    const initial = new Set<string>()
+    for (const item of navigation) {
+      if (item.children?.some((c) => location.pathname.startsWith(c.href))) {
+        initial.add(item.name)
+      }
+    }
+    return initial
+  })
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
   const menuRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -90,7 +117,60 @@ export function Layout() {
         <nav className={`p-4 space-y-1 flex-1 ${sidebarCollapsed ? 'px-2' : ''}`}>
           {navigation.map((item) => {
             const Icon = item.icon
-            const isActive = location.pathname.startsWith(item.href)
+            const hasChildren = item.children && item.children.length > 0
+            const isChildActive = hasChildren && item.children!.some((c) => location.pathname.startsWith(c.href))
+            const isActive = location.pathname.startsWith(item.href) || isChildActive
+            const isExpanded = expandedItems.has(item.name)
+
+            const toggleExpand = () => {
+              setExpandedItems((prev) => {
+                const next = new Set(prev)
+                if (next.has(item.name)) next.delete(item.name)
+                else next.add(item.name)
+                return next
+              })
+            }
+
+            if (hasChildren) {
+              return (
+                <div key={item.name}>
+                  <button
+                    onClick={toggleExpand}
+                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-md ${
+                      isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
+                    } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                    title={sidebarCollapsed ? item.name : undefined}
+                  >
+                    <Icon className="w-5 h-5 shrink-0" />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="flex-1 text-left">{item.name}</span>
+                        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </>
+                    )}
+                  </button>
+                  {!sidebarCollapsed && isExpanded && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.children!.map((child) => {
+                        const childActive = location.pathname.startsWith(child.href)
+                        return (
+                          <Link
+                            key={child.name}
+                            to={child.href}
+                            className={`flex items-center gap-3 pl-11 pr-4 py-1.5 rounded-md text-sm ${
+                              childActive ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                            }`}
+                          >
+                            {child.name}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
             return (
               <Link
                 key={item.name}

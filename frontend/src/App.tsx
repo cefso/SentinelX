@@ -6,6 +6,7 @@ import { Layout } from './components/layout/Layout'
 import { AlertsPage } from './pages/alerts'
 import { AlertDetailPage } from './pages/alerts/detail'
 import { AlertSourcesPage } from './pages/alerts/sources'
+import { UnresolvedAlertsPage } from './pages/alerts/unresolved'
 import { RulesPage } from './pages/rules'
 import { DedupRulesPage } from './pages/rules/dedup'
 import { SuppressRulesPage } from './pages/rules/suppress'
@@ -43,6 +44,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="alerts" element={<AlertsPage />} />
+        <Route path="alerts/unresolved" element={<UnresolvedAlertsPage />} />
         <Route path="alerts/sources" element={<AlertSourcesPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />
         <Route path="rules" element={<RulesPage />} />

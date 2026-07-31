@@ -2,7 +2,7 @@
 SentinelX - 指纹视图列表（含虚拟策略聚合指纹行 + 抖动检测）
 """
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import and_, func, literal, select, union_all, Integer, String, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,6 +103,10 @@ async def list_alerts_fingerprint_aggregate(
     base_filter: List,
     page: int,
     page_size: int,
+    flapping_only: bool = False,
+    stale_only: bool = False,
+    sort_by: Optional[str] = None,
+    sort_order: str = "desc",
 ) -> AlertAggregatedResponse:
     """指纹视图：真实 fingerprint 分组 + 虚拟策略聚合指纹行合并分页。"""
     tenant_str = str(tenant_id)
@@ -121,6 +125,15 @@ async def list_alerts_fingerprint_aggregate(
 
     fp_filter = list(base_filter) + [Alert.id.not_in(strategy_member_ids)]
 
+    severity_order = case(
+        (Alert.severity == "critical", 1),
+        (Alert.severity == "high", 2),
+        (Alert.severity == "medium", 3),
+        (Alert.severity == "low", 4),
+        (Alert.severity == "info", 5),
+        else_=6,
+    )
+
     fp_subq = (
         select(
             Alert.fingerprint.label("row_key"),
@@ -130,6 +143,7 @@ async def list_alerts_fingerprint_aggregate(
             func.max(Alert.id).label("latest_id"),
             func.count(Alert.id).label("row_count"),
             func.max(Alert.fired_at).label("sort_at"),
+            func.min(severity_order).label("severity_rank"),
         )
         .where(and_(*fp_filter))
         .group_by(Alert.fingerprint)
@@ -144,6 +158,7 @@ async def list_alerts_fingerprint_aggregate(
             func.min(AlertAggregateMember.alert_id).label("latest_id"),
             AlertAggregateGroup.alert_count.label("row_count"),
             func.max(Alert.fired_at).label("sort_at"),
+            func.min(severity_order).label("severity_rank"),
         )
         .select_from(AlertAggregateGroup)
         .join(
@@ -167,12 +182,26 @@ async def list_alerts_fingerprint_aggregate(
 
     combined = union_all(fp_subq, strategy_subq).subquery()
 
+    # 动态排序
+    if sort_by == "severity":
+        order_col = combined.c.severity_rank
+    elif sort_by == "count":
+        order_col = combined.c.row_count
+    else:
+        # 默认按持续时长（sort_at）排序
+        order_col = combined.c.sort_at
+
+    if sort_order == "asc":
+        order_clause = order_col.asc()
+    else:
+        order_clause = order_col.desc()
+
     total_result = await db.execute(select(func.count()).select_from(combined))
     total = total_result.scalar() or 0
 
     page_result = await db.execute(
         select(combined)
-        .order_by(combined.c.sort_at.desc())
+        .order_by(order_clause)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -236,6 +265,12 @@ async def list_alerts_fingerprint_aggregate(
                 stale=is_stale,
             )
         )
+
+    # 后置过滤：flapping_only / stale_only
+    if flapping_only:
+        items = [item for item in items if item.flapping]
+    if stale_only:
+        items = [item for item in items if item.stale]
 
     return AlertAggregatedResponse(
         items=items,
