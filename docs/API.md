@@ -133,9 +133,9 @@ Content-Type: application/json
 - **source_type**: 告警源类型
 - **client_id**: 在「告警提供商」创建告警源时生成的客户端 ID（也支持数字形式的告警源 `id`）
 
-**支持的 source_type**: `prometheus`, `alertmanager`, `aliyun`, `aliyun_cms`, `aliyun_cms2`, `tencent`, `huawei`, `zabbix`, `grafana`, `custom`
+**支持的 source_type**: `prometheus`, `alertmanager`, `aliyun`, `aliyun_cms`, `aliyun_cms2`, `tencent`, `huawei`, `zabbix`, `grafana`, `lcmdb`, `custom`
 
-> `grafana` 使用 Prometheus 兼容解析；`huawei` 使用通用 Custom Webhook 解析（需按标准告警字段组织 payload）。
+> `grafana` 使用 Prometheus 兼容解析；`huawei` 使用华为云 SMN 适配器，支持 SubscriptionConfirmation 自动确认；`lcmdb` 解析绿城CMDB markdown 格式的 key-value 对。
 
 **Prometheus Alertmanager 格式**:
 ```json
@@ -183,7 +183,7 @@ Authorization: Bearer <TOKEN>
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| status | string | 状态: firing/resolved/acknowledged/silenced |
+| status | string | 状态: firing/resolved/suppressed/aggregated |
 | severity | string | 级别: critical/high/medium/low/info |
 | source | string | 来源类型 |
 | start_time | string | 开始时间 ISO 格式 |

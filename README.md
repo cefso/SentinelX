@@ -204,6 +204,9 @@ cd docker && docker compose -f docker-compose.build.yml up -d --build
 
 - [API 文档](docs/API.md) - 完整的 API 接口说明
 - [部署指南](docs/DEPLOYMENT.md) - Docker Compose 和 Helm 部署
+- [Webhook 测试指南](docs/WEBHOOK_TEST.md) - 各适配器 curl 模拟命令
+- [规则引擎测试手册](docs/RULE_ENGINE_TEST.md) - 去重/抑制/聚合策略测试
+- [项目介绍](docs/project-intro.html) - 可视化项目功能概览（浏览器打开）
 
 ## 项目结构
 
@@ -220,7 +223,7 @@ SentinelX/
 │   │   │   └── services/     # 认证服务
 │   │   ├── tenant/           # 租户管理
 │   │   ├── alert/            # 告警核心
-│   │   │   ├── adapters/     # 告警适配器（prometheus/aliyun/zabbix/tencent 等）
+│   │   │   ├── adapters/     # 告警适配器（prometheus/aliyun/zabbix/tencent/huawei/lcmdb 等）
 │   │   │   ├── models.py     # 数据模型
 │   │   │   ├── routers.py    # API路由
 │   │   │   ├── schemas.py    # Pydantic Schema
@@ -499,6 +502,7 @@ SentinelX 支持用户属于多个租户，通过 UserTenant 关联表实现 N:M
 # 应用配置
 APP_NAME=SentinelX
 DEBUG=true
+DEFAULT_ADMIN_PASSWORD=Admin@123456  # 首次启动的管理员密码（不设置则自动生成随机密码）
 
 # 数据库
 DB_HOST=localhost
@@ -659,6 +663,8 @@ POST   /api/v1/tenants/{id}/webhook-key              # 生成/重置 Webhook API
 /api/v1/webhooks/{tenant_slug}/aliyun_cms2/{client_id} # 阿里云云监控2.0
 /api/v1/webhooks/{tenant_slug}/tencent/{client_id}
 /api/v1/webhooks/{tenant_slug}/zabbix/{client_id}
+/api/v1/webhooks/{tenant_slug}/huawei/{client_id}     # 华为云 SMN
+/api/v1/webhooks/{tenant_slug}/lcmdb/{client_id}      # 绿城CMDB
 /api/v1/webhooks/{tenant_slug}/custom/{client_id}
 ```
 
@@ -695,6 +701,8 @@ POST   /api/v1/webhook-logs/dismiss          # 忽略日志（单条或全部）
 | `aliyun_cms` / `aliyun_cms2` | 校验阿里云云监控字段 |
 | `zabbix` | 校验 Zabbix 告警格式 |
 | `tencent` | 校验腾讯云告警字段 |
+| `huawei` | 校验华为云 SMN 消息结构（type/subject/message），支持 SubscriptionConfirmation 自动确认 |
+| `lcmdb` | **不校验格式**，解析 markdown 格式的 key-value 对 |
 
 > **注意**: `custom` 适配器是兜底设计，不会因数据格式问题返回 `format_error`。如需测试 `format_error`，请使用 `prometheus`、`zabbix` 等结构化适配器。
 
