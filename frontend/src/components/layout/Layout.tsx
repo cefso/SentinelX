@@ -22,8 +22,9 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   {
-    name: '告警看板', href: '/dashboard', icon: LayoutDashboard,
+    name: '告警中心', href: '/dashboard', icon: LayoutDashboard,
     children: [
+      { name: '告警总览', href: '/dashboard' },
       { name: '未恢复告警', href: '/alerts/unresolved' },
     ],
   },
@@ -48,15 +49,35 @@ export function Layout() {
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false)
   const [switching, setSwitching] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
-    // Auto-expand parent if current route matches a child
+    // Auto-expand parent if current route matches parent or a child
     const initial = new Set<string>()
     for (const item of navigation) {
-      if (item.children?.some((c) => location.pathname.startsWith(c.href))) {
+      if (item.children && (
+        location.pathname.startsWith(item.href) ||
+        item.children.some((c) => location.pathname.startsWith(c.href))
+      )) {
         initial.add(item.name)
       }
     }
     return initial
   })
+
+  // Auto-collapse when navigating away from parent/children routes
+  useEffect(() => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev)
+      for (const item of navigation) {
+        if (!item.children) continue
+        const onParentOrChild =
+          location.pathname.startsWith(item.href) ||
+          item.children.some((c) => location.pathname.startsWith(c.href))
+        if (!onParentOrChild && next.has(item.name)) {
+          next.delete(item.name)
+        }
+      }
+      return next
+    })
+  }, [location.pathname])
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore()
   const menuRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -132,27 +153,39 @@ export function Layout() {
             }
 
             if (hasChildren) {
+              const handleParentClick = () => {
+                if (!isExpanded) {
+                  setExpandedItems((prev) => new Set(prev).add(item.name))
+                }
+              }
+
               return (
                 <div key={item.name}>
-                  <button
-                    onClick={toggleExpand}
-                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-md ${
-                      isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
-                    } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
-                    title={sidebarCollapsed ? item.name : undefined}
-                  >
-                    <Icon className="w-5 h-5 shrink-0" />
+                  <div className="flex items-center">
+                    <Link
+                      to={item.href}
+                      onClick={handleParentClick}
+                      className={`flex-1 flex items-center gap-3 px-4 py-2 rounded-md ${
+                        isActive && !isChildActive ? 'bg-gray-800 text-white' : isChildActive ? 'text-white' : 'text-gray-300 hover:bg-gray-800'
+                      } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                      title={sidebarCollapsed ? item.name : undefined}
+                    >
+                      <Icon className="w-5 h-5 shrink-0" />
+                      {!sidebarCollapsed && item.name}
+                    </Link>
                     {!sidebarCollapsed && (
-                      <>
-                        <span className="flex-1 text-left">{item.name}</span>
+                      <button
+                        onClick={toggleExpand}
+                        className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-300 transition-colors"
+                      >
                         <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      </>
+                      </button>
                     )}
-                  </button>
+                  </div>
                   {!sidebarCollapsed && isExpanded && (
                     <div className="ml-4 mt-1 space-y-1">
                       {item.children!.map((child) => {
-                        const childActive = location.pathname.startsWith(child.href)
+                        const childActive = location.pathname === child.href || (child.href !== '/dashboard' && location.pathname.startsWith(child.href))
                         return (
                           <Link
                             key={child.name}

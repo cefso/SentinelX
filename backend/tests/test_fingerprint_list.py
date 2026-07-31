@@ -49,6 +49,7 @@ async def test_fingerprint_list_returns_strategy_group_and_fingerprint_rows():
         latest_id=2,
         row_count=2,
         sort_at=datetime.now(timezone.utc),
+        severity_rank=1,
     )
     sg_row = SimpleNamespace(
         row_key=f"{STRATEGY_GROUP_FP_PREFIX}2",
@@ -58,6 +59,7 @@ async def test_fingerprint_list_returns_strategy_group_and_fingerprint_rows():
         latest_id=3,
         row_count=2,
         sort_at=datetime.now(timezone.utc),
+        severity_rank=1,
     )
 
     total_mock = MagicMock()
@@ -83,8 +85,12 @@ async def test_fingerprint_list_returns_strategy_group_and_fingerprint_rows():
     flapping_recent_mock = MagicMock()
     flapping_recent_mock.all.return_value = []
 
+    # Mock for alert_total (sum of row_count)
+    alert_total_mock = MagicMock()
+    alert_total_mock.scalar.return_value = 4
+
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[total_mock, page_mock, alerts_mock, flapping_freq_mock, flapping_recent_mock])
+    db.execute = AsyncMock(side_effect=[total_mock, alert_total_mock, page_mock, alerts_mock, flapping_freq_mock, flapping_recent_mock])
 
     result = await list_alerts_fingerprint_aggregate(
         db=db,
@@ -112,11 +118,14 @@ async def test_fingerprint_list_empty():
     total_mock = MagicMock()
     total_mock.scalar.return_value = 0
 
+    alert_total_mock = MagicMock()
+    alert_total_mock.scalar.return_value = 0
+
     page_mock = MagicMock()
     page_mock.all.return_value = []
 
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[total_mock, page_mock])
+    db.execute = AsyncMock(side_effect=[total_mock, alert_total_mock, page_mock])
 
     result = await list_alerts_fingerprint_aggregate(
         db=db,
