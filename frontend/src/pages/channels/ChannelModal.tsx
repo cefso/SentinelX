@@ -311,6 +311,25 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 />
                 <p className="text-xs text-gray-500 mt-1">在阿里云语音服务控制台创建的 TTS 模板编码</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">模板参数映射 <span className="text-gray-400 font-normal">(可选)</span></label>
+                <textarea
+                  value={config?.tts_param_template ? JSON.stringify(config.tts_param_template, null, 2) : ''}
+                  onChange={(e) => {
+                    try {
+                      updateConfig('tts_param_template', JSON.parse(e.target.value))
+                    } catch {
+                      // 用户正在输入，暂不更新
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                  placeholder={'{"alert_severity": "severity", "alert_info": "title"}'}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  JSON 对象，key 为 TTS 模板变量名，value 为告警字段名。不填则使用默认映射：alert_severity→severity，alert_info→title
+                </p>
+              </div>
             </div>
           )}
 
