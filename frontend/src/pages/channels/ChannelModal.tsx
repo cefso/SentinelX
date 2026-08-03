@@ -307,7 +307,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   value={config?.template_code || ''}
                   onChange={(e) => updateConfig('template_code', e.target.value)}
                   className="w-full px-3 py-2 border rounded-md"
-                  placeholder="TTS_287115108"
+                  placeholder="TTS_xxxxxxxxx"
                 />
                 <p className="text-xs text-gray-500 mt-1">在阿里云语音服务控制台创建的 TTS 模板编码</p>
               </div>
