@@ -65,6 +65,12 @@ CHANNEL_TYPES = [
         optional_fields=[],
         description="Slack Incoming Webhook",
     ),
+    ChannelTypeInfo(
+        value="aliyun_voice", label="阿里云语音通知", icon="📞",
+        required_fields=["access_key_id", "access_key_secret", "called_number", "template_code"],
+        optional_fields=["tts_param_template"],
+        description="通过阿里云语音服务发送语音通知",
+    ),
 ]
 
 

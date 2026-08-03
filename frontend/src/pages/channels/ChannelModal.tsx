@@ -28,6 +28,7 @@ export const CHANNEL_TYPES = [
   { value: 'email', label: '邮件', icon: '📧' },
   { value: 'webhook', label: 'Webhook', icon: '🔗' },
   { value: 'slack', label: 'Slack', icon: '💬' },
+  { value: 'aliyun_voice', label: '阿里云语音通知', icon: '📞' },
 ]
 
 export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel | null; onClose: () => void; onSuccess: () => void }) {
@@ -263,6 +264,72 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 className="w-full px-3 py-2 border rounded-md"
                 placeholder="https://hooks.slack.com/services/..."
               />
+            </div>
+          )}
+
+          {channelType === 'aliyun_voice' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">AccessKey ID <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={config?.access_key_id || ''}
+                  onChange={(e) => updateConfig('access_key_id', e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="阿里云 AccessKey ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">AccessKey Secret <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={config?.access_key_secret || ''}
+                  onChange={(e) => updateConfig('access_key_secret', e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="阿里云 AccessKey Secret"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">被叫号码 <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={config?.called_number || ''}
+                  onChange={(e) => updateConfig('called_number', e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="13800138000,13900139000"
+                />
+                <p className="text-xs text-gray-500 mt-1">支持多个号码，逗号分隔</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">TTS 模板编码 <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={config?.template_code || ''}
+                  onChange={(e) => updateConfig('template_code', e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="TTS_000000000"
+                />
+                <p className="text-xs text-gray-500 mt-1">在阿里云语音服务控制台创建的 TTS 模板编码</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">模板参数映射 <span className="text-gray-400 font-normal">(可选)</span></label>
+                <textarea
+                  value={config?.tts_param_template ? JSON.stringify(config.tts_param_template, null, 2) : ''}
+                  onChange={(e) => {
+                    try {
+                      updateConfig('tts_param_template', JSON.parse(e.target.value))
+                    } catch {
+                      // 用户正在输入，暂不更新
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                  placeholder={'{"alert_severity": "severity", "alert_info": "title"}'}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  JSON 对象，key 为 TTS 模板变量名，value 为告警字段名。不填则使用默认映射：alert_severity→severity，alert_info→title
+                </p>
+              </div>
             </div>
           )}
 

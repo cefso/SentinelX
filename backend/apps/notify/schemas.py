@@ -26,7 +26,7 @@ class ChannelCreate(ChannelBase):
     @field_validator('channel_type')
     @classmethod
     def validate_channel_type(cls, v: str) -> str:
-        valid_types = {'dingtalk', 'feishu', 'wecom', 'email', 'webhook', 'slack'}
+        valid_types = {'dingtalk', 'feishu', 'wecom', 'email', 'webhook', 'slack', 'aliyun_voice'}
         if v not in valid_types:
             raise ValueError(f"channel_type must be one of: {', '.join(sorted(valid_types))}")
         return v
@@ -138,6 +138,15 @@ def _validate_config_by_type(channel_type: str, config: Dict[str, Any]) -> Dict[
         if not config.get("webhook_url"):
             raise ValueError("slack渠道必须配置 webhook_url")
         _validate_url(config["webhook_url"], "webhook_url")
+    elif channel_type == "aliyun_voice":
+        if not config.get("access_key_id"):
+            raise ValueError("aliyun_voice渠道必须配置 access_key_id")
+        if not config.get("access_key_secret"):
+            raise ValueError("aliyun_voice渠道必须配置 access_key_secret")
+        if not config.get("called_number"):
+            raise ValueError("aliyun_voice渠道必须配置 called_number")
+        if not config.get("template_code"):
+            raise ValueError("aliyun_voice渠道必须配置 template_code")
     return config
 
 
