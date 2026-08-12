@@ -9,6 +9,16 @@ import { convertToCSV, downloadCSV, generateExportFilename } from '@/utils/expor
 import { ExportModal, ExportRange } from '@/components/alerts/ExportModal'
 import { toast } from '@/stores/toast-store'
 
+/**
+ * 从聚合项中提取 AlertResponse
+ */
+function extractAlertFromAggregated(item: AlertAggregatedItem | AlertResponse): AlertResponse {
+  if ('latest' in item && item.latest) {
+    return item.latest
+  }
+  return item as AlertResponse
+}
+
 interface AlertSource {
   id: number
   name: string
@@ -152,8 +162,9 @@ export function AlertsPage() {
       }
 
       if (range === 'current_page') {
-        // 导出当前页
-        allAlerts = alerts?.items || []
+        // 导出当前页 - 需要处理聚合模式
+        const items = alerts?.items || []
+        allAlerts = items.map(item => extractAlertFromAggregated(item as AlertAggregatedItem | AlertResponse))
       } else {
         // 获取所有数据
         let currentPage = 1
