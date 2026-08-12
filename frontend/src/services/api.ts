@@ -163,6 +163,14 @@ class ApiClient {
     return response.data
   }
 
+  async disposeAlert(alertId: number, data: { action: string; comment: string }): Promise<{ message: string }> {
+    return this.post(`/alerts/${alertId}/dispose`, data)
+  }
+
+  async getDisposeRecords(alertId: number): Promise<DisposeRecord[]> {
+    return this.get(`/alerts/${alertId}/dispose`)
+  }
+
   async getRuleFieldValues(params: { field: string; search?: string; limit?: number; offset?: number }): Promise<{ field: string; values: { value: string; count: number }[]; total: number }> {
     return this.get('/rules/field-values', params)
   }
@@ -387,6 +395,16 @@ export interface WebhookLogsResponse {
 export interface WebhookLogDismissResponse {
   message: string
   count?: number
+}
+
+export interface DisposeRecord {
+  id: number
+  alert_id: number
+  action: 'note' | 'acknowledge' | 'resolve' | 'silence'
+  comment: string
+  operator_id?: number
+  operator_name?: string
+  created_at: string
 }
 
 export const apiClient = new ApiClient()

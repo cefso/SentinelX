@@ -31,6 +31,7 @@ from apps.alert.schemas import (
     CloudProductMetricCreate, CloudProductMetricUpdate, CloudProductMetricResponse,
     CloudMetricsListResponse,
     AlertTrendItem, AlertTrendResponse, SourceAlertStats, SourceAlertStatsResponse,
+    DisposeRequest, DisposeRecordResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
@@ -1172,6 +1173,82 @@ async def update_alert(
     await db.commit()
     await db.refresh(alert)
     return alert
+
+
+@router.post("/alerts/{alert_id}/dispose", response_model=dict)
+async def dispose_alert(
+    alert_id: int,
+    request: DisposeRequest,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """处置告警 - 添加处理记录并可选更新状态"""
+    result = await db.execute(
+        select(Alert).where(
+            Alert.id == alert_id,
+            Alert.tenant_id == str(tenant_id)
+        )
+    )
+    alert = result.scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    now = datetime.now(timezone.utc)
+
+    # 根据处置类型更新告警状态
+    if request.action == 'acknowledge' and alert.status == 'firing':
+        alert.status = 'acknowledged'
+        alert.acknowledged_at = now
+    elif request.action == 'resolve' and alert.status in ('firing', 'acknowledged'):
+        alert.status = 'resolved'
+        alert.resolved_at = now
+
+    # 创建处置记录（使用 AlertHistory 存储）
+    history = AlertHistory(
+        tenant_id=str(tenant_id),
+        alert_id=alert_id,
+        action=f"dispose_{request.action}",
+        description=request.comment,
+        operator_id=current_user.id,
+        operator_name=current_user.username,
+        old_value={"status": alert.status},
+        new_value={"dispose_action": request.action, "comment": request.comment},
+    )
+    db.add(history)
+
+    await db.commit()
+    return {"message": "处置成功"}
+
+
+@router.get("/alerts/{alert_id}/dispose", response_model=list[DisposeRecordResponse])
+async def get_dispose_records(
+    alert_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取告警的处置记录"""
+    result = await db.execute(
+        select(AlertHistory).where(
+            AlertHistory.alert_id == alert_id,
+            AlertHistory.tenant_id == str(tenant_id),
+            AlertHistory.action.like('dispose_%')
+        ).order_by(AlertHistory.created_at.desc())
+    )
+    records = result.scalars().all()
+
+    return [
+        DisposeRecordResponse(
+            id=r.id,
+            alert_id=r.alert_id,
+            action=r.action.replace('dispose_', ''),
+            comment=r.description or '',
+            operator_id=r.operator_id,
+            operator_name=r.operator_name,
+            created_at=r.created_at,
+        )
+        for r in records
+    ]
 
 
 # ============ 告警诊断 ============

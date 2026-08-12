@@ -36,6 +36,7 @@ export interface AlertResponse {
   aggregate_parent_id?: number
   aggregate_group_id?: number
   aggregate_group_count?: number
+  dispose_records?: AlertDisposeRecord[]
 }
 
 export interface AlertStats {
@@ -95,4 +96,14 @@ export interface AlertAggregateMembersResponse {
   alert_count: number
   page: number
   page_size: number
+}
+
+export interface AlertDisposeRecord {
+  id: number
+  alert_id: number
+  action: 'note' | 'acknowledge' | 'resolve' | 'silence'
+  comment: string
+  operator_id?: number
+  operator_name?: string
+  created_at: string
 }
