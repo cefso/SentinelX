@@ -654,7 +654,6 @@ export function AlertDetailPage() {
         open={showDisposeModal}
         onOpenChange={setShowDisposeModal}
         alertId={alert.id}
-        currentStatus={alert.status}
       />
     </div>
   )
