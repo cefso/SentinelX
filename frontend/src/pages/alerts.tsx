@@ -174,7 +174,8 @@ export function AlertsPage() {
           const params: Record<string, any> = {
             ...baseParams,
             page: currentPage,
-            page_size: 1000,
+            page_size: 100,
+            aggregate: false,
           }
 
           // 添加时间范围筛选
