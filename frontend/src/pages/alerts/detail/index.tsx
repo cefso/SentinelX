@@ -7,15 +7,16 @@ import { AggregateRuleModal } from '../../rules/aggregate'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/stores/toast-store'
-import { apiClient } from '@/services/api'
+import { apiClient, DisposeRecord } from '@/services/api'
 import { AlertResponse, AlertAggregateMembersResponse } from '@/types/alert'
 import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc } from '@/hooks/useCloudMetrics'
-import { Send, Circle, ChevronDown, Clock } from 'lucide-react'
+import { Send, Circle, ChevronDown, Clock, FileText } from 'lucide-react'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { buildTimeline, Timeline } from './Timeline'
 import { Labels } from './Labels'
 import { useAlertAI, AIActionsButton, AIAnalysisPanel } from './AIActions'
+import { DisposeModal } from '@/components/alerts/DisposeModal'
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,6 +26,7 @@ export function AlertDetailPage() {
   const [ruleInitialConditions, setRuleInitialConditions] = useState<Condition[]>([])
   const [showCreateRuleMenu, setShowCreateRuleMenu] = useState(false)
   const createRuleMenuRef = useRef<HTMLDivElement>(null)
+  const [showDisposeModal, setShowDisposeModal] = useState(false)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -150,6 +152,12 @@ export function AlertDetailPage() {
     queryFn: () => apiClient.get(`/alerts/${alert!.id}/aggregated-members`),
     enabled: !!alert?.id,
   })
+
+  const { data: disposeRecords = [] } = useQuery<DisposeRecord[]>({
+    queryKey: ['disposeRecords', alert?.id],
+    queryFn: () => apiClient.getDisposeRecords(alert!.id),
+    enabled: !!alert?.id,
+  })
   const aggregatedMembers = aggregateMembersData?.items ?? []
   const aggregateGroupCount = aggregateMembersData?.alert_count ?? 0
   const isAggregateParent = !alert?.aggregate_parent_id && aggregateGroupCount > 1
@@ -228,6 +236,14 @@ export function AlertDetailPage() {
               className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
             >
               解决
+            </button>
+          )}
+          {alert.status !== 'resolved' && (
+            <button
+              onClick={() => setShowDisposeModal(true)}
+              className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+            >
+              处置
             </button>
           )}
           {alert.trace_id && (
@@ -408,6 +424,40 @@ export function AlertDetailPage() {
               ))}
             </select>
           </div>
+
+          {/* 处置记录卡片 */}
+          {disposeRecords.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-gray-500" />
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">处置记录 ({disposeRecords.length})</h2>
+              </div>
+              <div className="relative">
+                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
+                <div className="space-y-3">
+                  {disposeRecords
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((record) => (
+                      <div key={record.id} className="relative pl-8">
+                        <div className="absolute left-0 top-1 w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center">
+                          <span className="text-xs text-purple-600 font-medium">
+                            {record.action === 'note' ? '备' : record.action === 'acknowledge' ? '确' : '解'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400 mb-0.5">
+                          {formatLocalDateTime(record.created_at)}
+                          {record.operator_name && <span className="ml-1">· {record.operator_name}</span>}
+                        </div>
+                        <div className="text-xs font-medium text-gray-700 mb-0.5">
+                          {record.action === 'note' ? '备注' : record.action === 'acknowledge' ? '确认' : '解决'}
+                        </div>
+                        <div className="text-sm text-gray-600">{record.comment}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 原始数据卡片 */}
           {alert.raw_data && Object.keys(alert.raw_data).length > 0 && (
@@ -600,6 +650,12 @@ export function AlertDetailPage() {
           }}
         />
       )}
+      <DisposeModal
+        open={showDisposeModal}
+        onOpenChange={setShowDisposeModal}
+        alertId={alert.id}
+        currentStatus={alert.status}
+      />
     </div>
   )
 }

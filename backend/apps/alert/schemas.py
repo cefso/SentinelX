@@ -222,6 +222,26 @@ class AlertHistoryResponse(BaseModel):
         from_attributes = True
 
 
+class DisposeRequest(BaseModel):
+    """处置请求"""
+    action: Literal['note', 'acknowledge', 'resolve', 'silence'] = Field(..., description="处置类型: note/acknowledge/resolve/silence")
+    comment: str = Field(..., min_length=1, max_length=1000, description="处理备注")
+
+
+class DisposeRecordResponse(BaseModel):
+    """处置记录响应"""
+    id: int = Field(..., description="记录ID")
+    alert_id: int = Field(..., description="告警ID")
+    action: str = Field(..., description="处置类型")
+    comment: str = Field(..., description="处理备注")
+    operator_id: Optional[int] = Field(None, description="操作人ID")
+    operator_name: Optional[str] = Field(None, description="操作人名称")
+    created_at: datetime = Field(..., description="创建时间")
+
+    class Config:
+        from_attributes = True
+
+
 # ============ Trace诊断Schema ============
 
 class TraceStep(BaseModel):
