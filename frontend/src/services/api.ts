@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth-store'
+import { AlertResponse } from '@/types/alert'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -260,6 +261,23 @@ class ApiClient {
     dismiss_all?: boolean
   }): Promise<WebhookLogDismissResponse> {
     return this.post('/webhook-logs/dismiss', data)
+  }
+
+  /**
+   * 获取告警列表（用于导出）
+   */
+  async getAlertsForExport(params: {
+    page?: number
+    page_size?: number
+    status?: string
+    severity?: string
+    source_id?: number
+    keyword?: string
+    fingerprint?: string
+    start_time?: string
+    end_time?: string
+  }): Promise<{ items: AlertResponse[]; total: number }> {
+    return this.get('/alerts', params)
   }
 }
 

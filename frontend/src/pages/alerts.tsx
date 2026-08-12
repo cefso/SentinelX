@@ -5,6 +5,9 @@ import { apiClient } from '@/services/api'
 import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
 import { formatLocalDateTime } from '@/utils/datetime'
+import { convertToCSV, downloadCSV, generateExportFilename } from '@/utils/export'
+import { ExportModal, ExportRange } from '@/components/alerts/ExportModal'
+import { toast } from '@/stores/toast-store'
 
 interface AlertSource {
   id: number
@@ -18,7 +21,7 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
@@ -36,6 +39,8 @@ export function AlertsPage() {
   })
   const [aggregateMode, setAggregateMode] = useState(true)
   const [showWebhookLogModal, setShowWebhookLogModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // 查询未忽略的 Webhook 错误日志数量
   const { data: webhookLogCountData } = useQuery({
@@ -131,6 +136,93 @@ export function AlertsPage() {
 
   const totalPages = Math.ceil((alerts?.total || 0) / pageSize)
 
+  // 导出处理函数
+  const handleExport = async (range: ExportRange, customDates?: { start: string; end: string }) => {
+    setIsExporting(true)
+    try {
+      let allAlerts: AlertResponse[] = []
+
+      // 构建查询参数
+      const baseParams: Record<string, any> = {
+        status: filters.status || undefined,
+        severity: filters.severity || undefined,
+        source_id: filters.sourceId || undefined,
+        keyword: filters.keyword || undefined,
+        fingerprint: filters.fingerprint || undefined,
+      }
+
+      if (range === 'current_page') {
+        // 导出当前页
+        allAlerts = alerts?.items || []
+      } else {
+        // 获取所有数据
+        let currentPage = 1
+        let hasMore = true
+
+        while (hasMore) {
+          const params: Record<string, any> = {
+            ...baseParams,
+            page: currentPage,
+            page_size: 1000,
+          }
+
+          // 添加时间范围筛选
+          if (range === 'last_7_days') {
+            const sevenDaysAgo = new Date()
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+            params.start_time = sevenDaysAgo.toISOString()
+          } else if (range === 'last_30_days') {
+            const thirtyDaysAgo = new Date()
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+            params.start_time = thirtyDaysAgo.toISOString()
+          } else if (range === 'custom' && customDates) {
+            params.start_time = new Date(customDates.start).toISOString()
+            params.end_time = new Date(customDates.end + 'T23:59:59').toISOString()
+          }
+
+          const result = await apiClient.getAlertsForExport(params)
+          allAlerts = [...allAlerts, ...result.items]
+
+          if (allAlerts.length >= result.total || result.items.length === 0) {
+            hasMore = false
+          } else {
+            currentPage++
+          }
+        }
+      }
+
+      if (allAlerts.length === 0) {
+        toast.warning('没有可导出的告警记录')
+        return
+      }
+
+      // 为每条告警获取处置记录
+      const alertsWithRecords = await Promise.all(
+        allAlerts.map(async (alert) => {
+          try {
+            const records = await apiClient.getDisposeRecords(alert.id)
+            return { ...alert, dispose_records: records }
+          } catch {
+            return { ...alert, dispose_records: [] }
+          }
+        })
+      )
+
+      // 转换为 CSV 并下载
+      const csv = convertToCSV(alertsWithRecords)
+      const filename = generateExportFilename()
+      downloadCSV(filename, csv)
+
+      toast.success(`成功导出 ${allAlerts.length} 条告警记录`)
+      setShowExportModal(false)
+    } catch (error) {
+      console.error('Export failed:', error)
+      toast.error('导出失败，请重试')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -215,6 +307,13 @@ export function AlertsPage() {
             >
               <RotateCcw className="w-3 h-3" />
               重置
+            </button>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
+            >
+              <Download className="w-4 h-4" />
+              导出
             </button>
           </div>
 
@@ -508,6 +607,16 @@ export function AlertsPage() {
       <WebhookLogModal
         open={showWebhookLogModal}
         onOpenChange={setShowWebhookLogModal}
+      />
+
+      {/* 导出弹窗 */}
+      <ExportModal
+        open={showExportModal}
+        onOpenChange={setShowExportModal}
+        currentCount={alerts?.items?.length || 0}
+        totalCount={alerts?.total || 0}
+        onExport={handleExport}
+        isExporting={isExporting}
       />
     </div>
   )
