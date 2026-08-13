@@ -258,6 +258,7 @@ class ApiClient {
 
   async dismissWebhookLogs(data: {
     id?: number
+    ids?: number[]
     dismiss_all?: boolean
   }): Promise<WebhookLogDismissResponse> {
     return this.post('/webhook-logs/dismiss', data)
