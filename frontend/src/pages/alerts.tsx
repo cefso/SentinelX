@@ -31,7 +31,7 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download, ArrowUp, ArrowDown } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
@@ -51,6 +51,8 @@ export function AlertsPage() {
   const [showWebhookLogModal, setShowWebhookLogModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [sortBy, setSortBy] = useState<'duration' | 'severity' | 'count'>('duration')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   // 查询未忽略的 Webhook 错误日志数量
   const { data: webhookLogCountData } = useQuery({
@@ -118,7 +120,7 @@ export function AlertsPage() {
   })
 
   const { data: alerts, isLoading, refetch } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
-    queryKey: ['alerts', page, pageSize, filters, aggregateMode],
+    queryKey: ['alerts', page, pageSize, filters, aggregateMode, sortBy, sortOrder],
     queryFn: () => apiClient.get('/alerts', {
       page,
       page_size: pageSize,
@@ -129,6 +131,8 @@ export function AlertsPage() {
       fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
       hide_aggregated_children: false,
+      sort_by: sortBy,
+      sort_order: sortOrder,
     }),
   })
 
@@ -350,6 +354,34 @@ export function AlertsPage() {
                 </button>
               ))}
             </div>
+
+            <span className="text-sm text-gray-500 py-1.5">排序:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {[
+                { value: 'duration', label: '触发时间' },
+                { value: 'severity', label: '严重级别' },
+                { value: 'count', label: '告警数量' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSortBy(opt.value as any)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    sortBy === opt.value
+                      ? 'bg-white shadow text-gray-900 font-medium'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="p-1.5 border rounded hover:bg-gray-50"
+              title={sortOrder === 'asc' ? '升序' : '降序'}
+            >
+              {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+            </button>
 
             <span className="text-sm text-gray-500 py-1.5">状态:</span>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
