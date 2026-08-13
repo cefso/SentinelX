@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Calendar } from 'lucide-react'
 
 export interface AdvancedFilterState {
   startTime: string
@@ -23,6 +23,7 @@ const timeRangeOptions = [
   { value: '1h', label: '最近1小时' },
   { value: '24h', label: '最近24小时' },
   { value: '7d', label: '最近7天' },
+  { value: 'custom', label: '自定义' },
 ]
 
 const durationOptions = [
@@ -33,7 +34,7 @@ const durationOptions = [
 ]
 
 function getTimeRange(value: string): { start_time?: string } {
-  if (!value) return {}
+  if (!value || value === 'custom') return {}
   const now = new Date()
   const start = new Date()
   switch (value) {
@@ -75,6 +76,9 @@ export function AdvancedFilters({
   sources,
 }: AdvancedFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isCustomTime, setIsCustomTime] = useState(false)
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
 
   // 计算当前选中的时间范围值
   const selectedTimeRange = filters.startTime ? getTimeRangeValue(filters.startTime) : ''
@@ -86,7 +90,34 @@ export function AdvancedFilters({
     filters.flappingOnly,
     filters.staleOnly,
     filters.assigneeId,
+    filters.sourceId,
   ].filter(Boolean).length
+
+  const handleTimeRangeSelect = (value: string) => {
+    if (value === 'custom') {
+      setIsCustomTime(true)
+      return
+    }
+    setIsCustomTime(false)
+    const range = getTimeRange(value)
+    onFilterChange({
+      ...filters,
+      startTime: range.start_time || '',
+      endTime: '',
+    })
+  }
+
+  const handleCustomTimeApply = () => {
+    if (customStartDate && customEndDate) {
+      const start = new Date(customStartDate)
+      const end = new Date(customEndDate + 'T23:59:59')
+      onFilterChange({
+        ...filters,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+      })
+    }
+  }
 
   return (
     <div className="border rounded-lg bg-gray-50">
@@ -120,15 +151,9 @@ export function AdvancedFilters({
               {timeRangeOptions.map(opt => (
                 <button
                   key={opt.value}
-                  onClick={() => {
-                    const range = getTimeRange(opt.value)
-                    onFilterChange({
-                      ...filters,
-                      startTime: range.start_time || '',
-                    })
-                  }}
+                  onClick={() => handleTimeRangeSelect(opt.value)}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    selectedTimeRange === opt.value
+                    (selectedTimeRange === opt.value && !isCustomTime) || (opt.value === 'custom' && isCustomTime)
                       ? 'bg-white shadow text-gray-900 font-medium'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
@@ -137,6 +162,46 @@ export function AdvancedFilters({
                 </button>
               ))}
             </div>
+
+            {/* 自定义时间选择 */}
+            {isCustomTime && (
+              <div className="flex items-center gap-2 mt-2 p-2 bg-white rounded-lg border">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="开始日期"
+                />
+                <span className="text-gray-500">至</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="结束日期"
+                />
+                <button
+                  onClick={handleCustomTimeApply}
+                  disabled={!customStartDate || !customEndDate}
+                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  应用
+                </button>
+                <button
+                  onClick={() => {
+                    setIsCustomTime(false)
+                    setCustomStartDate('')
+                    setCustomEndDate('')
+                    onFilterChange({ ...filters, startTime: '', endTime: '' })
+                  }}
+                  className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  取消
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 告警来源 */}
