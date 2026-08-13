@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import type { WebhookLogsResponse } from '@/services/api'
+import type { WebhookLogsResponse, WebhookLog } from '@/services/api'
 import { Modal } from '@/components/common/Modal'
-import { ScrollText } from 'lucide-react'
+import { ScrollText, Search, RotateCcw, ChevronLeft, ChevronRight, Square, CheckSquare } from 'lucide-react'
 
 interface WebhookLogModalProps {
   open: boolean
@@ -24,44 +24,124 @@ const statusColors: Record<string, string> = {
   server_error: 'text-red-600 bg-red-50',
 }
 
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'success', label: '成功' },
+  { value: 'parse_error', label: '解析失败' },
+  { value: 'format_error', label: '格式错误' },
+  { value: 'server_error', label: '服务器错误' },
+]
+
+const timeOptions = [
+  { value: '', label: '全部时间' },
+  { value: '1h', label: '最近1小时' },
+  { value: '24h', label: '最近24小时' },
+  { value: '7d', label: '最近7天' },
+]
+
 export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
   const queryClient = useQueryClient()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sourceFilter] = useState('')
+  const [timeFilter, setTimeFilter] = useState('')
+  const [keyword, setKeyword] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
-  const { data, isLoading } = useQuery<WebhookLogsResponse>({
-    queryKey: ['webhook-logs', page],
-    queryFn: () => apiClient.getWebhookLogs({ page, page_size: 20, dismissed: false }),
+  // 计算时间范围
+  const timeRange = useMemo(() => {
+    if (!timeFilter) return {}
+    const now = new Date()
+    const start = new Date()
+    switch (timeFilter) {
+      case '1h':
+        start.setHours(now.getHours() - 1)
+        break
+      case '24h':
+        start.setDate(now.getDate() - 1)
+        break
+      case '7d':
+        start.setDate(now.getDate() - 7)
+        break
+    }
+    return { start_time: start.toISOString() }
+  }, [timeFilter])
+
+  const { data, isLoading, refetch } = useQuery<WebhookLogsResponse>({
+    queryKey: ['webhook-logs', page, statusFilter, sourceFilter, timeFilter],
+    queryFn: () => apiClient.getWebhookLogs({
+      page,
+      page_size: 20,
+      dismissed: false,
+      status: statusFilter || undefined,
+      source_type: sourceFilter || undefined,
+      ...timeRange,
+    }),
     enabled: open,
   })
 
   const dismissMutation = useMutation({
-    mutationFn: (params: { id?: number; dismiss_all?: boolean }) =>
+    mutationFn: (params: { id?: number; ids?: number[]; dismiss_all?: boolean }) =>
       apiClient.dismissWebhookLogs(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhook-logs'] })
       queryClient.invalidateQueries({ queryKey: ['webhook-logs-count'] })
-      setSelectedId(null)
+      setSelectedIds(new Set())
+      setExpandedId(null)
     },
   })
 
   const logs = data?.items || []
-  const selectedLog = logs.find((log) => log.id === selectedId) || logs[0]
+  const totalPages = Math.ceil((data?.total || 0) / 20)
 
+  // 筛选后的日志（关键词搜索在前端进行）
+  const filteredLogs = useMemo(() => {
+    if (!keyword) return logs
+    const lowerKeyword = keyword.toLowerCase()
+    return logs.filter(log => {
+      const rawStr = JSON.stringify(log.raw_data).toLowerCase()
+      return rawStr.includes(lowerKeyword) ||
+             log.source_type.toLowerCase().includes(lowerKeyword) ||
+             (log.error_message && log.error_message.toLowerCase().includes(lowerKeyword))
+    })
+  }, [logs, keyword])
+
+  // 重置分页当筛选条件改变时
   useEffect(() => {
-    if (logs.length > 0 && !selectedId) {
-      setSelectedId(logs[0].id)
-    }
-  }, [logs, selectedId])
+    setPage(1)
+    setSelectedIds(new Set())
+  }, [statusFilter, sourceFilter, timeFilter])
 
-  const handleDismissCurrent = () => {
-    if (selectedLog) {
-      dismissMutation.mutate({ id: selectedLog.id })
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredLogs.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredLogs.map(log => log.id)))
     }
+  }
+
+  const handleSelectOne = (id: number) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const handleDismissSelected = () => {
+    if (selectedIds.size === 0) return
+    dismissMutation.mutate({ ids: Array.from(selectedIds) })
   }
 
   const handleDismissAll = () => {
     dismissMutation.mutate({ dismiss_all: true })
+  }
+
+  const handleDismissSingle = (id: number) => {
+    dismissMutation.mutate({ id })
   }
 
   const formatDate = (dateString?: string) => {
@@ -73,122 +153,275 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
     }
   }
 
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id)
+  }
+
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
       title={`Webhook 接收日志 (${data?.total || 0})`}
-      size="xl"
+      size="full"
     >
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      ) : logs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-          <ScrollText className="w-12 h-12 mb-4 text-gray-300" />
-          <p>暂无 Webhook 日志</p>
-        </div>
       ) : (
         <>
-          {/* 操作栏 */}
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1">
-              <select
-                value={selectedLog?.id || ''}
-                onChange={(e) => setSelectedId(Number(e.target.value))}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {logs.map((log) => (
-                  <option key={log.id} value={log.id}>
-                    {formatDate(log.created_at)} - {log.source_type} - {statusLabels[log.status] || log.status}
-                  </option>
-                ))}
-              </select>
+          {/* 筛选栏 */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            {/* 搜索框 */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="搜索日志内容..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
-            <button
-              onClick={handleDismissCurrent}
-              disabled={!selectedLog || dismissMutation.isPending}
-              className="px-4 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50"
+
+            {/* 状态筛选 */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {dismissMutation.isPending ? '处理中...' : '忽略当前'}
-            </button>
-            <button
-              onClick={handleDismissAll}
-              disabled={dismissMutation.isPending}
-              className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+              {statusOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+
+            {/* 时间筛选 */}
+            <select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {dismissMutation.isPending ? '处理中...' : '忽略全部'}
+              {timeOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+
+            {/* 刷新按钮 */}
+            <button
+              onClick={() => refetch()}
+              className="px-3 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              title="刷新"
+            >
+              <RotateCcw className="w-4 h-4" />
             </button>
           </div>
 
-          {/* 详情卡片 */}
-          {selectedLog && (
-            <div className="border rounded-lg p-4 space-y-4 overflow-y-auto max-h-[50vh]">
-              {/* 基本信息 */}
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">时间:</span>
-                  <span className="font-medium">{formatDate(selectedLog.created_at)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">来源:</span>
-                  <span className="font-medium">{selectedLog.source_type}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">状态:</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[selectedLog.status] || ''}`}>
-                    {statusLabels[selectedLog.status] || selectedLog.status}
-                  </span>
-                </div>
-              </div>
-
-              {/* 原始数据 */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">原始数据</h4>
-                <pre className="p-3 bg-gray-50 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-64">
-                  {JSON.stringify(selectedLog.raw_data, null, 2)}
-                </pre>
-              </div>
-
-              {/* 错误详情 */}
-              {selectedLog.error_message && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">错误详情</h4>
-                  <pre className="p-3 bg-red-50 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-48 text-red-800">
-                    {selectedLog.error_message}
-                  </pre>
-                </div>
-              )}
+          {filteredLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+              <ScrollText className="w-12 h-12 mb-4 text-gray-300" />
+              <p>暂无 Webhook 日志</p>
             </div>
-          )}
-
-          {/* 分页 */}
-          {data && data.total > 20 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <span className="text-sm text-gray-500">
-                共 {data.total} 条，第 {page} / {Math.ceil(data.total / 20)} 页
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  上一页
-                </button>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page >= Math.ceil(data.total / 20)}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  下一页
-                </button>
+          ) : (
+            <>
+              {/* 表格 */}
+              <div className="border rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="w-10 px-3 py-3">
+                        <button onClick={handleSelectAll} className="flex items-center justify-center">
+                          {selectedIds.size === filteredLogs.length && filteredLogs.length > 0 ? (
+                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">来源</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">告警ID</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredLogs.map((log) => (
+                      <LogRow
+                        key={log.id}
+                        log={log}
+                        isSelected={selectedIds.has(log.id)}
+                        isExpanded={expandedId === log.id}
+                        onSelect={() => handleSelectOne(log.id)}
+                        onToggleExpand={() => toggleExpand(log.id)}
+                        onDismiss={() => handleDismissSingle(log.id)}
+                        formatDate={formatDate}
+                        isDismissing={dismissMutation.isPending}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+
+              {/* 底部操作栏 */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="flex items-center gap-4">
+                  {selectedIds.size > 0 && (
+                    <button
+                      onClick={handleDismissSelected}
+                      disabled={dismissMutation.isPending}
+                      className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {dismissMutation.isPending ? '处理中...' : `忽略选中 (${selectedIds.size})`}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleDismissAll}
+                    disabled={dismissMutation.isPending}
+                    className="px-4 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50"
+                  >
+                    {dismissMutation.isPending ? '处理中...' : '忽略全部'}
+                  </button>
+                </div>
+
+                {/* 分页 */}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">
+                      共 {data?.total || 0} 条，第 {page} / {totalPages} 页
+                    </span>
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (page <= 3) {
+                        pageNum = i + 1
+                      } else if (page >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = page - 2 + i
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-8 h-8 text-sm rounded border ${
+                            page === pageNum
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </>
       )}
     </Modal>
+  )
+}
+
+// 日志行组件
+function LogRow({
+  log,
+  isSelected,
+  isExpanded,
+  onSelect,
+  onToggleExpand,
+  onDismiss,
+  formatDate,
+  isDismissing,
+}: {
+  log: WebhookLog
+  isSelected: boolean
+  isExpanded: boolean
+  onSelect: () => void
+  onToggleExpand: () => void
+  onDismiss: () => void
+  formatDate: (date?: string) => string
+  isDismissing: boolean
+}) {
+  return (
+    <>
+      <tr
+        className={`hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+        onClick={onToggleExpand}
+      >
+        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+          <button onClick={onSelect} className="flex items-center justify-center">
+            {isSelected ? (
+              <CheckSquare className="w-4 h-4 text-blue-600" />
+            ) : (
+              <Square className="w-4 h-4 text-gray-400" />
+            )}
+          </button>
+        </td>
+        <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
+          {formatDate(log.created_at)}
+        </td>
+        <td className="px-3 py-3 text-sm text-gray-500">
+          {log.source_type}
+        </td>
+        <td className="px-3 py-3">
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[log.status] || ''}`}>
+            {statusLabels[log.status] || log.status}
+          </span>
+        </td>
+        <td className="px-3 py-3 text-sm text-gray-500">
+          {log.alert_id || '-'}
+        </td>
+        <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onDismiss}
+            disabled={isDismissing}
+            className="text-sm text-orange-600 hover:text-orange-800 disabled:opacity-50"
+          >
+            忽略
+          </button>
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={6} className="px-3 py-3 bg-gray-50">
+            <div className="space-y-3">
+              {/* 原始数据 */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 mb-1">原始数据</h4>
+                <pre className="p-3 bg-white border rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-48">
+                  {JSON.stringify(log.raw_data, null, 2)}
+                </pre>
+              </div>
+              {/* 错误详情 */}
+              {log.error_message && (
+                <div>
+                  <h4 className="text-xs font-medium text-gray-500 mb-1">错误详情</h4>
+                  <pre className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-32 text-red-800">
+                    {log.error_message}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
