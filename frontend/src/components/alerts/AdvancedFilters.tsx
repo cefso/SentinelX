@@ -110,7 +110,7 @@ export function AdvancedFilters({
   const handleCustomTimeApply = () => {
     if (customStartDate && customEndDate) {
       const start = new Date(customStartDate)
-      const end = new Date(customEndDate + 'T23:59:59')
+      const end = new Date(customEndDate)
       onFilterChange({
         ...filters,
         startTime: start.toISOString(),
@@ -168,19 +168,19 @@ export function AdvancedFilters({
               <div className="flex items-center gap-2 mt-2 p-2 bg-white rounded-lg border">
                 <Calendar className="w-4 h-4 text-gray-500" />
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
                   className="px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="开始日期"
+                  placeholder="开始时间"
                 />
                 <span className="text-gray-500">至</span>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
                   className="px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="结束日期"
+                  placeholder="结束时间"
                 />
                 <button
                   onClick={handleCustomTimeApply}
