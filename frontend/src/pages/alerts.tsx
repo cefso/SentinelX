@@ -7,6 +7,7 @@ import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { convertToCSV, downloadCSV, generateExportFilename } from '@/utils/export'
 import { ExportModal, ExportRange } from '@/components/alerts/ExportModal'
+import { AdvancedFilters, AdvancedFilterState } from '@/components/alerts/AdvancedFilters'
 import { toast } from '@/stores/toast-store'
 
 /**
@@ -43,7 +44,6 @@ export function AlertsPage() {
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
-    sourceId: '' as number | '',
     keyword: '',
     fingerprint: '',
   })
@@ -53,6 +53,15 @@ export function AlertsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [sortBy, setSortBy] = useState<'duration' | 'severity' | 'count'>('duration')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterState>({
+    startTime: '',
+    endTime: '',
+    maxFiredAt: '',
+    flappingOnly: false,
+    staleOnly: false,
+    assigneeId: '',
+    sourceId: '',
+  })
 
   // 查询未忽略的 Webhook 错误日志数量
   const { data: webhookLogCountData } = useQuery({
@@ -120,23 +129,34 @@ export function AlertsPage() {
   })
 
   const { data: alerts, isLoading, refetch } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
-    queryKey: ['alerts', page, pageSize, filters, aggregateMode, sortBy, sortOrder],
+    queryKey: ['alerts', page, pageSize, filters, aggregateMode, sortBy, sortOrder, advancedFilters],
     queryFn: () => apiClient.get('/alerts', {
       page,
       page_size: pageSize,
       status: filters.status || undefined,
       severity: filters.severity || undefined,
-      source_id: filters.sourceId || undefined,
+      source_id: advancedFilters.sourceId || undefined,
       keyword: filters.keyword || undefined,
       fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
       hide_aggregated_children: false,
       sort_by: sortBy,
       sort_order: sortOrder,
+      start_time: advancedFilters.startTime || undefined,
+      end_time: advancedFilters.endTime || undefined,
+      max_fired_at: advancedFilters.maxFiredAt || undefined,
+      flapping_only: advancedFilters.flappingOnly || undefined,
+      stale_only: advancedFilters.staleOnly || undefined,
+      assignee_id: advancedFilters.assigneeId || undefined,
     }),
   })
 
   const { data: cloudMetricsMap } = useCloudMetricsMap()
+
+  const { data: users = [] } = useQuery<{ id: number; username: string }[]>({
+    queryKey: ['users-for-assign'],
+    queryFn: () => apiClient.get('/users'),
+  })
 
   const getProductDisplayName = (namespace: string) => {
     if (!cloudMetricsMap || !namespace) return namespace || '-'
@@ -160,7 +180,7 @@ export function AlertsPage() {
       const baseParams: Record<string, any> = {
         status: filters.status || undefined,
         severity: filters.severity || undefined,
-        source_id: filters.sourceId || undefined,
+        source_id: advancedFilters.sourceId || undefined,
         keyword: filters.keyword || undefined,
         fingerprint: filters.fingerprint || undefined,
       }
@@ -318,7 +338,19 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '', fingerprint: '' })}
+              onClick={() => {
+                setFilters({ status: '', severity: '', keyword: '', fingerprint: '' })
+                setAdvancedFilters({
+                  startTime: '',
+                  endTime: '',
+                  maxFiredAt: '',
+                  flappingOnly: false,
+                  staleOnly: false,
+                  assigneeId: '',
+                  sourceId: '',
+                })
+                setPage(1)
+              }}
               className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
@@ -431,34 +463,6 @@ export function AlertsPage() {
               ))}
             </div>
 
-            <span className="text-sm text-gray-500 py-1.5">来源:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              <button
-                key="all"
-                onClick={() => { setFilters({ ...filters, sourceId: '' }); setPage(1); }}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  filters.sourceId === ''
-                    ? 'bg-white shadow text-gray-900 font-medium'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                全部
-              </button>
-              {sources.map(source => (
-                <button
-                  key={source.id}
-                  onClick={() => { setFilters({ ...filters, sourceId: source.id }); setPage(1); }}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    filters.sourceId === source.id
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  {source.name}
-                </button>
-              ))}
-            </div>
-
             {/* 指纹搜索 */}
             <div className="flex items-center gap-2 ml-auto">
               <input
@@ -469,6 +473,19 @@ export function AlertsPage() {
                 className="px-3 py-1 text-sm border rounded-md w-48"
               />
             </div>
+          </div>
+
+          {/* 高级筛选 */}
+          <div className="mt-3">
+            <AdvancedFilters
+              filters={advancedFilters}
+              onFilterChange={(newFilters) => {
+                setAdvancedFilters(newFilters)
+                setPage(1)
+              }}
+              users={users}
+              sources={sources}
+            />
           </div>
         </div>
 
