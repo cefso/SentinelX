@@ -8,12 +8,14 @@ export interface AdvancedFilterState {
   flappingOnly: boolean
   staleOnly: boolean
   assigneeId: '' | number
+  sourceId: '' | number
 }
 
 interface AdvancedFiltersProps {
   filters: AdvancedFilterState
   onFilterChange: (filters: AdvancedFilterState) => void
   users: { id: number; username: string }[]
+  sources: { id: number; name: string }[]
 }
 
 const timeRangeOptions = [
@@ -70,6 +72,7 @@ export function AdvancedFilters({
   filters,
   onFilterChange,
   users,
+  sources,
 }: AdvancedFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -134,6 +137,24 @@ export function AdvancedFilters({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* 告警来源 */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">告警来源</label>
+            <select
+              value={filters.sourceId}
+              onChange={(e) => onFilterChange({
+                ...filters,
+                sourceId: e.target.value ? Number(e.target.value) : '',
+              })}
+              className="w-full max-w-xs px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">全部来源</option>
+              {sources.map(source => (
+                <option key={source.id} value={source.id}>{source.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* 持续时长筛选 */}

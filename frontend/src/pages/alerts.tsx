@@ -44,7 +44,6 @@ export function AlertsPage() {
   const [filters, setFilters] = useState({
     status: '',
     severity: '',
-    sourceId: '' as number | '',
     keyword: '',
     fingerprint: '',
   })
@@ -61,6 +60,7 @@ export function AlertsPage() {
     flappingOnly: false,
     staleOnly: false,
     assigneeId: '',
+    sourceId: '',
   })
 
   // 查询未忽略的 Webhook 错误日志数量
@@ -135,7 +135,7 @@ export function AlertsPage() {
       page_size: pageSize,
       status: filters.status || undefined,
       severity: filters.severity || undefined,
-      source_id: filters.sourceId || undefined,
+      source_id: advancedFilters.sourceId || undefined,
       keyword: filters.keyword || undefined,
       fingerprint: filters.fingerprint || undefined,
       aggregate: aggregateMode || undefined,
@@ -180,7 +180,7 @@ export function AlertsPage() {
       const baseParams: Record<string, any> = {
         status: filters.status || undefined,
         severity: filters.severity || undefined,
-        source_id: filters.sourceId || undefined,
+        source_id: advancedFilters.sourceId || undefined,
         keyword: filters.keyword || undefined,
         fingerprint: filters.fingerprint || undefined,
       }
@@ -338,7 +338,19 @@ export function AlertsPage() {
               搜索
             </button>
             <button
-              onClick={() => setFilters({ status: '', severity: '', sourceId: '', keyword: '', fingerprint: '' })}
+              onClick={() => {
+                setFilters({ status: '', severity: '', keyword: '', fingerprint: '' })
+                setAdvancedFilters({
+                  startTime: '',
+                  endTime: '',
+                  maxFiredAt: '',
+                  flappingOnly: false,
+                  staleOnly: false,
+                  assigneeId: '',
+                  sourceId: '',
+                })
+                setPage(1)
+              }}
               className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
@@ -451,34 +463,6 @@ export function AlertsPage() {
               ))}
             </div>
 
-            <span className="text-sm text-gray-500 py-1.5">来源:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              <button
-                key="all"
-                onClick={() => { setFilters({ ...filters, sourceId: '' }); setPage(1); }}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  filters.sourceId === ''
-                    ? 'bg-white shadow text-gray-900 font-medium'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                全部
-              </button>
-              {sources.map(source => (
-                <button
-                  key={source.id}
-                  onClick={() => { setFilters({ ...filters, sourceId: source.id }); setPage(1); }}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    filters.sourceId === source.id
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  {source.name}
-                </button>
-              ))}
-            </div>
-
             {/* 指纹搜索 */}
             <div className="flex items-center gap-2 ml-auto">
               <input
@@ -500,6 +484,7 @@ export function AlertsPage() {
                 setPage(1)
               }}
               users={users}
+              sources={sources}
             />
           </div>
         </div>
