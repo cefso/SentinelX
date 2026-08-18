@@ -654,11 +654,10 @@ async def change_password(
 
 
 @router.post("/users/{user_id}/reset-permissions")
-@require_permission("users:write")
 async def reset_user_permissions(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:write")),
 ):
     """重置用户权限 - 删除用户的所有租户关联"""
     # 不能重置自己的权限
