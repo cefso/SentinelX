@@ -522,29 +522,29 @@ async def create_user(
 
     # 检查用户名唯一性
     existing = await db.execute(
-        select(User).where(User.username == request.username)
+        select(User.id).where(User.username == request.username).limit(1)
     )
-    if existing.scalar_one_or_none():
+    if existing.scalar():
         raise HTTPException(status_code=409, detail="Username already exists")
 
     # 检查邮箱唯一性
     existing = await db.execute(
-        select(User).where(User.email == request.email)
+        select(User.id).where(User.email == request.email).limit(1)
     )
-    if existing.scalar_one_or_none():
+    if existing.scalar():
         raise HTTPException(status_code=409, detail="Email already exists")
 
     # 获取默认角色
     role_result = await db.execute(
-        select(Role).where(Role.tenant_id == tenant_id, Role.code == "viewer")
+        select(Role).where(Role.tenant_id == tenant_id, Role.code == "viewer").limit(1)
     )
-    default_role = role_result.scalar_one_or_none()
+    default_role = role_result.scalar()
     if not default_role:
         # 如果没有viewer角色，获取第一个可用角色
         role_result = await db.execute(
-            select(Role).where(Role.tenant_id == tenant_id).order_by(Role.id)
+            select(Role).where(Role.tenant_id == tenant_id).order_by(Role.id).limit(1)
         )
-        default_role = role_result.scalar_one_or_none()
+        default_role = role_result.scalar()
 
     user = User(
         username=request.username,

@@ -120,16 +120,16 @@ class AuthService:
         """
         # 检查用户名唯一性
         result = await self.db.execute(
-            select(User).where(User.username == username)
+            select(User.id).where(User.username == username).limit(1)
         )
-        if result.scalar_one_or_none():
+        if result.scalar():
             raise AuthenticationError("Username already exists")
 
         # 检查邮箱唯一性
         result = await self.db.execute(
-            select(User).where(User.email == email)
+            select(User.id).where(User.email == email).limit(1)
         )
-        if result.scalar_one_or_none():
+        if result.scalar():
             raise AuthenticationError("Email already exists")
 
         # 创建用户
@@ -158,15 +158,15 @@ class AuthService:
 
             # 获取 viewer 角色（默认普通用户角色）
             result = await self.db.execute(
-                select(Role).where(Role.tenant_id == tenant_id, Role.code == "viewer")
+                select(Role).where(Role.tenant_id == tenant_id, Role.code == "viewer").limit(1)
             )
-            viewer_role = result.scalar_one_or_none()
+            viewer_role = result.scalar()
             if not viewer_role:
                 # 如果没有 viewer 角色，获取该租户第一个角色
                 result = await self.db.execute(
-                    select(Role).where(Role.tenant_id == tenant_id).order_by(Role.id)
+                    select(Role).where(Role.tenant_id == tenant_id).order_by(Role.id).limit(1)
                 )
-                viewer_role = result.scalar_one_or_none()
+                viewer_role = result.scalar()
 
             if viewer_role:
                 user_tenant = UserTenant(
