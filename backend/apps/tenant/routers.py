@@ -653,6 +653,36 @@ async def change_password(
     return {"message": "Password updated successfully"}
 
 
+@router.post("/users/{user_id}/reset-permissions")
+@require_permission("users:write")
+async def reset_user_permissions(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """重置用户权限 - 删除用户的所有租户关联"""
+    # 不能重置自己的权限
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot reset your own permissions")
+
+    # 查找用户的所有租户关联
+    result = await db.execute(
+        select(UserTenant).where(UserTenant.user_id == user_id)
+    )
+    user_tenants = result.scalars().all()
+
+    if not user_tenants:
+        raise HTTPException(status_code=404, detail="User has no tenant associations")
+
+    # 删除所有关联
+    for ut in user_tenants:
+        await db.delete(ut)
+
+    await db.commit()
+
+    return {"message": "User permissions reset successfully", "removed_count": len(user_tenants)}
+
+
 @router.delete("/users/{user_id}")
 async def remove_user_from_tenant(
     user_id: int,
