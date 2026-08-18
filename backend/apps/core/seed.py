@@ -68,7 +68,7 @@ async def seed_default_data():
                     tenant_id=None,
                     name="超级管理员",
                     code="system_admin",
-                    description="系统级超级管理员，拥有所有权限",
+                    description="系统级超级管理员，拥有所有权限，可管理所有租户",
                     permissions=["*"],
                     is_builtin=True,
                     scope="system",
@@ -84,12 +84,12 @@ async def seed_default_data():
                 ),
                 Role(
                     tenant_id=None,
-                    name="观察者",
+                    name="只读用户",
                     code="viewer",
-                    description="只读用户",
+                    description="只读用户，仅查看权限",
                     permissions=["read"],
                     is_builtin=True,
-                    scope="system",
+                    scope="tenant",
                 ),
             ]
             for role in system_roles:
@@ -98,15 +98,6 @@ async def seed_default_data():
 
             # 创建租户级角色
             tenant_roles = [
-                Role(
-                    tenant_id=tenant.id,
-                    name="租户管理员",
-                    code="tenant_admin",
-                    description="租户内管理员",
-                    permissions=["*"],
-                    is_builtin=False,
-                    scope="tenant",
-                ),
                 Role(
                     tenant_id=tenant.id,
                     name="运维人员",
@@ -131,16 +122,11 @@ async def seed_default_data():
                         "cloud_metrics:read", "cloud_metrics:write", "cloud_metrics:delete",
                         # AI
                         "ai:read", "ai:write",
+                        # 用户管理
+                        "users:read", "users:write",
+                        # API Key
+                        "api_keys:read", "api_keys:write", "api_keys:delete",
                     ],
-                    is_builtin=False,
-                    scope="tenant",
-                ),
-                Role(
-                    tenant_id=tenant.id,
-                    name="只读用户",
-                    code="tenant_viewer",
-                    description="只读用户，仅查看权限",
-                    permissions=["read"],
                     is_builtin=False,
                     scope="tenant",
                 ),
