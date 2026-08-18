@@ -45,10 +45,9 @@ async def list_public_tenants(
 # ============ 租户管理 ============
 
 @router.get("/tenants", response_model=list[TenantResponse])
-@require_permission("tenants:read")
 async def list_tenants(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("tenants:read")),
 ):
     """获取租户列表"""
     result = await db.execute(
@@ -59,7 +58,6 @@ async def list_tenants(
 
 
 @router.post("/tenants", response_model=TenantResponse)
-@require_permission("tenants:write")
 async def create_tenant(
     request: TenantCreate,
     db: AsyncSession = Depends(get_db),
@@ -131,7 +129,6 @@ async def get_current_tenant(
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantResponse)
-@require_permission("tenants:read")
 async def get_tenant(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
@@ -164,7 +161,6 @@ async def get_tenant(
 
 
 @router.put("/tenants/{tenant_id}", response_model=TenantResponse)
-@require_permission("tenants:write")
 async def update_tenant(
     tenant_id: int,
     request: TenantUpdate,
@@ -188,7 +184,6 @@ async def update_tenant(
 # ============ Webhook Key 管理 ============
 
 @router.post("/tenants/{tenant_id}/webhook-key")
-@require_permission("tenants:write")
 async def generate_webhook_key(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
@@ -216,7 +211,6 @@ async def generate_webhook_key(
 
 
 @router.get("/tenants/{tenant_id}/webhook-key")
-@require_permission("tenants:read")
 async def get_webhook_key_info(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
@@ -450,7 +444,6 @@ async def reject_user(
 # ============ 用户管理 ============
 
 @router.get("/users", response_model=list[UserResponse])
-@require_permission("users:read")
 async def list_users(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -472,7 +465,6 @@ async def list_users(
 
 
 @router.post("/users", response_model=UserResponse)
-@require_permission("users:write")
 async def create_user(
     request: UserCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -534,7 +526,6 @@ async def create_user(
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
-@require_permission("users:read")
 async def get_user(
     user_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -556,7 +547,6 @@ async def get_user(
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)
-@require_permission("users:write")
 async def update_user(
     user_id: int,
     request: UserUpdate,
@@ -586,7 +576,6 @@ async def update_user(
 
 
 @router.put("/users/{user_id}/role")
-@require_permission("users:write")
 async def update_user_role(
     user_id: int,
     request: UserRoleUpdate,
@@ -636,7 +625,6 @@ async def update_user_role(
 
 
 @router.put("/users/{user_id}/password")
-@require_permission("users:write")
 async def change_password(
     user_id: int,
     request: UserPasswordUpdate,
@@ -666,7 +654,6 @@ async def change_password(
 
 
 @router.delete("/users/{user_id}")
-@require_permission("users:delete")
 async def remove_user_from_tenant(
     user_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -697,7 +684,6 @@ async def remove_user_from_tenant(
 
 
 @router.post("/users/{user_id}/activate")
-@require_permission("users:write")
 async def activate_user(
     user_id: int,
     is_active: bool,
@@ -735,7 +721,6 @@ async def activate_user(
 # ============ 角色管理 ============
 
 @router.get("/roles", response_model=list[RoleResponse])
-@require_permission("roles:read")
 async def list_roles(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -756,7 +741,6 @@ async def list_roles(
 
 
 @router.post("/roles", response_model=RoleResponse)
-@require_permission("roles:write")
 async def create_role(
     request: RoleCreate,
     tenant_id: int = Depends(get_current_tenant_id),

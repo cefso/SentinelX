@@ -234,7 +234,6 @@ async def get_my_permissions(
 # ============ API Key管理 ============
 
 @router.post("/auth/api-keys")
-@require_permission("api_keys:write")
 async def create_api_key(
     name: str,
     expires_days: Optional[int] = None,
@@ -261,7 +260,6 @@ async def create_api_key(
 
 
 @router.get("/auth/api-keys")
-@require_permission("api_keys:read")
 async def list_api_keys(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -275,7 +273,6 @@ async def list_api_keys(
 
 
 @router.delete("/auth/api-keys/{key_id}")
-@require_permission("api_keys:delete")
 async def revoke_api_key(
     key_id: str,
     current_user: User = Depends(get_current_user),

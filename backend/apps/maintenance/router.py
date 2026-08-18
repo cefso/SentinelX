@@ -16,7 +16,6 @@ router = APIRouter()
 # ============ 维护窗口管理 ============
 
 @router.get("/maintenance/windows")
-@require_permission("maintenance:read")
 async def list_maintenance_windows(
     active_only: bool = False,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -46,7 +45,6 @@ async def list_maintenance_windows(
 
 
 @router.post("/maintenance/windows")
-@require_permission("maintenance:write")
 async def create_maintenance_window(
     name: str,
     start_time: datetime,
@@ -83,7 +81,6 @@ async def create_maintenance_window(
 
 
 @router.get("/maintenance/windows/{window_id}")
-@require_permission("maintenance:read")
 async def get_maintenance_window(
     window_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -111,7 +108,6 @@ async def get_maintenance_window(
 
 
 @router.put("/maintenance/windows/{window_id}")
-@require_permission("maintenance:write")
 async def update_maintenance_window(
     window_id: int,
     name: Optional[str] = None,
@@ -150,7 +146,6 @@ async def update_maintenance_window(
 
 
 @router.delete("/maintenance/windows/{window_id}")
-@require_permission("maintenance:delete")
 async def delete_maintenance_window(
     window_id: int,
     tenant_id: int = Depends(get_current_tenant_id),

@@ -34,7 +34,6 @@ router = APIRouter()
 
 
 @router.get("/ai/config", response_model=AIConfigResponse)
-@require_permission("ai:read")
 async def get_ai_config(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -45,7 +44,6 @@ async def get_ai_config(
 
 
 @router.put("/ai/config", response_model=AIConfigResponse)
-@require_permission("ai:write")
 async def update_ai_config(
     body: AIConfigUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -65,7 +63,6 @@ async def get_ai_providers(
 
 
 @router.post("/ai/models", response_model=ListModelsResponse)
-@require_permission("ai:write")
 async def list_ai_models(
     body: ListModelsRequest,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -99,7 +96,6 @@ async def list_ai_models(
 
 
 @router.get("/ai/tasks/{task_id}", response_model=AITaskStatusResponse)
-@require_permission("ai:read")
 async def get_ai_task_status(
     task_id: str,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -115,7 +111,6 @@ async def get_ai_task_status(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
-@require_permission("ai:write")
 async def analyze_alert(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -132,7 +127,6 @@ async def analyze_alert(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
-@require_permission("ai:write")
 async def polish_alert_content(
     alert_id: int,
     template: Optional[str] = None,
@@ -154,7 +148,6 @@ async def polish_alert_content(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
-@require_permission("ai:write")
 async def suggest_alert_actions(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -171,7 +164,6 @@ async def suggest_alert_actions(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
-@require_permission("ai:write")
 async def predict_alert_impact(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),

@@ -108,7 +108,6 @@ async def _validate_template_ids(
 # ============ 规则管理 ============
 
 @router.get("/rules", response_model=list[RuleResponse])
-@require_permission("rules:read")
 async def list_rules(
     is_active: Optional[bool] = None,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -130,7 +129,6 @@ async def list_rules(
 
 
 @router.post("/rules", response_model=RuleResponse)
-@require_permission("rules:write")
 async def create_rule(
     request: RuleCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -401,7 +399,6 @@ router.add_api_route("/rules/aggregate-rules/{rule_id}", _delete_aggregate, meth
 
 
 @router.get("/rules/{rule_id}", response_model=RuleResponse)
-@require_permission("rules:read")
 async def get_rule(
     rule_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -421,7 +418,6 @@ async def get_rule(
 
 
 @router.put("/rules/{rule_id}", response_model=RuleResponse)
-@require_permission("rules:write")
 async def update_rule(
     rule_id: int,
     request: RuleUpdate,
@@ -456,7 +452,6 @@ async def update_rule(
 
 
 @router.delete("/rules/{rule_id}")
-@require_permission("rules:delete")
 async def delete_rule(
     rule_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -479,7 +474,6 @@ async def delete_rule(
 
 
 @router.post("/rules/test", response_model=RuleTestResponse)
-@require_permission("rules:execute")
 async def test_rule(
     request: RuleTestRequest,
     tenant_id: int = Depends(get_current_tenant_id),
