@@ -1145,7 +1145,7 @@ async def update_alert(
     request: AlertUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(require_permission("alerts:write")),
 ):
     """更新告警"""
     result = await db.execute(
@@ -1184,7 +1184,7 @@ async def dispose_alert(
     request: DisposeRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(require_permission("alerts:write")),
 ):
     """处置告警 - 添加处理记录并可选更新状态"""
     result = await db.execute(
@@ -1443,6 +1443,7 @@ async def batch_delete_cloud_metrics(
     ids: List[int],
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
     """批量删除云产品指标（软删除，设置为 inactive）"""
     if not ids:
@@ -1498,6 +1499,7 @@ async def sync_cloud_metrics(
     alert_ids: Optional[List[int]] = None,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """
     同步云产品指标（从告警中提取）
@@ -1515,6 +1517,7 @@ async def sync_cloud_metrics(
 async def sync_all_cloud_metrics(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """全量同步：从所有告警中提取云产品指标"""
     from apps.alert.services.cloud_metrics_sync import SyncService
@@ -1529,6 +1532,7 @@ async def create_cloud_metric(
     request: CloudProductMetricCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """创建云产品指标"""
     metric = CloudProductMetric(
@@ -1565,6 +1569,7 @@ async def update_cloud_metric(
     request: CloudProductMetricUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """更新云产品指标"""
     metric = await db.get(CloudProductMetric, metric_id)
@@ -1584,6 +1589,7 @@ async def delete_cloud_metric(
     metric_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
     """删除云产品指标（软删除，设置为 inactive）"""
     metric = await db.get(CloudProductMetric, metric_id)
@@ -1683,6 +1689,7 @@ async def dismiss_webhook_logs(
     request: WebhookLogDismissRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alerts:write")),
 ):
     """忽略 Webhook 日志"""
     if request.dismiss_all:

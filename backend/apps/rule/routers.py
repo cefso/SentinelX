@@ -275,6 +275,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         request: StrategyRuleCreate,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:write")),
     ):
         """创建策略规则"""
         slug = _slugify(request.name)
@@ -319,6 +320,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         request: StrategyRuleUpdate,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:write")),
     ):
         """更新策略规则"""
         result = await db.execute(
@@ -352,6 +354,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         rule_id: int,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:delete")),
     ):
         """删除策略规则"""
         result = await db.execute(

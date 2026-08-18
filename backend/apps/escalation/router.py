@@ -48,7 +48,7 @@ async def manual_escalate(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("escalation:write")),
 ):
     """
     手动升级告警
@@ -91,7 +91,7 @@ async def manual_escalate(
 async def run_escalation_check(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("escalation:write")),
 ):
     """
     手动触发升级检查

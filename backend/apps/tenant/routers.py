@@ -61,9 +61,9 @@ async def list_tenants(
 async def create_tenant(
     request: TenantCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_superuser()),
 ):
-    """创建租户"""
+    """创建租户（系统管理员专属）"""
     # 检查slug唯一性
     existing = await db.execute(
         select(Tenant).where(Tenant.slug == request.slug)
@@ -165,9 +165,9 @@ async def update_tenant(
     tenant_id: int,
     request: TenantUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_superuser()),
 ):
-    """更新租户"""
+    """更新租户（系统管理员专属）"""
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -470,7 +470,7 @@ async def create_user(
     request: UserCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:write")),
 ):
     """创建用户"""
     # 检查用户名唯一性
@@ -553,6 +553,7 @@ async def update_user(
     request: UserUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users:write")),
 ):
     """更新用户"""
     result = await db.execute(
@@ -581,7 +582,7 @@ async def update_user_role(
     user_id: int,
     request: UserRoleUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:write")),
 ):
     """更新用户在指定租户的角色"""
     # 处理每个租户角色
@@ -688,7 +689,7 @@ async def remove_user_from_tenant(
     user_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:delete")),
 ):
     """从本租户移除用户"""
     # 获取用户在本租户的关联
@@ -719,7 +720,7 @@ async def activate_user(
     is_active: bool,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:write")),
 ):
     """激活/禁用用户"""
     # 获取用户
@@ -775,6 +776,7 @@ async def create_role(
     request: RoleCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("roles:write")),
 ):
     """创建角色"""
     role = Role(

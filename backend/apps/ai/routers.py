@@ -48,7 +48,7 @@ async def update_ai_config(
     body: AIConfigUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("ai:write")),
 ):
     """保存当前租户 AI 配置"""
     return await save_ai_config(db, tenant_id, body)
@@ -67,7 +67,7 @@ async def list_ai_models(
     body: ListModelsRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("ai:write")),
 ):
     """根据 API Key 拉取可用模型列表"""
     base_url = resolve_base_url(body.provider_id, body.base_url)

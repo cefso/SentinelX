@@ -437,6 +437,7 @@ async def create_template(
     request: TemplateCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write")),
 ):
     """创建通知模板"""
     # 自动生成 code（如果未提供）
@@ -503,6 +504,7 @@ async def update_template(
     request: TemplateUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write")),
 ):
     """更新通知模板"""
     result = await db.execute(
@@ -528,6 +530,7 @@ async def delete_template(
     template_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:delete")),
 ):
     """删除通知模板"""
     result = await db.execute(
