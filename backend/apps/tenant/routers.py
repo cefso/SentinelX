@@ -449,14 +449,15 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取当前租户的用户列表"""
+    """获取当前租户的用户列表（包括未分配租户的用户）"""
+    # 查询所有用户，左连接当前租户的关联
     result = await db.execute(
         select(User, UserTenant)
-        .join(UserTenant, UserTenant.user_id == User.id)
-        .where(
-            UserTenant.tenant_id == tenant_id,
-            User.is_deleted == False
+        .outerjoin(
+            UserTenant,
+            (UserTenant.user_id == User.id) & (UserTenant.tenant_id == tenant_id)
         )
+        .where(User.is_deleted == False)
         .order_by(User.id)
     )
     rows = result.all()
