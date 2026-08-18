@@ -144,12 +144,16 @@ const alertSourceTypes: AlertSourceConfig[] = [
 ]
 
 export function AlertSourcesPage() {
-  const { currentTenant } = useAuthStore()
+  const { currentTenant, user } = useAuthStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingSource, setEditingSource] = useState<AlertSource | null>(null)
   const [defaultSourceType, setDefaultSourceType] = useState<string>('prometheus')
   const [clientId, setClientId] = useState<string>('')
   const queryClient = useQueryClient()
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || permissions.includes('alert_sources:write') || user?.is_system === true
 
   // 获取已配置的告警源列表
   const { data: sources = [], isLoading: sourcesLoading } = useQuery<AlertSource[]>({
@@ -229,13 +233,15 @@ export function AlertSourcesPage() {
             </div>
           )}
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          添加配置
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            添加配置
+          </button>
+        )}
       </div>
 
       {/* 已配置的告警源 - 4列卡片 */}
@@ -256,22 +262,24 @@ export function AlertSourcesPage() {
                       <div className={`p-2 rounded-lg ${source.is_active === 'active' ? 'bg-green-50' : 'bg-gray-50'}`}>
                         <Icon className={`w-5 h-5 ${source.is_active === 'active' ? 'text-green-600' : 'text-gray-400'}`} />
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => toggleSourceMutation.mutate(source.id)}
-                          disabled={toggleSourceMutation.isPending}
-                          className={`p-1.5 rounded-lg ${source.is_active === 'active' ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`}
-                          title={source.is_active === 'active' ? '已启用' : '已停用'}
-                        >
-                          {source.is_active === 'active' ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-                        </button>
-                        <button
-                          onClick={() => handleEdit(source)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {canWrite && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => toggleSourceMutation.mutate(source.id)}
+                            disabled={toggleSourceMutation.isPending}
+                            className={`p-1.5 rounded-lg ${source.is_active === 'active' ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                            title={source.is_active === 'active' ? '已启用' : '已停用'}
+                          >
+                            {source.is_active === 'active' ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                          </button>
+                          <button
+                            onClick={() => handleEdit(source)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="font-medium text-sm mb-1">{source.name}</div>
                     <div className="text-xs text-gray-500 mb-3">{typeInfo?.name || source.source_type}</div>
@@ -285,16 +293,18 @@ export function AlertSourcesPage() {
                         <div className="text-xs text-gray-500">触发中</div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (confirm('确定要删除该告警源配置吗？')) {
-                          deleteSourceMutation.mutate(source.id)
-                        }
-                      }}
-                      className="w-full text-xs text-red-600 hover:bg-red-50 py-1 rounded"
-                    >
-                      删除
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => {
+                          if (confirm('确定要删除该告警源配置吗？')) {
+                            deleteSourceMutation.mutate(source.id)
+                          }
+                        }}
+                        className="w-full text-xs text-red-600 hover:bg-red-50 py-1 rounded"
+                      >
+                        删除
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -360,20 +370,22 @@ export function AlertSourcesPage() {
                 </div>
 
                 {/* 卡片底部操作 */}
-                <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
-                  <button
-                    onClick={() => {
-                      setEditingSource(null)
-                      setClientId(Math.random().toString(36).slice(2, 7))
-                      setDefaultSourceType(sourceType.id)
-                      setShowCreateModal(true)
-                    }}
-                    className="w-full flex items-center justify-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {isConfigured ? '编辑配置' : '添加配置'}
-                  </button>
-                </div>
+                {canWrite && (
+                  <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
+                    <button
+                      onClick={() => {
+                        setEditingSource(null)
+                        setClientId(Math.random().toString(36).slice(2, 7))
+                        setDefaultSourceType(sourceType.id)
+                        setShowCreateModal(true)
+                      }}
+                      className="w-full flex items-center justify-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {isConfigured ? '编辑配置' : '添加配置'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
