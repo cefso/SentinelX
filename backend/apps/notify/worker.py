@@ -85,8 +85,6 @@ class NotificationWorker:
             service = NotificationService(db)
 
             # 获取告警
-            from sqlalchemy import select
-
             result = await db.execute(select(Alert).where(Alert.id == alert_id))
             alert = result.scalar_one_or_none()
 
@@ -161,7 +159,7 @@ class NotificationWorker:
                 if record:
                     record.status = "success" if success else "failed"
                     record.error_message = error
-                    record.sent_at = datetime.utcnow()
+                    record.sent_at = datetime.now(timezone.utc)
                     record.response_data = {
                         "success": success,
                         "error": error,

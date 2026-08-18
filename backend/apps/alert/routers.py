@@ -17,7 +17,7 @@ import structlog
 from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.mq import get_mq_async
-from apps.core.security import verify_password
+from apps.core.security import verify_api_key
 
 logger = structlog.get_logger()
 from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
@@ -56,6 +56,61 @@ def generate_fingerprint(alert: AlertCreate, tenant_id: str, source_id: int = No
 def generate_trace_id() -> str:
     """生成12位Trace ID"""
     return str(uuid.uuid4())[:12]
+
+
+async def _create_single_alert(
+    alert_data: AlertCreate,
+    tenant_id: str,
+    db: AsyncSession,
+    redis,
+    source_id: int = None,
+    status: str = "firing",
+) -> dict:
+    """创建单个告警并分发到 MQ"""
+    trace_id = alert_data.trace_id or generate_trace_id()
+    alert = _build_alert(alert_data, tenant_id, source_id, status, trace_id)
+    db.add(alert)
+    await db.flush()
+
+    # 记录告警接入历史
+    history = AlertHistory(
+        tenant_id=tenant_id,
+        alert_id=alert.id,
+        action="received",
+        description="告警接入",
+        new_value={"status": status, "source": alert.source},
+    )
+    db.add(history)
+
+    mq = await get_mq_async()
+    await mq.send("alerts_raw", {
+        "alert_id": alert.id,
+        "tenant_id": str(tenant_id),
+        "trace_id": trace_id,
+        "action": "process"
+    })
+
+    return {"id": alert.id, "trace_id": trace_id, "db_alert": alert}
+
+
+async def _create_alert_batch(
+    alerts: List[AlertCreate],
+    tenant_id: str,
+    db: AsyncSession,
+    redis,
+    source_id: int = None,
+) -> dict:
+    """批量创建告警并分发"""
+    results = []
+    for alert_data in alerts:
+        result = await _create_single_alert(alert_data, tenant_id, db, redis, source_id)
+        results.append(result)
+
+    await db.commit()
+    return {
+        "received": len(results),
+        "alerts": [{"id": r["id"], "trace_id": r["trace_id"]} for r in results]
+    }
 
 
 def _build_alert(
@@ -106,12 +161,10 @@ async def _create_alerts_from_parsed(
     根据解析后的告警数据创建 Alert 记录并启动分发
     支持单条和批量创建
     """
-    dispatcher = AlertDispatcher(db, redis)
-
     # 更新 AlertSource 统计
     if source_id:
         source = await db.get(AlertSource, source_id)
-        if source and str(source.tenant_id) == tenant_id:
+        if source and source.tenant_id == tenant_id:
             source.alert_count = (source.alert_count or 0) + 1
             source.last_alert_at = datetime.now(timezone.utc)
 
@@ -124,118 +177,52 @@ async def _create_alerts_from_parsed(
 
     # alertState=OK：恢复处理，查找并更新同 fingerprint 的 firing 告警
     if alert_state == "OK":
-        fingerprints = []
-        if isinstance(parsed_alert, list):
-            for alert_data in parsed_alert:
-                fp = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
-                fingerprints.append(fp)
-        else:
-            fp = parsed_alert.fingerprint or generate_fingerprint(parsed_alert, tenant_id, source_id)
-            fingerprints.append(fp)
-
-        resolved = await _resolve_firing_alerts(db, tenant_id, fingerprints)
-        # 继续执行下面的创建逻辑（不 return），创建新告警 status=resolved
+        alerts_list = parsed_alert if isinstance(parsed_alert, list) else [parsed_alert]
+        fingerprints = [
+            a.fingerprint or generate_fingerprint(a, tenant_id, source_id)
+            for a in alerts_list
+        ]
+        await _resolve_firing_alerts(db, tenant_id, fingerprints)
 
     # alertState=INSUFFICIENT_DATA：降级处理
     if alert_state == "INSUFFICIENT_DATA":
-        if isinstance(parsed_alert, list):
-            for alert_data in parsed_alert:
-                alert_data.severity = "low"
-        else:
-            parsed_alert.severity = "low"
+        alerts_list = parsed_alert if isinstance(parsed_alert, list) else [parsed_alert]
+        for alert_data in alerts_list:
+            alert_data.severity = "low"
 
-    # OK 消息：直接创建 resolved 状态告警，跳过 dispatcher
+    # OK 消息：直接创建 resolved 状态告警
     if alert_state == "OK":
-        if isinstance(parsed_alert, list):
-            results = []
-            for alert_data in parsed_alert:
-                trace_id = generate_trace_id()
-                alert = _build_alert(alert_data, tenant_id, source_id, "resolved", trace_id)
-                db.add(alert)
-                await db.flush()
-
-                # OK 消息不经过 dispatcher，直接记录历史
-                history = AlertHistory(
-                    tenant_id=tenant_id,
-                    alert_id=alert.id,
-                    action="resolved",
-                    description="阿里云云监控告警恢复",
-                    new_value={
-                        "alert_state": "OK",
-                        "resolved_by": "aliyun_cms_recovery",
-                    },
-                )
-                db.add(history)
-                results.append({"id": alert.id, "db_alert": alert, "trace_id": trace_id})
-
-            await db.commit()
-            return {
-                "received": len(results),
-                "alerts": [{"id": r["id"], "trace_id": r["trace_id"]} for r in results]
-            }
-        else:
+        alerts_list = parsed_alert if isinstance(parsed_alert, list) else [parsed_alert]
+        results = []
+        for alert_data in alerts_list:
             trace_id = generate_trace_id()
-            alert = _build_alert(parsed_alert, tenant_id, source_id, "resolved", trace_id)
+            alert = _build_alert(alert_data, tenant_id, source_id, "resolved", trace_id)
             db.add(alert)
             await db.flush()
 
-            # OK 消息不经过 dispatcher，直接记录历史
             history = AlertHistory(
                 tenant_id=tenant_id,
                 alert_id=alert.id,
                 action="resolved",
                 description="阿里云云监控告警恢复",
-                new_value={
-                    "alert_state": "OK",
-                    "resolved_by": "aliyun_cms_recovery",
-                },
+                new_value={"alert_state": "OK", "resolved_by": "aliyun_cms_recovery"},
             )
             db.add(history)
+            results.append({"id": alert.id, "trace_id": trace_id})
 
-            await db.commit()
-            await db.refresh(alert)
-            return {"id": alert.id, "trace_id": alert.trace_id}
+        await db.commit()
+        if len(results) == 1:
+            return {"id": results[0]["id"], "trace_id": results[0]["trace_id"]}
+        return {
+            "received": len(results),
+            "alerts": results
+        }
 
     # 非 OK 消息：正常创建 firing 告警并通过 dispatcher 处理
     if isinstance(parsed_alert, list):
-        results = []
-        for alert_data in parsed_alert:
-            trace_id = generate_trace_id()
-            alert = _build_alert(alert_data, tenant_id, source_id, "firing", trace_id)
-            db.add(alert)
-            await db.flush()
-
-            mq = await get_mq_async()
-            await mq.send("alerts_raw", {
-                "alert_id": alert.id,
-                "tenant_id": alert.tenant_id,
-                "trace_id": trace_id,
-                "action": "process"
-            })
-            results.append({"id": None, "db_alert": alert})
-
-        await db.commit()
-        return {
-            "received": len(results),
-            "alerts": [{"id": r["db_alert"].id, "trace_id": r["db_alert"].trace_id} for r in results]
-        }
+        return await _create_alert_batch(parsed_alert, tenant_id, db, redis, source_id)
     else:
-        trace_id = generate_trace_id()
-        alert = _build_alert(parsed_alert, tenant_id, source_id, "firing", trace_id)
-        db.add(alert)
-        await db.flush()
-
-        mq = await get_mq_async()
-        await mq.send("alerts_raw", {
-            "alert_id": alert.id,
-            "tenant_id": alert.tenant_id,
-            "trace_id": trace_id,
-            "action": "process"
-        })
-
-        await db.commit()
-        await db.refresh(alert)
-        return {"id": alert.id, "trace_id": alert.trace_id}
+        return await _create_single_alert(parsed_alert, tenant_id, db, redis, source_id)
 
 
 async def _resolve_firing_alerts(
@@ -473,6 +460,16 @@ async def create_alert(
     db.add(alert)
     await db.flush()
 
+    # 记录告警接入历史
+    history = AlertHistory(
+        tenant_id=tenant_id,
+        alert_id=alert.id,
+        action="received",
+        description="告警接入",
+        new_value={"status": "firing", "source": alert.source},
+    )
+    db.add(history)
+
     # 启动后台分发处理
     mq = await get_mq_async()
     await mq.send("alerts_raw", {
@@ -562,7 +559,7 @@ async def receive_webhook_by_source(
 
     # 3. 验证 API Key (可选)
     if x_api_key and tenant.webhook_api_key:
-        if not verify_password(x_api_key, tenant.webhook_api_key):
+        if not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 4. 根据 Content-Type 解析请求数据
@@ -692,7 +689,7 @@ async def receive_aliyun_cms_webhook(
     # 2. 验证 API Key (可选，如果有配置的话)
     tenant_id = str(tenant.id)
     if x_api_key and tenant.webhook_api_key:
-        if not verify_password(x_api_key, tenant.webhook_api_key):
+        if not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 3. 解析 form data
@@ -719,53 +716,12 @@ async def receive_aliyun_cms_webhook(
 @router.post("/alerts/batch")
 async def create_alerts_batch(
     alerts: List[AlertCreate],
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
     """批量接收告警"""
-    created_alerts = []
-    dispatcher = AlertDispatcher(db, redis)
-
-    for alert_data in alerts:
-        trace_id = alert_data.trace_id or generate_trace_id()
-        fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, alert_data.source_id)
-
-        alert = Alert(
-            tenant_id=tenant_id,
-            alert_key=alert_data.alert_key,
-            fingerprint=fingerprint,
-            source=alert_data.source,
-            title=alert_data.title,
-            content=alert_data.content,
-            severity=alert_data.severity,
-            status="firing",
-            labels=alert_data.labels,
-            annotations=alert_data.annotations,
-            metric_name=alert_data.metric_name,
-            metric_value=alert_data.metric_value,
-            raw_data=alert_data.raw_data,
-            namespace=alert_data.namespace,
-            instance_id=alert_data.instance_id,
-            instance_name=alert_data.instance_name,
-            trace_id=trace_id,
-            fired_at=datetime.now(timezone.utc),
-        )
-        db.add(alert)
-        await db.flush()
-        created_alerts.append(alert)
-
-        # 异步分发
-        mq = await get_mq_async()
-        await mq.send("alerts_raw", {
-            "alert_id": alert.id,
-            "tenant_id": str(tenant_id),
-            "trace_id": trace_id,
-            "action": "process"
-        })
-
-    await db.commit()
-    return {"created": len(created_alerts), "alerts": created_alerts}
+    return await _create_alert_batch(alerts, tenant_id, db, redis)
 
 
 # ============ 告警查询 ============

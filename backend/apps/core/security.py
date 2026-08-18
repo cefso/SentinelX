@@ -121,5 +121,12 @@ def verify_signature(secret: str, timestamp: str, body: str, signature: str) -> 
     return hmac.compare_digest(expected, signature)
 
 
+def verify_api_key(provided_key: str, stored_key: str) -> bool:
+    """常量时间比较 API key（用于 webhook 认证）"""
+    if not provided_key or not stored_key:
+        return False
+    return hmac.compare_digest(provided_key, stored_key)
+
+
 # 全局加密器实例
 encryptor = AESEncryptor()

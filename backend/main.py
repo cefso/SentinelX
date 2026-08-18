@@ -36,7 +36,6 @@ from apps.core.middleware import (
     RequestLoggingMiddleware,
     PerformanceLoggingMiddleware,
     TenantContextMiddleware,
-    ErrorHandlingMiddleware,
 )
 from apps.core.middleware_audit import AuditLoggingMiddleware
 from apps.core.exceptions import SentinelXException, http_exception_from_sentinelx
@@ -55,6 +54,12 @@ async def lifespan(app: FastAPI):
 
     # 检查 JWT_SECRET_KEY 是否仍为默认值
     if settings.JWT_SECRET_KEY == "your-secret-key-change-in-production":
+        if not settings.DEBUG:
+            logger.critical("jwt_secret_key_is_default_in_production")
+            raise RuntimeError(
+                "Cannot start with default JWT_SECRET_KEY in production. "
+                "Set a unique JWT_SECRET_KEY in .env"
+            )
         logger.warning(
             "jwt_secret_key_is_default",
             message="JWT_SECRET_KEY is using the default value. "
@@ -136,7 +141,6 @@ app.add_middleware(
 )
 
 # 自定义中间件
-app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(PerformanceLoggingMiddleware)
 app.add_middleware(TenantContextMiddleware)

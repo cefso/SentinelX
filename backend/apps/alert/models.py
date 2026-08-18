@@ -18,7 +18,7 @@ class AlertSource(Base):
     __tablename__ = "alert_sources"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     code = Column(String(64), nullable=False, unique=True)  # 如: prometheus-01

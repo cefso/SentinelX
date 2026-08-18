@@ -2,7 +2,7 @@
 SentinelX - 租户管理路由
 """
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -315,7 +315,7 @@ async def approve_user(
     # 更新用户审批状态
     user.is_approved = True
     user.is_active = True
-    user.approved_at = datetime.utcnow()
+    user.approved_at = datetime.now(timezone.utc)
     user.approved_by = current_user.id
 
     # 如果有系统级角色，更新用户并自动分配所有租户
