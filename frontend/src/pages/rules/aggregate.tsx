@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
@@ -78,8 +79,13 @@ function initAggregateModalState(rule: StrategyRule | null, initialConditions?: 
 
 export function AggregateRulesPage() {
   const queryClient = useQueryClient()
+  const { currentTenant, user } = useAuthStore()
   const [showModal, setShowModal] = useState(false)
   const [editingRule, setEditingRule] = useState<StrategyRule | null>(null)
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || permissions.includes('rules:write') || user?.is_system === true
 
   const { data: rules = [], isLoading } = useQuery<StrategyRule[]>({
     queryKey: ['aggregate-rules'],
@@ -113,12 +119,14 @@ export function AggregateRulesPage() {
         <p className="text-sm text-gray-500">
           策略聚合规则在时间窗口内将相似告警合并为组，子告警默认不再重复通知
         </p>
-        <button
-          onClick={handleCreate}
-          className="px-4 py-2 bg-violet-600 text-white text-sm rounded-md hover:bg-violet-700"
-        >
-          创建聚合规则
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2 bg-violet-600 text-white text-sm rounded-md hover:bg-violet-700"
+          >
+            创建聚合规则
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow">
@@ -169,32 +177,42 @@ export function AggregateRulesPage() {
                     <div className="text-sm">{rule.match_count}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleMutation.mutate({ ruleId: rule.id, is_active: !rule.is_active })}
-                      disabled={toggleMutation.isPending}
-                      className={`px-2 py-1 text-xs rounded disabled:opacity-50 ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
-                    >
-                      {rule.is_active ? '启用' : '停用'}
-                    </button>
+                    {canWrite ? (
+                      <button
+                        onClick={() => toggleMutation.mutate({ ruleId: rule.id, is_active: !rule.is_active })}
+                        disabled={toggleMutation.isPending}
+                        className={`px-2 py-1 text-xs rounded disabled:opacity-50 ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                      >
+                        {rule.is_active ? '启用' : '停用'}
+                      </button>
+                    ) : (
+                      <span className={`px-2 py-1 text-xs rounded ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        {rule.is_active ? '已启用' : '已停用'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleEdit(rule)}
-                      className="text-violet-600 hover:text-violet-800 mr-3"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm('确定要删除该规则吗？')) {
-                          deleteMutation.mutate(rule.id)
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                      className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                    >
-                      删除
-                    </button>
+                    {canWrite && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(rule)}
+                          className="text-violet-600 hover:text-violet-800 mr-3"
+                        >
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('确定要删除该规则吗？')) {
+                              deleteMutation.mutate(rule.id)
+                            }
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                        >
+                          删除
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -368,6 +386,6 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
             </button>
           </div>
         </form>
-    </Modal>
-  )
-}
+      </Modal>
+    )
+  }
