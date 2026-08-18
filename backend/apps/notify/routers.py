@@ -14,6 +14,7 @@ from apps.auth.dependencies import get_current_user, get_current_tenant_id, requ
 from apps.alert.models import Alert
 from apps.rule.models import NotificationRecord
 from apps.rule.models import NotificationChannel, NotificationTemplate
+from apps.tenant.models import User
 from apps.notify.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, ChannelTypeInfo, ChannelTypesResponse,
     ChannelTestRequest, ChannelTestResponse,
@@ -104,6 +105,7 @@ async def create_channel(
     request: ChannelCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:write")),
 ):
     """创建通知渠道"""
     # 检查 code 是否重复
@@ -156,6 +158,7 @@ async def update_channel(
     request: ChannelUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:write")),
 ):
     """更新通知渠道"""
     result = await db.execute(
@@ -197,6 +200,7 @@ async def delete_channel(
     channel_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:delete")),
 ):
     """删除通知渠道"""
     result = await db.execute(

@@ -22,7 +22,7 @@ from apps.core.security import verify_password
 logger = structlog.get_logger()
 from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember, WebhookLog
-from apps.tenant.models import Tenant
+from apps.tenant.models import Tenant, User
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
     AlertSourceCreate, AlertSourceUpdate, AlertSourceResponse,
@@ -341,6 +341,7 @@ async def create_source(
     request: AlertSourceCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """创建告警源"""
     source = AlertSource(
@@ -364,6 +365,7 @@ async def update_source(
     request: AlertSourceUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """更新告警源"""
     source = await db.get(AlertSource, source_id)
@@ -397,6 +399,7 @@ async def delete_source(
     source_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alert_sources:delete")),
 ):
     """删除告警源，保留关联告警"""
     source = await db.get(AlertSource, source_id)

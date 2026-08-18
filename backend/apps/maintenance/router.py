@@ -53,7 +53,7 @@ async def create_maintenance_window(
     scope: Optional[Dict[str, Any]] = None,
     tenant_id: int = Depends(get_current_tenant_id),
     db=Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("maintenance:write")),
 ):
     """创建维护窗口"""
     if end_time <= start_time:
@@ -118,7 +118,7 @@ async def update_maintenance_window(
     is_active: Optional[bool] = None,
     tenant_id: int = Depends(get_current_tenant_id),
     db=Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("maintenance:write")),
 ):
     """更新维护窗口"""
     if end_time and start_time and end_time <= start_time:
@@ -150,7 +150,7 @@ async def delete_maintenance_window(
     window_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db=Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("maintenance:delete")),
 ):
     """删除维护窗口"""
     service = MaintenanceService(db)

@@ -133,6 +133,7 @@ async def create_rule(
     request: RuleCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:write")),
 ):
     """创建规则"""
     # 验证 actions 中的 template_id
@@ -423,6 +424,7 @@ async def update_rule(
     request: RuleUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:write")),
 ):
     """更新规则"""
     # 验证 actions 中的 template_id
@@ -456,6 +458,7 @@ async def delete_rule(
     rule_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:delete")),
 ):
     """删除规则"""
     result = await db.execute(
