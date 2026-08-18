@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { FileText, Plus, Edit2, Trash2, Eye } from 'lucide-react'
 import { CHANNEL_TYPES, CHANNEL_TYPE_LABELS, VARIABLE_DOCS, EXAMPLE_ALERT, renderJinja2Preview } from './templates/constants'
 import { Modal } from '@/components/common/Modal'
@@ -20,9 +21,14 @@ export interface NotificationTemplate {
 
 export function TemplatesPage() {
   const queryClient = useQueryClient()
+  const { currentTenant, user } = useAuthStore()
   const [showModal, setShowModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null)
   const [filter, setFilter] = useState<string>('all')
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || permissions.includes('templates:write') || user?.is_system === true
 
   const { data: templates = [], isLoading } = useQuery<NotificationTemplate[]>({
     queryKey: ['templates'],
@@ -57,13 +63,15 @@ export function TemplatesPage() {
             管理各渠道的通知模板，支持 Jinja2 变量
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="px-4 py-2 bg-primary text-white text-sm rounded-md hover:bg-primary/90 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          创建模板
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2 bg-primary text-white text-sm rounded-md hover:bg-primary/90 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            创建模板
+          </button>
+        )}
       </div>
 
       {/* Channel type filter */}
@@ -144,25 +152,29 @@ export function TemplatesPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => handleEdit(template)}
-                      className="text-blue-600 hover:text-blue-800 mr-3 inline-flex items-center gap-1"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      编辑
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm('确定要删除该模板吗？')) {
-                          deleteMutation.mutate(template.id)
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                      className="text-red-600 hover:text-red-800 disabled:opacity-50 inline-flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      删除
-                    </button>
+                    {canWrite && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(template)}
+                          className="text-blue-600 hover:text-blue-800 mr-3 inline-flex items-center gap-1"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('确定要删除该模板吗？')) {
+                              deleteMutation.mutate(template.id)
+                            }
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="text-red-600 hover:text-red-800 disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          删除
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

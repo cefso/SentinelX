@@ -22,6 +22,7 @@ from apps.auth.dependencies import (
     get_current_tenant_id,
     get_permission_service,
     get_audit_service,
+    require_permission,
 )
 from apps.auth.api_key import APIKeyAuth
 
@@ -239,14 +240,9 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建API Key (仅管理员)"""
+    """创建API Key"""
     from apps.auth.dependencies import get_token_payload
     payload = get_token_payload()
-    if not payload or not payload.get("is_superuser"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
 
     api_key_auth = APIKeyAuth(db)
     api_key, full_api_key = await api_key_auth.create_api_key(
@@ -285,11 +281,6 @@ async def revoke_api_key(
     """撤销API Key"""
     from apps.auth.dependencies import get_token_payload
     payload = get_token_payload()
-    if not payload or not payload.get("is_superuser"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
 
     api_key_auth = APIKeyAuth(db)
     success = await api_key_auth.revoke_api_key(payload.get("current_tenant_id"), key_id)

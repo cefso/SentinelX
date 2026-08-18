@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from apps.core.database import get_db
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.rule.models import AlertRule
 from apps.alert.models import Alert, AlertSource
 from apps.alert.services.alert_utils import alert_to_dict
@@ -133,6 +133,7 @@ async def create_rule(
     request: RuleCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:write")),
 ):
     """创建规则"""
     # 验证 actions 中的 template_id
@@ -274,6 +275,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         request: StrategyRuleCreate,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:write")),
     ):
         """创建策略规则"""
         slug = _slugify(request.name)
@@ -318,6 +320,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         request: StrategyRuleUpdate,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:write")),
     ):
         """更新策略规则"""
         result = await db.execute(
@@ -351,6 +354,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         rule_id: int,
         tenant_id: int = Depends(get_current_tenant_id),
         db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(require_permission("rules:delete")),
     ):
         """删除策略规则"""
         result = await db.execute(
@@ -423,6 +427,7 @@ async def update_rule(
     request: RuleUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:write")),
 ):
     """更新规则"""
     # 验证 actions 中的 template_id
@@ -456,6 +461,7 @@ async def delete_rule(
     rule_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("rules:delete")),
 ):
     """删除规则"""
     result = await db.execute(

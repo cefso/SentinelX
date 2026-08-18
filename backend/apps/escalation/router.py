@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import get_db
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.tenant.models import User
 from apps.alert.services.escalation import EscalationService
 
@@ -48,7 +48,7 @@ async def manual_escalate(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("escalation:write")),
 ):
     """
     手动升级告警
@@ -91,7 +91,7 @@ async def manual_escalate(
 async def run_escalation_check(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("escalation:write")),
 ):
     """
     手动触发升级检查

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { ChannelModal, CHANNEL_TYPES } from './ChannelModal'
 import { Modal } from '@/components/common/Modal'
@@ -39,6 +40,7 @@ interface NotificationRecord {
 
 export function ChannelsPage() {
   const queryClient = useQueryClient()
+  const { currentTenant, user } = useAuthStore()
   const [showModal, setShowModal] = useState(false)
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [filter, setFilter] = useState<string>('all')
@@ -49,6 +51,11 @@ export function ChannelsPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [recordFilter, setRecordFilter] = useState<string>('all')
   const [recordPage, setRecordPage] = useState(0)
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || permissions.includes('channels:write') || user?.is_system === true
+  const canTest = permissions.includes('*') || permissions.includes('channels:test') || user?.is_system === true
 
   const { data: channels = [], isLoading } = useQuery<Channel[]>({
     queryKey: ['channels'],
@@ -202,12 +209,14 @@ export function ChannelsPage() {
           <h1 className="text-2xl font-bold text-gray-900">通知渠道</h1>
           <p className="text-sm text-gray-500 mt-0.5">管理钉钉、飞书、企业微信等通知渠道</p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
-        >
-          创建渠道
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+          >
+            创建渠道
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -269,33 +278,41 @@ export function ChannelsPage() {
                           <div className="text-sm text-gray-500">{channel.code}</div>
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleOpenTest(channel)}
-                          disabled={!channel.is_active}
-                          className="text-green-600 hover:text-green-800 text-sm disabled:opacity-30"
-                          title={channel.is_active ? '发送测试消息' : '请先启用渠道'}
-                        >
-                          测试
-                        </button>
-                        <button
-                          onClick={() => handleEdit(channel)}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm('确定要删除该渠道吗？')) {
-                              deleteMutation.mutate(channel.id)
-                            }
-                          }}
-                          disabled={deleteMutation.isPending}
-                          className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
-                        >
-                          删除
-                        </button>
-                      </div>
+                      {(canTest || canWrite) && (
+                        <div className="flex gap-1">
+                          {canTest && (
+                            <button
+                              onClick={() => handleOpenTest(channel)}
+                              disabled={!channel.is_active}
+                              className="text-green-600 hover:text-green-800 text-sm disabled:opacity-30"
+                              title={channel.is_active ? '发送测试消息' : '请先启用渠道'}
+                            >
+                              测试
+                            </button>
+                          )}
+                          {canWrite && (
+                            <button
+                              onClick={() => handleEdit(channel)}
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canWrite && (
+                            <button
+                              onClick={() => {
+                                if (confirm('确定要删除该渠道吗？')) {
+                                  deleteMutation.mutate(channel.id)
+                                }
+                              }}
+                              disabled={deleteMutation.isPending}
+                              className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2 text-sm">
@@ -305,13 +322,19 @@ export function ChannelsPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">状态</span>
-                        <button
-                          onClick={() => toggleMutation.mutate({ channelId: channel.id, is_active: !channel.is_active })}
-                          disabled={toggleMutation.isPending}
-                          className={`px-2 py-0.5 text-xs rounded disabled:opacity-50 ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
-                        >
-                          {channel.is_active ? '启用' : '停用'}
-                        </button>
+                        {canWrite ? (
+                          <button
+                            onClick={() => toggleMutation.mutate({ channelId: channel.id, is_active: !channel.is_active })}
+                            disabled={toggleMutation.isPending}
+                            className={`px-2 py-0.5 text-xs rounded disabled:opacity-50 ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                          >
+                            {channel.is_active ? '启用' : '停用'}
+                          </button>
+                        ) : (
+                          <span className={`px-2 py-0.5 text-xs rounded ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {channel.is_active ? '已启用' : '已停用'}
+                          </span>
+                        )}
                       </div>
                       {channel.is_default && (
                         <div className="flex justify-between">

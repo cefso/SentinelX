@@ -10,10 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from apps.core.database import get_db
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.alert.models import Alert
 from apps.rule.models import NotificationRecord
 from apps.rule.models import NotificationChannel, NotificationTemplate
+from apps.tenant.models import User
 from apps.notify.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, ChannelTypeInfo, ChannelTypesResponse,
     ChannelTestRequest, ChannelTestResponse,
@@ -104,6 +105,7 @@ async def create_channel(
     request: ChannelCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:write")),
 ):
     """创建通知渠道"""
     # 检查 code 是否重复
@@ -156,6 +158,7 @@ async def update_channel(
     request: ChannelUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:write")),
 ):
     """更新通知渠道"""
     result = await db.execute(
@@ -197,6 +200,7 @@ async def delete_channel(
     channel_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("channels:delete")),
 ):
     """删除通知渠道"""
     result = await db.execute(
@@ -433,6 +437,7 @@ async def create_template(
     request: TemplateCreate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write")),
 ):
     """创建通知模板"""
     # 自动生成 code（如果未提供）
@@ -499,6 +504,7 @@ async def update_template(
     request: TemplateUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write")),
 ):
     """更新通知模板"""
     result = await db.execute(
@@ -524,6 +530,7 @@ async def delete_template(
     template_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:delete")),
 ):
     """删除通知模板"""
     result = await db.execute(

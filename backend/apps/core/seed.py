@@ -68,7 +68,7 @@ async def seed_default_data():
                     tenant_id=None,
                     name="超级管理员",
                     code="system_admin",
-                    description="系统级超级管理员，拥有所有权限",
+                    description="系统级超级管理员，拥有所有权限，可管理所有租户",
                     permissions=["*"],
                     is_builtin=True,
                     scope="system",
@@ -84,12 +84,12 @@ async def seed_default_data():
                 ),
                 Role(
                     tenant_id=None,
-                    name="观察者",
+                    name="只读用户",
                     code="viewer",
-                    description="只读用户",
+                    description="只读用户，仅查看权限",
                     permissions=["read"],
                     is_builtin=True,
-                    scope="system",
+                    scope="tenant",
                 ),
             ]
             for role in system_roles:
@@ -100,28 +100,33 @@ async def seed_default_data():
             tenant_roles = [
                 Role(
                     tenant_id=tenant.id,
-                    name="租户管理员",
-                    code="tenant_admin",
-                    description="租户内管理员",
-                    permissions=["*"],
-                    is_builtin=False,
-                    scope="tenant",
-                ),
-                Role(
-                    tenant_id=tenant.id,
                     name="运维人员",
                     code="operator",
-                    description="运维人员",
-                    permissions=["read", "write", "alerts:read", "alerts:write", "rules:read", "rules:write"],
-                    is_builtin=False,
-                    scope="tenant",
-                ),
-                Role(
-                    tenant_id=tenant.id,
-                    name="只读用户",
-                    code="tenant_viewer",
-                    description="租户只读用户",
-                    permissions=["read", "alerts:read", "rules:read"],
+                    description="运维人员，拥有日常运维所需权限",
+                    permissions=[
+                        # 告警
+                        "alerts:read", "alerts:write", "alerts:delete", "alerts:ack",
+                        # 告警源
+                        "alert_sources:read", "alert_sources:write", "alert_sources:delete",
+                        # 规则
+                        "rules:read", "rules:write", "rules:delete", "rules:execute",
+                        # 渠道
+                        "channels:read", "channels:write", "channels:delete", "channels:test",
+                        # 模板
+                        "templates:read", "templates:write", "templates:delete",
+                        # 维护窗口
+                        "maintenance:read", "maintenance:write", "maintenance:delete",
+                        # 告警升级
+                        "escalation:read", "escalation:write",
+                        # 云产品指标
+                        "cloud_metrics:read", "cloud_metrics:write", "cloud_metrics:delete",
+                        # AI
+                        "ai:read", "ai:write",
+                        # 用户管理
+                        "users:read", "users:write",
+                        # API Key
+                        "api_keys:read", "api_keys:write", "api_keys:delete",
+                    ],
                     is_builtin=False,
                     scope="tenant",
                 ),

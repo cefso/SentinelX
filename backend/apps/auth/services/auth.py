@@ -332,35 +332,72 @@ class PermissionService:
     PERMISSIONS = {
         # 告警权限
         "alerts:read": "查看告警",
-        "alerts:write": "管理告警",
+        "alerts:write": "管理告警（创建/更新/确认/解决/指派/静默）",
         "alerts:delete": "删除告警",
         "alerts:ack": "确认告警",
 
+        # 告警源权限
+        "alert_sources:read": "查看告警源",
+        "alert_sources:write": "管理告警源（创建/更新/启禁用）",
+        "alert_sources:delete": "删除告警源",
+
         # 规则权限
         "rules:read": "查看规则",
-        "rules:write": "管理规则",
+        "rules:write": "管理规则（创建/更新/启用/禁用）",
         "rules:delete": "删除规则",
-        "rules:execute": "执行规则",
+        "rules:execute": "执行规则（测试/预览）",
 
         # 渠道权限
         "channels:read": "查看渠道",
-        "channels:write": "管理渠道",
+        "channels:write": "管理渠道（创建/更新）",
         "channels:delete": "删除渠道",
         "channels:test": "测试渠道",
 
+        # 通知模板权限
+        "templates:read": "查看模板",
+        "templates:write": "管理模板（创建/更新）",
+        "templates:delete": "删除模板",
+
         # 用户权限
         "users:read": "查看用户",
-        "users:write": "管理用户",
+        "users:write": "管理用户（创建/更新/启用禁用/调整角色）",
         "users:delete": "删除用户",
+
+        # 角色权限
+        "roles:read": "查看角色",
+        "roles:write": "管理角色（创建/更新）",
 
         # 租户权限
         "tenants:read": "查看租户",
-        "tenants:write": "管理租户",
+        "tenants:write": "管理租户（创建/更新配置）",
         "tenants:delete": "删除租户",
 
+        # API Key权限
+        "api_keys:read": "查看API Key列表",
+        "api_keys:write": "创建API Key",
+        "api_keys:delete": "撤销API Key",
+
+        # 维护窗口权限
+        "maintenance:read": "查看维护窗口",
+        "maintenance:write": "管理维护窗口（创建/更新）",
+        "maintenance:delete": "删除维护窗口",
+
+        # 告警升级权限
+        "escalation:read": "查看升级候选",
+        "escalation:write": "手动升级/触发检查",
+
+        # 云产品指标权限
+        "cloud_metrics:read": "查看云产品指标",
+        "cloud_metrics:write": "管理云产品指标（同步/创建）",
+        "cloud_metrics:delete": "删除云产品指标",
+
+        # AI权限
+        "ai:read": "查看AI配置",
+        "ai:write": "管理AI配置/执行分析",
+
         # 系统权限
-        "admin": "管理员(全部权限)",
-        "read": "只读权限",
+        "admin": "管理员（全部权限）",
+        "read": "只读权限（所有:read权限）",
     }
 
     def __init__(self, db: AsyncSession):

@@ -14,10 +14,10 @@ type SettingsTab = 'profile' | 'security' | 'tenant' | 'api-keys' | 'users' | 'a
 const menuItems = [
   { key: 'profile' as const, label: '个人信息', icon: User },
   { key: 'security' as const, label: '安全设置', icon: Lock },
-  { key: 'tenant' as const, label: '租户设置', icon: Shield },
-  { key: 'api-keys' as const, label: 'API Keys', icon: Key },
-  { key: 'users' as const, label: '用户管理', icon: Users },
-  { key: 'ai' as const, label: 'AI设置', icon: Sparkles },
+  { key: 'tenant' as const, label: '租户设置', icon: Shield, requireWrite: true },
+  { key: 'api-keys' as const, label: 'API Keys', icon: Key, requireWrite: true },
+  { key: 'users' as const, label: '用户管理', icon: Users, requireWrite: true },
+  { key: 'ai' as const, label: 'AI设置', icon: Sparkles, requireWrite: true },
   { key: 'about' as const, label: '关于本系统', icon: Info },
 ]
 
@@ -28,7 +28,11 @@ const adminMenuItems = [
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
-  const { user } = useAuthStore()
+  const { user, currentTenant } = useAuthStore()
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || user?.is_system === true
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
@@ -39,6 +43,8 @@ export function SettingsPage() {
         </div>
         <nav className="p-2 space-y-1">
           {menuItems.map((item) => {
+            // 如果需要写权限但用户没有，则不显示
+            if (item.requireWrite && !canWrite) return null
             const Icon = item.icon
             return (
               <button

@@ -18,6 +18,82 @@
 - **租户切换**: 用户可同时属于多个租户，支持前端快速切换
 - **用户注册审批**: 用户注册需管理员审批通过后方可登录，支持多租户权限分配
 
+## 权限系统
+
+SentinelX 采用 RBAC（基于角色的访问控制）权限模型，支持细粒度的功能模块权限管理。
+
+### 权限码一览
+
+| 模块 | 权限码 | 描述 |
+|------|--------|------|
+| 告警 | `alerts:read` | 查看告警 |
+| 告警 | `alerts:write` | 管理告警（创建/更新/确认/解决/指派/静默） |
+| 告警 | `alerts:delete` | 删除告警 |
+| 告警源 | `alert_sources:read` | 查看告警源 |
+| 告警源 | `alert_sources:write` | 管理告警源（创建/更新/启禁用） |
+| 告警源 | `alert_sources:delete` | 删除告警源 |
+| 规则 | `rules:read` | 查看规则 |
+| 规则 | `rules:write` | 管理规则（创建/更新/启用/禁用） |
+| 规则 | `rules:delete` | 删除规则 |
+| 规则 | `rules:execute` | 执行规则（测试/预览） |
+| 渠道 | `channels:read` | 查看渠道 |
+| 渠道 | `channels:write` | 管理渠道（创建/更新） |
+| 渠道 | `channels:delete` | 删除渠道 |
+| 渠道 | `channels:test` | 测试渠道 |
+| 模板 | `templates:read` | 查看模板 |
+| 模板 | `templates:write` | 管理模板（创建/更新） |
+| 模板 | `templates:delete` | 删除模板 |
+| 用户 | `users:read` | 查看用户 |
+| 用户 | `users:write` | 管理用户（创建/更新/启用禁用/调整角色） |
+| 用户 | `users:delete` | 删除用户 |
+| 角色 | `roles:read` | 查看角色 |
+| 角色 | `roles:write` | 管理角色（创建/更新） |
+| 租户 | `tenants:read` | 查看租户 |
+| 租户 | `tenants:write` | 管理租户（创建/更新配置） |
+| 租户 | `tenants:delete` | 删除租户 |
+| API Key | `api_keys:read` | 查看API Key列表 |
+| API Key | `api_keys:write` | 创建API Key |
+| API Key | `api_keys:delete` | 撤销API Key |
+| 维护窗口 | `maintenance:read` | 查看维护窗口 |
+| 维护窗口 | `maintenance:write` | 管理维护窗口（创建/更新） |
+| 维护窗口 | `maintenance:delete` | 删除维护窗口 |
+| 告警升级 | `escalation:read` | 查看升级候选 |
+| 告警升级 | `escalation:write` | 手动升级/触发检查 |
+| 云指标 | `cloud_metrics:read` | 查看云产品指标 |
+| 云指标 | `cloud_metrics:write` | 管理云产品指标（同步/创建） |
+| 云指标 | `cloud_metrics:delete` | 删除云产品指标 |
+| AI | `ai:read` | 查看AI配置 |
+| AI | `ai:write` | 管理AI配置/执行分析 |
+| 系统 | `admin` | 全部权限 |
+| 系统 | `read` | 只读权限（所有:read权限） |
+
+### 预设角色
+
+| 角色 | code | 权限 | 适用场景 |
+|------|------|------|----------|
+| 超级管理员 | `system_admin` | `["*"]` | 系统运维，管理所有租户 |
+| 管理员 | `admin` | `["*"]` | 租户内管理，创建用户/配置 |
+| 运维人员 | `operator` | 详细权限列表 | 日常告警处理、规则配置 |
+| 只读用户 | `viewer` | `["read"]` | 查看监控，无操作权限 |
+
+**角色说明：**
+- **system_admin**: 系统级角色，可访问和管理所有租户，用于平台运维
+- **admin**: 租户级角色，拥有租户内全部权限，用于租户管理员
+- **operator**: 租户级角色，拥有日常运维所需权限（告警、规则、渠道、模板等）
+- **viewer**: 租户级角色，仅查看权限，用于业务查看人员
+
+### 添加新权限
+
+1. 在 `backend/apps/auth/services/auth.py` 的 `PermissionService.PERMISSIONS` 中添加权限码
+2. 在对应路由文件中使用 `@require_permission("new:permission")` 装饰器
+3. 更新需要该权限的角色的 `permissions` 字段
+
+### 权限检查流程
+
+```
+请求 → get_current_user (验证JWT) → get_current_tenant_id (验证租户) → require_permission (验证权限) → 路由处理
+```
+
 ## 技术栈
 
 ### 后端

@@ -8,7 +8,7 @@ from redis.asyncio import Redis
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
-from apps.auth.dependencies import get_current_tenant_id, get_current_user, require_superuser
+from apps.auth.dependencies import get_current_tenant_id, get_current_user, require_superuser, require_permission
 from apps.tenant.models import User
 from apps.ai.schemas import (
     AIConfigResponse,
@@ -37,7 +37,7 @@ router = APIRouter()
 async def get_ai_config(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(get_current_user),
 ):
     """获取当前租户 AI 配置（脱敏）"""
     return await load_ai_config_response(db, tenant_id)
@@ -48,7 +48,7 @@ async def update_ai_config(
     body: AIConfigUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(require_permission("ai:write")),
 ):
     """保存当前租户 AI 配置"""
     return await save_ai_config(db, tenant_id, body)
@@ -67,7 +67,7 @@ async def list_ai_models(
     body: ListModelsRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(require_permission("ai:write")),
 ):
     """根据 API Key 拉取可用模型列表"""
     base_url = resolve_base_url(body.provider_id, body.base_url)

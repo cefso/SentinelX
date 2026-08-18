@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient, CloudMetricRecord, CloudProductMetricInput } from '@/services/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { EditModal } from './components/EditModal'
 import { Loader2, Plus, RefreshCw, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
@@ -9,7 +10,12 @@ const PAGE_SIZE = 20
 
 export function CloudMetricsPage() {
   const queryClient = useQueryClient()
+  const { currentTenant, user } = useAuthStore()
   const [page, setPage] = useState(1)
+
+  // 权限检查
+  const permissions = currentTenant?.permissions || []
+  const canWrite = permissions.includes('*') || permissions.includes('cloud_metrics:write') || user?.is_system === true
   const [productSearch, setProductSearch] = useState('')
   const [namespaceSearch, setNamespaceSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -139,25 +145,29 @@ export function CloudMetricsPage() {
               批量删除 ({selectedIds.size})
             </button>
           )}
-          <button
-            onClick={() => syncAllMutation.mutate()}
-            disabled={syncAllMutation.isPending}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
-          >
-            {syncAllMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            全量同步
-          </button>
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            新增指标
-          </button>
+          {canWrite && (
+            <>
+              <button
+                onClick={() => syncAllMutation.mutate()}
+                disabled={syncAllMutation.isPending}
+                className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+              >
+                {syncAllMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                全量同步
+              </button>
+              <button
+                onClick={handleCreate}
+                className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                新增指标
+              </button>
+            </>
+          )}
         </div>
       </div>
 

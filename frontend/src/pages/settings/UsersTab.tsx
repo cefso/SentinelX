@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
-import { Plus, Check, X } from 'lucide-react'
+import { Plus, Check, X, RotateCcw } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
 
 interface Role {
@@ -67,6 +67,13 @@ export function UsersTab() {
 
   const removeUserMutation = useMutation({
     mutationFn: (id: number) => apiClient.delete(`/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+
+  const resetPermissionsMutation = useMutation({
+    mutationFn: (id: number) => apiClient.post(`/users/${id}/reset-permissions`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
     },
@@ -146,6 +153,19 @@ export function UsersTab() {
                         } disabled:opacity-50`}
                       >
                         {u.is_active ? '禁用' : '启用'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`确定要重置用户 ${u.username} 的权限吗？这将删除该用户的所有租户关联。`)) {
+                            resetPermissionsMutation.mutate(u.id)
+                          }
+                        }}
+                        disabled={resetPermissionsMutation.isPending || u.id === user?.id}
+                        className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded hover:bg-orange-200 mr-2 disabled:opacity-50"
+                        title="重置权限"
+                      >
+                        <RotateCcw className="w-3 h-3 inline mr-1" />
+                        重置
                       </button>
                       <button
                         onClick={() => {

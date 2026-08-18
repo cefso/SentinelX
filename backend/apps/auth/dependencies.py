@@ -185,22 +185,32 @@ async def get_current_tenant_id(
 
 def require_permission(permission: str):
     """
-    权限检查装饰器
+    权限检查依赖
     用法:
         @router.get("/alerts")
-        @require_permission("alerts:read")
-        async def get_alerts(current_user: User = Depends(get_current_user)):
+        async def get_alerts(current_user: User = Depends(require_permission("alerts:read"))):
             ...
+
+    支持通配符:
+        - "read" 匹配所有 ":read" 结尾的权限
+        - "admin" 或 "*" 匹配所有权限
     """
-    async def dependency(
+    async def _check_permission(
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ):
         payload = get_token_payload()
         permissions = payload.get("permissions", []) if payload else []
 
-        # 检查是否有权限
-        if "*" in permissions or permission in permissions:
+        # 通配符匹配
+        if "*" in permissions or "admin" in permissions:
+            return current_user
+
+        # "read" 权限匹配所有 ":read" 结尾的权限
+        if permission == "read":
+            if any(p.endswith(":read") or p == "read" for p in permissions):
+                return current_user
+        elif permission in permissions:
             return current_user
 
         raise HTTPException(
@@ -208,7 +218,7 @@ def require_permission(permission: str):
             detail=f"Permission denied: {permission}",
         )
 
-    return dependency
+    return _check_permission
 
 
 def require_superuser():
