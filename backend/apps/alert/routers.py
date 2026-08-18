@@ -20,7 +20,7 @@ from apps.core.mq import get_mq_async
 from apps.core.security import verify_password
 
 logger = structlog.get_logger()
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember, WebhookLog
 from apps.tenant.models import Tenant
 from apps.alert.schemas import (
@@ -289,6 +289,7 @@ async def _resolve_firing_alerts(
 # ============ 告警源管理 ============
 
 @router.get("/sources/stats")
+@require_permission("alert_sources:read")
 async def get_sources_stats(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -323,6 +324,7 @@ async def get_sources_stats(
 
 
 @router.get("/sources", response_model=list[AlertSourceResponse])
+@require_permission("alert_sources:read")
 async def list_sources(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -337,6 +339,7 @@ async def list_sources(
 
 
 @router.post("/sources", response_model=AlertSourceResponse)
+@require_permission("alert_sources:write")
 async def create_source(
     request: AlertSourceCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -359,6 +362,7 @@ async def create_source(
 
 
 @router.put("/sources/{source_id}", response_model=AlertSourceResponse)
+@require_permission("alert_sources:write")
 async def update_source(
     source_id: int,
     request: AlertSourceUpdate,
@@ -393,6 +397,7 @@ async def update_source(
 
 
 @router.delete("/sources/{source_id}")
+@require_permission("alert_sources:delete")
 async def delete_source(
     source_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -416,6 +421,7 @@ async def delete_source(
 
 
 @router.patch("/sources/{source_id}/toggle", response_model=AlertSourceResponse)
+@require_permission("alert_sources:write")
 async def toggle_source(
     source_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -768,6 +774,7 @@ async def create_alerts_batch(
 # ============ 告警查询 ============
 
 @router.get("/alerts")
+@require_permission("alerts:read")
 async def list_alerts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -876,6 +883,7 @@ async def list_alerts(
 
 
 @router.get("/alerts/stats", response_model=AlertStats)
+@require_permission("alerts:read")
 async def get_alert_stats(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -1023,6 +1031,7 @@ async def get_alert_stats_by_source(
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
+@require_permission("alerts:read")
 async def get_alert(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1137,6 +1146,7 @@ async def get_aggregated_members(
 
 
 @router.put("/alerts/{alert_id}", response_model=AlertResponse)
+@require_permission("alerts:write")
 async def update_alert(
     alert_id: int,
     request: AlertUpdate,
@@ -1385,6 +1395,7 @@ async def diagnose_alert(
 # ============ 云产品指标 ============
 
 @router.get("/cloud-metrics", response_model=CloudMetricsListResponse)
+@require_permission("cloud_metrics:read")
 async def list_cloud_metrics(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=1000),
@@ -1436,6 +1447,7 @@ async def list_cloud_metrics(
 
 
 @router.post("/cloud-metrics/batch-delete")
+@require_permission("cloud_metrics:delete")
 async def batch_delete_cloud_metrics(
     ids: List[int],
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1461,6 +1473,7 @@ async def batch_delete_cloud_metrics(
 
 
 @router.get("/cloud-metrics/map")
+@require_permission("cloud_metrics:read")
 async def get_metrics_by_namespace(
     namespace: str,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1491,6 +1504,7 @@ async def get_metrics_by_namespace(
 
 
 @router.post("/cloud-metrics/sync")
+@require_permission("cloud_metrics:write")
 async def sync_cloud_metrics(
     alert_ids: Optional[List[int]] = None,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1509,6 +1523,7 @@ async def sync_cloud_metrics(
 
 
 @router.post("/cloud-metrics/sync-all")
+@require_permission("cloud_metrics:write")
 async def sync_all_cloud_metrics(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -1522,6 +1537,7 @@ async def sync_all_cloud_metrics(
 
 
 @router.post("/cloud-metrics", response_model=CloudProductMetricResponse)
+@require_permission("cloud_metrics:write")
 async def create_cloud_metric(
     request: CloudProductMetricCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1544,6 +1560,7 @@ async def create_cloud_metric(
 
 
 @router.get("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
+@require_permission("cloud_metrics:read")
 async def get_cloud_metric(
     metric_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1557,6 +1574,7 @@ async def get_cloud_metric(
 
 
 @router.put("/cloud-metrics/{metric_id}", response_model=CloudProductMetricResponse)
+@require_permission("cloud_metrics:write")
 async def update_cloud_metric(
     metric_id: int,
     request: CloudProductMetricUpdate,
@@ -1577,6 +1595,7 @@ async def update_cloud_metric(
 
 
 @router.delete("/cloud-metrics/{metric_id}")
+@require_permission("cloud_metrics:delete")
 async def delete_cloud_metric(
     metric_id: int,
     tenant_id: int = Depends(get_current_tenant_id),

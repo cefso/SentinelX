@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from apps.core.database import get_db
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.alert.models import Alert
 from apps.rule.models import NotificationRecord
 from apps.rule.models import NotificationChannel, NotificationTemplate
@@ -83,6 +83,7 @@ async def list_channel_types():
 
 
 @router.get("/channels", response_model=List[ChannelResponse])
+@require_permission("channels:read")
 async def list_channels(
     is_active: Optional[bool] = None,
     channel_type: Optional[str] = None,
@@ -100,6 +101,7 @@ async def list_channels(
 
 
 @router.post("/channels", response_model=ChannelResponse)
+@require_permission("channels:write")
 async def create_channel(
     request: ChannelCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -132,6 +134,7 @@ async def create_channel(
 
 
 @router.get("/channels/{channel_id}", response_model=ChannelResponse)
+@require_permission("channels:read")
 async def get_channel(
     channel_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -151,6 +154,7 @@ async def get_channel(
 
 
 @router.put("/channels/{channel_id}", response_model=ChannelResponse)
+@require_permission("channels:write")
 async def update_channel(
     channel_id: int,
     request: ChannelUpdate,
@@ -193,6 +197,7 @@ async def update_channel(
 
 
 @router.delete("/channels/{channel_id}")
+@require_permission("channels:delete")
 async def delete_channel(
     channel_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -215,6 +220,7 @@ async def delete_channel(
 
 
 @router.post("/channels/{channel_id}/test", response_model=ChannelTestResponse)
+@require_permission("channels:test")
 async def test_channel(
     channel_id: int,
     request: ChannelTestRequest,
@@ -415,6 +421,7 @@ async def list_all_template_variables():
 
 
 @router.get("/templates", response_model=List[TemplateResponse])
+@require_permission("templates:read")
 async def list_templates(
     channel_type: Optional[str] = None,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -429,6 +436,7 @@ async def list_templates(
 
 
 @router.post("/templates", response_model=TemplateResponse)
+@require_permission("templates:write")
 async def create_template(
     request: TemplateCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -475,6 +483,7 @@ async def create_template(
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
+@require_permission("templates:read")
 async def get_template(
     template_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -494,6 +503,7 @@ async def get_template(
 
 
 @router.put("/templates/{template_id}", response_model=TemplateResponse)
+@require_permission("templates:write")
 async def update_template(
     template_id: int,
     request: TemplateUpdate,
@@ -520,6 +530,7 @@ async def update_template(
 
 
 @router.delete("/templates/{template_id}")
+@require_permission("templates:delete")
 async def delete_template(
     template_id: int,
     tenant_id: int = Depends(get_current_tenant_id),

@@ -191,6 +191,10 @@ def require_permission(permission: str):
         @require_permission("alerts:read")
         async def get_alerts(current_user: User = Depends(get_current_user)):
             ...
+
+    支持通配符:
+        - "read" 匹配所有 ":read" 结尾的权限
+        - "admin" 或 "*" 匹配所有权限
     """
     async def dependency(
         current_user: User = Depends(get_current_user),
@@ -199,8 +203,15 @@ def require_permission(permission: str):
         payload = get_token_payload()
         permissions = payload.get("permissions", []) if payload else []
 
-        # 检查是否有权限
-        if "*" in permissions or permission in permissions:
+        # 通配符匹配
+        if "*" in permissions or "admin" in permissions:
+            return current_user
+
+        # "read" 权限匹配所有 ":read" 结尾的权限
+        if permission == "read":
+            if any(p.endswith(":read") or p == "read" for p in permissions):
+                return current_user
+        elif permission in permissions:
             return current_user
 
         raise HTTPException(

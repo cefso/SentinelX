@@ -8,7 +8,7 @@ from redis.asyncio import Redis
 
 from apps.core.database import get_db
 from apps.core.redis import get_redis
-from apps.auth.dependencies import get_current_tenant_id, get_current_user, require_superuser
+from apps.auth.dependencies import get_current_tenant_id, get_current_user, require_superuser, require_permission
 from apps.tenant.models import User
 from apps.ai.schemas import (
     AIConfigResponse,
@@ -34,21 +34,23 @@ router = APIRouter()
 
 
 @router.get("/ai/config", response_model=AIConfigResponse)
+@require_permission("ai:read")
 async def get_ai_config(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(get_current_user),
 ):
     """获取当前租户 AI 配置（脱敏）"""
     return await load_ai_config_response(db, tenant_id)
 
 
 @router.put("/ai/config", response_model=AIConfigResponse)
+@require_permission("ai:write")
 async def update_ai_config(
     body: AIConfigUpdate,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(get_current_user),
 ):
     """保存当前租户 AI 配置"""
     return await save_ai_config(db, tenant_id, body)
@@ -63,11 +65,12 @@ async def get_ai_providers(
 
 
 @router.post("/ai/models", response_model=ListModelsResponse)
+@require_permission("ai:write")
 async def list_ai_models(
     body: ListModelsRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_superuser()),
+    current_user: User = Depends(get_current_user),
 ):
     """根据 API Key 拉取可用模型列表"""
     base_url = resolve_base_url(body.provider_id, body.base_url)
@@ -96,6 +99,7 @@ async def list_ai_models(
 
 
 @router.get("/ai/tasks/{task_id}", response_model=AITaskStatusResponse)
+@require_permission("ai:read")
 async def get_ai_task_status(
     task_id: str,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -111,6 +115,7 @@ async def get_ai_task_status(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
+@require_permission("ai:write")
 async def analyze_alert(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -127,6 +132,7 @@ async def analyze_alert(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
+@require_permission("ai:write")
 async def polish_alert_content(
     alert_id: int,
     template: Optional[str] = None,
@@ -148,6 +154,7 @@ async def polish_alert_content(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
+@require_permission("ai:write")
 async def suggest_alert_actions(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -164,6 +171,7 @@ async def suggest_alert_actions(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AITaskCreateResponse,
 )
+@require_permission("ai:write")
 async def predict_alert_impact(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),

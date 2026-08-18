@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 
 from apps.core.database import get_db
 from apps.core.security import hash_password, verify_password
-from apps.auth.dependencies import get_current_user, get_current_tenant_id, get_token_payload, require_superuser
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, get_token_payload, require_superuser, require_permission
 from apps.auth.services.auth import AuditService
 from apps.tenant.models import Tenant, User, Role, Team, UserTenant, UserTeam
 from apps.tenant.schemas import (
@@ -45,17 +45,12 @@ async def list_public_tenants(
 # ============ 租户管理 ============
 
 @router.get("/tenants", response_model=list[TenantResponse])
+@require_permission("tenants:read")
 async def list_tenants(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取租户列表（仅超级管理员或系统管理员）"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-    is_system = payload.get("is_system", False) if payload else False
-    if not is_system and not is_superuser:
-        raise HTTPException(status_code=403, detail="Superuser required")
-
+    """获取租户列表"""
     result = await db.execute(
         select(Tenant).where(Tenant.is_deleted == False).order_by(Tenant.id)
     )
@@ -64,18 +59,13 @@ async def list_tenants(
 
 
 @router.post("/tenants", response_model=TenantResponse)
+@require_permission("tenants:write")
 async def create_tenant(
     request: TenantCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """创建租户"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-    is_system = payload.get("is_system", False) if payload else False
-    if not is_system and not is_superuser:
-        raise HTTPException(status_code=403, detail="Superuser required")
-
     # 检查slug唯一性
     existing = await db.execute(
         select(Tenant).where(Tenant.slug == request.slug)
@@ -141,21 +131,13 @@ async def get_current_tenant(
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantResponse)
+@require_permission("tenants:read")
 async def get_tenant(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """获取租户详情"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-    is_system = payload.get("is_system", False) if payload else False
-    current_tenant_id = payload.get("current_tenant_id") if payload else None
-
-    # 系统管理员可以访问所有租户，租户管理员只能访问当前租户
-    if not is_system and not is_superuser and current_tenant_id != tenant_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -182,6 +164,7 @@ async def get_tenant(
 
 
 @router.put("/tenants/{tenant_id}", response_model=TenantResponse)
+@require_permission("tenants:write")
 async def update_tenant(
     tenant_id: int,
     request: TenantUpdate,
@@ -189,12 +172,6 @@ async def update_tenant(
     current_user: User = Depends(get_current_user),
 ):
     """更新租户"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-    is_system = payload.get("is_system", False) if payload else False
-    if not is_system and not is_superuser:
-        raise HTTPException(status_code=403, detail="Superuser required")
-
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -211,19 +188,13 @@ async def update_tenant(
 # ============ Webhook Key 管理 ============
 
 @router.post("/tenants/{tenant_id}/webhook-key")
+@require_permission("tenants:write")
 async def generate_webhook_key(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """生成或重置租户的 Webhook API Key"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    # 只有管理员可以操作
-    if not is_superuser:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -245,19 +216,13 @@ async def generate_webhook_key(
 
 
 @router.get("/tenants/{tenant_id}/webhook-key")
+@require_permission("tenants:read")
 async def get_webhook_key_info(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """获取租户的 Webhook URL 信息（不包含 API Key）"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    # 只有管理员可以查看
-    if not is_superuser:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -485,6 +450,7 @@ async def reject_user(
 # ============ 用户管理 ============
 
 @router.get("/users", response_model=list[UserResponse])
+@require_permission("users:read")
 async def list_users(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -506,6 +472,7 @@ async def list_users(
 
 
 @router.post("/users", response_model=UserResponse)
+@require_permission("users:write")
 async def create_user(
     request: UserCreate,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -513,13 +480,6 @@ async def create_user(
     current_user: User = Depends(get_current_user),
 ):
     """创建用户"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    # 只能由租户管理员创建
-    if not is_superuser:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     # 检查用户名唯一性
     existing = await db.execute(
         select(User.id).where(User.username == request.username).limit(1)
@@ -574,6 +534,7 @@ async def create_user(
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
+@require_permission("users:read")
 async def get_user(
     user_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -595,6 +556,7 @@ async def get_user(
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)
+@require_permission("users:write")
 async def update_user(
     user_id: int,
     request: UserUpdate,
@@ -624,6 +586,7 @@ async def update_user(
 
 
 @router.put("/users/{user_id}/role")
+@require_permission("users:write")
 async def update_user_role(
     user_id: int,
     request: UserRoleUpdate,
@@ -631,10 +594,6 @@ async def update_user_role(
     current_user: User = Depends(get_current_user),
 ):
     """更新用户在指定租户的角色"""
-    # 检查是否是租户管理员或系统管理员
-    if not current_user.is_system and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
     # 处理每个租户角色
     for tr in request.tenant_roles:
         # 检查角色是否存在且属于指定租户
@@ -677,6 +636,7 @@ async def update_user_role(
 
 
 @router.put("/users/{user_id}/password")
+@require_permission("users:write")
 async def change_password(
     user_id: int,
     request: UserPasswordUpdate,
@@ -685,13 +645,6 @@ async def change_password(
     current_user: User = Depends(get_current_user),
 ):
     """修改密码"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    # 只能修改自己的密码，或者管理员可以修改其他用户密码
-    if current_user.id != user_id and not is_superuser:
-        raise HTTPException(status_code=403, detail="Access denied")
-
     result = await db.execute(
         select(User)
         .join(UserTenant, UserTenant.user_id == User.id)
@@ -713,19 +666,14 @@ async def change_password(
 
 
 @router.delete("/users/{user_id}")
+@require_permission("users:delete")
 async def remove_user_from_tenant(
     user_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """从本租户移除用户（仅管理员）"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    if not is_superuser:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
+    """从本租户移除用户"""
     # 获取用户在本租户的关联
     result = await db.execute(
         select(UserTenant).where(
@@ -749,6 +697,7 @@ async def remove_user_from_tenant(
 
 
 @router.post("/users/{user_id}/activate")
+@require_permission("users:write")
 async def activate_user(
     user_id: int,
     is_active: bool,
@@ -756,13 +705,7 @@ async def activate_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """激活/禁用用户（仅管理员）"""
-    payload = get_token_payload()
-    is_superuser = payload.get("is_superuser", False) if payload else False
-
-    if not is_superuser:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
+    """激活/禁用用户"""
     # 获取用户
     result = await db.execute(
         select(User)
@@ -792,6 +735,7 @@ async def activate_user(
 # ============ 角色管理 ============
 
 @router.get("/roles", response_model=list[RoleResponse])
+@require_permission("roles:read")
 async def list_roles(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -812,6 +756,7 @@ async def list_roles(
 
 
 @router.post("/roles", response_model=RoleResponse)
+@require_permission("roles:write")
 async def create_role(
     request: RoleCreate,
     tenant_id: int = Depends(get_current_tenant_id),

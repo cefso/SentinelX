@@ -111,8 +111,27 @@ async def seed_default_data():
                     tenant_id=tenant.id,
                     name="运维人员",
                     code="operator",
-                    description="运维人员",
-                    permissions=["read", "write", "alerts:read", "alerts:write", "rules:read", "rules:write"],
+                    description="运维人员，拥有日常运维所需权限",
+                    permissions=[
+                        # 告警
+                        "alerts:read", "alerts:write", "alerts:delete", "alerts:ack",
+                        # 告警源
+                        "alert_sources:read", "alert_sources:write", "alert_sources:delete",
+                        # 规则
+                        "rules:read", "rules:write", "rules:delete", "rules:execute",
+                        # 渠道
+                        "channels:read", "channels:write", "channels:delete", "channels:test",
+                        # 模板
+                        "templates:read", "templates:write", "templates:delete",
+                        # 维护窗口
+                        "maintenance:read", "maintenance:write", "maintenance:delete",
+                        # 告警升级
+                        "escalation:read", "escalation:write",
+                        # 云产品指标
+                        "cloud_metrics:read", "cloud_metrics:write", "cloud_metrics:delete",
+                        # AI
+                        "ai:read", "ai:write",
+                    ],
                     is_builtin=False,
                     scope="tenant",
                 ),
@@ -120,8 +139,8 @@ async def seed_default_data():
                     tenant_id=tenant.id,
                     name="只读用户",
                     code="tenant_viewer",
-                    description="租户只读用户",
-                    permissions=["read", "alerts:read", "rules:read"],
+                    description="只读用户，仅查看权限",
+                    permissions=["read"],
                     is_builtin=False,
                     scope="tenant",
                 ),

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import get_db
-from apps.auth.dependencies import get_current_user, get_current_tenant_id
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
 from apps.tenant.models import User
 from apps.alert.services.escalation import EscalationService
 
@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/alerts/escalation/candidates")
+@require_permission("escalation:read")
 async def list_escalation_candidates(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -44,6 +45,7 @@ async def list_escalation_candidates(
 
 
 @router.post("/alerts/{alert_id}/escalate")
+@require_permission("escalation:write")
 async def manual_escalate(
     alert_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
@@ -88,6 +90,7 @@ async def manual_escalate(
 
 
 @router.post("/alerts/escalation/check")
+@require_permission("escalation:write")
 async def run_escalation_check(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
