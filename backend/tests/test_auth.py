@@ -16,7 +16,7 @@ def test_permission_service_builtin_permissions():
 def test_permission_labels():
     """测试权限标签"""
     assert PermissionService.PERMISSIONS["alerts:read"] == "查看告警"
-    assert PermissionService.PERMISSIONS["admin"] == "管理员(全部权限)"
+    assert PermissionService.PERMISSIONS["admin"] == "管理员（全部权限）"
 
 
 class TestAPIKeyFormat:
