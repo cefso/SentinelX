@@ -1,7 +1,7 @@
 """
 SentinelX - 认证服务
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List, Dict, Any
 import structlog
 
@@ -55,7 +55,7 @@ class AuthService:
             raise AuthenticationError("Registration pending approval")
 
         # 更新最后登录时间
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
 
         # 获取用户的租户列表
         tenants = await self.get_user_tenants(user.id)

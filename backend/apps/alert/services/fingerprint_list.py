@@ -1,6 +1,7 @@
 """
 SentinelX - 指纹视图列表（含虚拟策略聚合指纹行 + 抖动检测）
 """
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -59,19 +60,26 @@ async def _detect_flapping_fingerprints(
     # 条件B: 交替模式 + 短持续时间（仅对尚未标记的 fingerprint 检测）
     remaining = [fp for fp in fingerprints if fp not in flapping_fps]
     if remaining:
-        for fp in remaining:
-            recent_result = await db.execute(
-                select(Alert.status, Alert.fired_at, Alert.resolved_at)
-                .where(
-                    and_(
-                        Alert.tenant_id == tenant_id,
-                        Alert.fingerprint == fp,
-                    )
+        # 批量查询所有 fingerprint 的最近告警（避免 N+1）
+        all_recent_result = await db.execute(
+            select(Alert.fingerprint, Alert.status, Alert.fired_at, Alert.resolved_at)
+            .where(
+                and_(
+                    Alert.tenant_id == tenant_id,
+                    Alert.fingerprint.in_(remaining),
                 )
-                .order_by(Alert.fired_at.desc())
-                .limit(10)
             )
-            recent_alerts = recent_result.all()
+            .order_by(Alert.fingerprint, Alert.fired_at.desc())
+        )
+        all_recent = all_recent_result.all()
+
+        # 按 fingerprint 分组
+        fp_alerts: dict[str, list] = defaultdict(list)
+        for row in all_recent:
+            fp_alerts[row.fingerprint].append(row)
+
+        for fp in remaining:
+            recent_alerts = fp_alerts.get(fp, [])[:10]
             if len(recent_alerts) < 3:
                 continue
 

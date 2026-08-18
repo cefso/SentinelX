@@ -138,8 +138,7 @@ class RuleEngine:
         if db is None:
             return
         try:
-            # alert_rules.last_match_at 为 naive UTC，与模型列类型一致
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(timezone.utc)
             rule.match_count = (getattr(rule, "match_count", None) or 0) + 1
             rule.last_match_at = now
             await db.commit()

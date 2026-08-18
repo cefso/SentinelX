@@ -126,34 +126,6 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-class ErrorHandlingMiddleware(BaseHTTPMiddleware):
-    """
-    统一错误处理中间件
-    将未处理的异常转换为标准JSON响应
-    """
-
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        try:
-            return await call_next(request)
-        except Exception as exc:
-            log.error(
-                "unhandled_exception",
-                path=request.url.path,
-                method=request.method,
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-            )
-
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "message": "Internal server error",
-                    "code": "INTERNAL_ERROR",
-                    "details": {},
-                }
-            )
-
-
 def _generate_request_id() -> str:
     """生成请求ID"""
     return str(uuid.uuid4())[:8]

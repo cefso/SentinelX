@@ -65,7 +65,9 @@ class NotificationChannel(ABC):
             context["metric_value"] = ""
 
         try:
-            jinja_template = Template(template)
+            from jinja2.sandbox import SandboxedEnvironment
+            env = SandboxedEnvironment()
+            jinja_template = env.from_string(template)
             return jinja_template.render(**context)
         except Exception as e:
             # Jinja2 渲染失败时返回原始模板（向后兼容）

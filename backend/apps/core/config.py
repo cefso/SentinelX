@@ -3,6 +3,7 @@ SentinelX - 综合告警平台配置管理
 """
 import json
 from pathlib import Path
+from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
@@ -84,11 +85,15 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        user = quote_plus(self.DB_USER)
+        password = quote_plus(self.DB_PASSWORD)
+        return f"postgresql+asyncpg://{user}:{password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        user = quote_plus(self.DB_USER)
+        password = quote_plus(self.DB_PASSWORD)
+        return f"postgresql://{user}:{password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def REDIS_URL(self) -> str:

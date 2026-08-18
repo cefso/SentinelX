@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 import structlog
 from structlog.types import EventDict, WrappedLogger
 from typing import Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apps.core.config import settings
 
@@ -35,7 +35,7 @@ def _is_debug() -> bool:
 def _add_service_context(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
     """添加服务上下文信息"""
     event_dict["service"] = "sentinelx"
-    event_dict["timestamp"] = datetime.utcnow().isoformat()
+    event_dict["timestamp"] = datetime.now(timezone.utc).isoformat()
     return event_dict
 
 

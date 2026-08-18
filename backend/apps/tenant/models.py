@@ -1,9 +1,14 @@
 """
 SentinelX - 租户管理数据模型
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, Index, ForeignKey, UniqueConstraint
 from apps.core.database import Base
+
+
+def utc_now():
+    """返回当前UTC时间（timezone-aware）"""
+    return datetime.now(timezone.utc)
 
 
 class Tenant(Base):
@@ -36,8 +41,8 @@ class Tenant(Base):
     is_deleted = Column(Boolean, default=False)
 
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     deleted_at = Column(DateTime, nullable=True)
 
     def __repr__(self):
@@ -76,8 +81,8 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
 
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     deleted_at = Column(DateTime, nullable=True)
 
     def __repr__(self):
@@ -107,7 +112,7 @@ class UserTenant(Base):
     # 是否为主租户
     is_primary = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 
 class Role(Base):
@@ -135,8 +140,8 @@ class Role(Base):
     scope = Column(String(32), default="tenant")
 
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     def __repr__(self):
         return f"<Role(id={self.id}, name={self.name}, code={self.code})>"
@@ -157,8 +162,8 @@ class Team(Base):
     # 负责人
     leader_id = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     def __repr__(self):
         return f"<Team(id={self.id}, name={self.name})>"
@@ -173,7 +178,7 @@ class UserTeam(Base):
     user_id = Column(Integer, nullable=False, index=True)
     team_id = Column(Integer, nullable=False, index=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
 
 class AuditLog(Base):
@@ -202,7 +207,7 @@ class AuditLog(Base):
     ip_address = Column(String(64), nullable=True)
     user_agent = Column(String(256), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
 
 
 class APIKey(Base):
@@ -237,5 +242,5 @@ class APIKey(Base):
     expires_at = Column(DateTime, nullable=True)
 
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)

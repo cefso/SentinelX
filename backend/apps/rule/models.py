@@ -1,9 +1,14 @@
 """
 SentinelX - 规则数据模型
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Index
 from apps.core.database import Base
+
+
+def utc_now():
+    """返回当前UTC时间（timezone-aware）"""
+    return datetime.now(timezone.utc)
 
 
 class AlertRule(Base):
@@ -45,8 +50,8 @@ class AlertRule(Base):
     match_count = Column(Integer, default=0)  # 累计匹配次数
     last_match_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class NotificationChannel(Base):
@@ -77,8 +82,8 @@ class NotificationChannel(Base):
     fail_count = Column(Integer, default=0)
     last_send_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class NotificationTemplate(Base):
@@ -103,8 +108,8 @@ class NotificationTemplate(Base):
     # 变量定义
     variables = Column(JSON, default=list)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class NotificationRecord(Base):
@@ -131,5 +136,5 @@ class NotificationRecord(Base):
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     sent_at = Column(DateTime, nullable=True)
