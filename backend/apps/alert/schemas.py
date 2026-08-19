@@ -222,6 +222,34 @@ class AlertHistoryResponse(BaseModel):
         from_attributes = True
 
 
+class AlertHistoryItemResponse(BaseModel):
+    """告警历史记录项（含告警基本信息）"""
+    id: int = Field(..., description="历史记录ID")
+    tenant_id: str = Field(..., description="租户ID")
+    alert_id: int = Field(..., description="告警ID")
+    alert_title: Optional[str] = Field(None, description="告警标题")
+    alert_status: Optional[str] = Field(None, description="告警当前状态")
+    alert_severity: Optional[str] = Field(None, description="告警严重级别")
+    action: str = Field(..., description="操作类型")
+    description: Optional[str] = Field(None, description="操作描述")
+    operator_id: Optional[int] = Field(None, description="操作人ID")
+    operator_name: Optional[str] = Field(None, description="操作人名称")
+    old_value: Optional[Dict] = Field(None, description="变更前的值")
+    new_value: Optional[Dict] = Field(None, description="变更后的值")
+    created_at: datetime = Field(..., description="操作时间")
+
+    class Config:
+        from_attributes = True
+
+
+class AlertHistoryListResponse(BaseModel):
+    """告警历史记录列表响应"""
+    items: List[AlertHistoryItemResponse] = Field(default_factory=list, description="历史记录列表")
+    total: int = Field(..., description="总数")
+    page: int = Field(..., description="当前页")
+    page_size: int = Field(..., description="每页数量")
+
+
 class DisposeRequest(BaseModel):
     """处置请求"""
     action: Literal['note', 'acknowledge', 'resolve', 'silence'] = Field(..., description="处置类型: note/acknowledge/resolve/silence")

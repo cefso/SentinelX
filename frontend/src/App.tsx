@@ -7,6 +7,7 @@ import { AlertsPage } from './pages/alerts'
 import { AlertDetailPage } from './pages/alerts/detail'
 import { AlertSourcesPage } from './pages/alerts/sources'
 import { UnresolvedAlertsPage } from './pages/alerts/unresolved'
+import { AlertHistoryPage } from './pages/alerts/history'
 import { RulesPage } from './pages/rules'
 import { DedupRulesPage } from './pages/rules/dedup'
 import { SuppressRulesPage } from './pages/rules/suppress'
@@ -46,6 +47,7 @@ function App() {
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="alerts/unresolved" element={<UnresolvedAlertsPage />} />
         <Route path="alerts/sources" element={<AlertSourcesPage />} />
+        <Route path="alerts/history" element={<AlertHistoryPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />
         <Route path="rules" element={<RulesPage />} />
         <Route path="rules/dedup" element={<DedupRulesPage />} />

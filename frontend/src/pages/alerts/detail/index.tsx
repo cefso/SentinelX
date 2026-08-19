@@ -7,12 +7,13 @@ import { AggregateRuleModal } from '../../rules/aggregate'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/stores/toast-store'
-import { apiClient, DisposeRecord } from '@/services/api'
-import { AlertResponse, AlertAggregateMembersResponse } from '@/types/alert'
+import { apiClient } from '@/services/api'
+import { AlertResponse, AlertAggregateMembersResponse, AlertHistoryItem } from '@/types/alert'
 import { useCloudMetricsMap, useNamespaceDesc, useMetricNameDesc } from '@/hooks/useCloudMetrics'
-import { Send, Circle, ChevronDown, Clock, FileText } from 'lucide-react'
+import { Send, Circle, ChevronDown, Clock, History } from 'lucide-react'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
+import { ActionBadge } from '@/components/common/ActionBadge'
 import { buildTimeline, Timeline } from './Timeline'
 import { Labels } from './Labels'
 import { useAlertAI, AIActionsButton, AIAnalysisPanel } from './AIActions'
@@ -153,9 +154,9 @@ export function AlertDetailPage() {
     enabled: !!alert?.id,
   })
 
-  const { data: disposeRecords = [] } = useQuery<DisposeRecord[]>({
-    queryKey: ['disposeRecords', alert?.id],
-    queryFn: () => apiClient.getDisposeRecords(alert!.id),
+  const { data: fullHistory = [] } = useQuery<AlertHistoryItem[]>({
+    queryKey: ['alertFullHistory', alert?.id],
+    queryFn: () => apiClient.getAlertFullHistory(alert!.id),
     enabled: !!alert?.id,
   })
   const aggregatedMembers = aggregateMembersData?.items ?? []
@@ -425,33 +426,43 @@ export function AlertDetailPage() {
             </select>
           </div>
 
-          {/* 处置记录卡片 */}
-          {disposeRecords.length > 0 && (
+          {/* 生命周期记录卡片 */}
+          {fullHistory.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center gap-2 mb-3">
-                <FileText className="w-4 h-4 text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">处置记录 ({disposeRecords.length})</h2>
+              <div className="flex items-center gap-2 mb-4">
+                <History className="w-4 h-4 text-gray-500" />
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">生命周期 ({fullHistory.length})</h2>
               </div>
               <div className="relative">
                 <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
                 <div className="space-y-3">
-                  {disposeRecords
+                  {fullHistory
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                     .map((record) => (
                       <div key={record.id} className="relative pl-8">
-                        <div className="absolute left-0 top-1 w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center">
-                          <span className="text-xs text-purple-600 font-medium">
-                            {record.action === 'note' ? '备' : record.action === 'acknowledge' ? '确' : '解'}
-                          </span>
+                        <div className="absolute left-0 top-1">
+                          <ActionBadge action={record.action} />
                         </div>
                         <div className="text-xs text-gray-400 mb-0.5">
                           {formatLocalDateTime(record.created_at)}
                           {record.operator_name && <span className="ml-1">· {record.operator_name}</span>}
                         </div>
-                        <div className="text-xs font-medium text-gray-700 mb-0.5">
-                          {record.action === 'note' ? '备注' : record.action === 'acknowledge' ? '确认' : '解决'}
-                        </div>
-                        <div className="text-sm text-gray-600">{record.comment}</div>
+                        <div className="text-sm text-gray-600">{record.description || record.action}</div>
+                        {record.old_value && record.new_value && (
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {Object.entries(record.new_value).map(([key, value]) => {
+                              const oldValue = record.old_value?.[key]
+                              if (oldValue !== undefined && oldValue !== value) {
+                                return (
+                                  <span key={key}>
+                                    {key}: <span className="text-gray-500">{String(oldValue)}</span> → <span className="text-blue-600">{String(value)}</span>
+                                  </span>
+                                )
+                              }
+                              return null
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                 </div>

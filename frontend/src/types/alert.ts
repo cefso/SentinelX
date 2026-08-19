@@ -107,3 +107,26 @@ export interface AlertDisposeRecord {
   operator_name?: string
   created_at: string
 }
+
+export interface AlertHistoryItem {
+  id: number
+  tenant_id: string
+  alert_id: number
+  alert_title?: string
+  alert_status?: string
+  alert_severity?: string
+  action: string
+  description?: string
+  operator_id?: number
+  operator_name?: string
+  old_value?: Record<string, any>
+  new_value?: Record<string, any>
+  created_at: string
+}
+
+export interface AlertHistoryListResponse {
+  items: AlertHistoryItem[]
+  total: number
+  page: number
+  page_size: number
+}
