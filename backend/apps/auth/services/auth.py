@@ -55,7 +55,7 @@ class AuthService:
             raise AuthenticationError("Registration pending approval")
 
         # 更新最后登录时间
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.utcnow()
 
         # 获取用户的租户列表
         tenants = await self.get_user_tenants(user.id)
