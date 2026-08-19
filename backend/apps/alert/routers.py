@@ -26,7 +26,8 @@ from apps.tenant.models import Tenant, User
 from apps.alert.schemas import (
     AlertCreate, AlertUpdate, AlertResponse, AlertListResponse, AlertFilter, AlertStats,
     AlertSourceCreate, AlertSourceUpdate, AlertSourceResponse,
-    AlertHistoryResponse, DiagnosisResponse, TraceStep,
+    AlertHistoryResponse, AlertHistoryItemResponse, AlertHistoryListResponse,
+    DiagnosisResponse, TraceStep,
     AlertAggregateMemberItem, AlertAggregateMembersResponse,
     CloudProductMetricCreate, CloudProductMetricUpdate, CloudProductMetricResponse,
     CloudMetricsListResponse,
@@ -981,6 +982,100 @@ async def get_alert_stats_by_source(
     return SourceAlertStatsResponse(items=items)
 
 
+@router.get("/alerts/history", response_model=AlertHistoryListResponse)
+async def get_alert_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    action: Optional[str] = Query(None, description="操作类型筛选"),
+    operator_id: Optional[int] = Query(None, description="操作人ID"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
+    keyword: Optional[str] = Query(None, description="模糊搜索告警标题"),
+    alert_status: Optional[str] = Query(None, description="告警状态筛选"),
+    alert_id: Optional[int] = Query(None, description="特定告警ID"),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取跨告警的历史记录列表"""
+    # 构建基础过滤条件
+    base_filter = [AlertHistory.tenant_id == str(tenant_id)]
+
+    if action:
+        base_filter.append(AlertHistory.action == action)
+    if operator_id:
+        base_filter.append(AlertHistory.operator_id == operator_id)
+    if start_time:
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        base_filter.append(AlertHistory.created_at >= start_time)
+    if end_time:
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        base_filter.append(AlertHistory.created_at <= end_time)
+    if alert_id:
+        base_filter.append(AlertHistory.alert_id == alert_id)
+
+    # 如果需要按告警标题或状态筛选，需要 JOIN Alert 表
+    join_filter = []
+    if keyword or alert_status:
+        join_filter.append(Alert.id == AlertHistory.alert_id)
+        if keyword:
+            join_filter.append(Alert.title.ilike(f"%{keyword}%"))
+        if alert_status:
+            join_filter.append(Alert.status == alert_status)
+
+    # 统计总数
+    count_query = select(func.count()).select_from(AlertHistory).where(and_(*base_filter))
+    if join_filter:
+        count_query = count_query.join(Alert, and_(*join_filter))
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # 查询历史记录
+    query = (
+        select(
+            AlertHistory,
+            Alert.title.label("alert_title"),
+            Alert.status.label("alert_status"),
+            Alert.severity.label("alert_severity"),
+        )
+        .outerjoin(Alert, AlertHistory.alert_id == Alert.id)
+        .where(and_(*base_filter))
+    )
+    if keyword or alert_status:
+        query = query.where(and_(*join_filter))
+
+    query = query.order_by(AlertHistory.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    rows = result.all()
+
+    items = [
+        AlertHistoryItemResponse(
+            id=row.AlertHistory.id,
+            tenant_id=row.AlertHistory.tenant_id,
+            alert_id=row.AlertHistory.alert_id,
+            alert_title=row.alert_title,
+            alert_status=row.alert_status,
+            alert_severity=row.alert_severity,
+            action=row.AlertHistory.action,
+            description=row.AlertHistory.description,
+            operator_id=row.AlertHistory.operator_id,
+            operator_name=row.AlertHistory.operator_name,
+            old_value=row.AlertHistory.old_value,
+            new_value=row.AlertHistory.new_value,
+            created_at=row.AlertHistory.created_at,
+        )
+        for row in rows
+    ]
+
+    return AlertHistoryListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
 async def get_alert(
     alert_id: int,
@@ -1204,6 +1299,50 @@ async def get_dispose_records(
             comment=r.description or '',
             operator_id=r.operator_id,
             operator_name=r.operator_name,
+            created_at=r.created_at,
+        )
+        for r in records
+    ]
+
+
+@router.get("/alerts/{alert_id}/history", response_model=list[AlertHistoryResponse])
+async def get_alert_full_history(
+    alert_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取单条告警的完整生命周期历史"""
+    # 验证告警存在且属于当前租户
+    alert_result = await db.execute(
+        select(Alert).where(
+            Alert.id == alert_id,
+            Alert.tenant_id == str(tenant_id)
+        )
+    )
+    alert = alert_result.scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    # 查询所有历史记录
+    result = await db.execute(
+        select(AlertHistory).where(
+            AlertHistory.alert_id == alert_id,
+            AlertHistory.tenant_id == str(tenant_id),
+        ).order_by(AlertHistory.created_at.desc())
+    )
+    records = result.scalars().all()
+
+    return [
+        AlertHistoryResponse(
+            id=r.id,
+            tenant_id=r.tenant_id,
+            alert_id=r.alert_id,
+            action=r.action,
+            description=r.description,
+            operator_id=r.operator_id,
+            operator_name=r.operator_name,
+            old_value=r.old_value,
+            new_value=r.new_value,
             created_at=r.created_at,
         )
         for r in records

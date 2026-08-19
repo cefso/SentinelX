@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth-store'
-import { AlertResponse } from '@/types/alert'
+import { AlertResponse, AlertHistoryListResponse, AlertHistoryItem } from '@/types/alert'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -170,6 +170,24 @@ class ApiClient {
 
   async getDisposeRecords(alertId: number): Promise<DisposeRecord[]> {
     return this.get(`/alerts/${alertId}/dispose`)
+  }
+
+  async getAlertHistory(params?: {
+    page?: number
+    page_size?: number
+    action?: string
+    operator_id?: number
+    start_time?: string
+    end_time?: string
+    keyword?: string
+    alert_status?: string
+    alert_id?: number
+  }): Promise<AlertHistoryListResponse> {
+    return this.get('/alerts/history', params)
+  }
+
+  async getAlertFullHistory(alertId: number): Promise<AlertHistoryItem[]> {
+    return this.get(`/alerts/${alertId}/history`)
   }
 
   async getRuleFieldValues(params: { field: string; search?: string; limit?: number; offset?: number }): Promise<{ field: string; values: { value: string; count: number }[]; total: number }> {

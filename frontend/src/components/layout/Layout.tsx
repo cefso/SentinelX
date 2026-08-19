@@ -28,7 +28,13 @@ const navigation: NavItem[] = [
       { name: '未恢复告警', href: '/alerts/unresolved' },
     ],
   },
-  { name: '告警', href: '/alerts', icon: Bell },
+  {
+    name: '告警', href: '/alerts', icon: Bell,
+    children: [
+      { name: '告警列表', href: '/alerts' },
+      { name: '操作记录', href: '/alerts/history' },
+    ],
+  },
   { name: '规则', href: '/rules', icon: Settings2 },
   { name: '渠道', href: '/channels', icon: Send },
   { name: '模板', href: '/templates', icon: FileText },
