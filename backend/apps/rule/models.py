@@ -7,8 +7,8 @@ from apps.core.database import Base
 
 
 def utc_now():
-    """返回当前UTC时间（timezone-aware）"""
-    return datetime.now(timezone.utc)
+    """返回当前UTC时间（naive，匹配 TIMESTAMP WITHOUT TIME ZONE 列）"""
+    return datetime.utcnow()
 
 
 class AlertRule(Base):

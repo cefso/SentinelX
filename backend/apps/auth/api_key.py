@@ -68,7 +68,7 @@ class APIKeyAuth:
             raise AuthenticationError("Tenant not found")
 
         # 双重写入: 新的 APIKey 表 + 旧的 api_token JSON 字段(兼容)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days) if expires_days else None
+        expires_at = datetime.utcnow() + timedelta(days=expires_days) if expires_days else None
 
         api_key_record = APIKey(
             tenant_id=tenant_id,
@@ -131,7 +131,7 @@ class APIKeyAuth:
                     logger.warning("api_key_inactive", key_id=key_id)
                     return None
 
-                if api_key_record.expires_at and api_key_record.expires_at < datetime.now(timezone.utc):
+                if api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
                     logger.warning("api_key_expired", key_id=key_id)
                     return None
 
