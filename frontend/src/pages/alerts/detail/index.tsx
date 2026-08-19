@@ -434,13 +434,13 @@ export function AlertDetailPage() {
                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">生命周期 ({fullHistory.length})</h2>
               </div>
               <div className="relative">
-                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
-                <div className="space-y-3">
+                <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
+                <div className="space-y-4">
                   {fullHistory
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                     .map((record) => (
-                      <div key={record.id} className="relative pl-8">
-                        <div className="absolute left-0 top-1">
+                      <div key={record.id} className="relative pl-16">
+                        <div className="absolute left-0 top-0">
                           <ActionBadge action={record.action} />
                         </div>
                         <div className="text-xs text-gray-400 mb-0.5">
