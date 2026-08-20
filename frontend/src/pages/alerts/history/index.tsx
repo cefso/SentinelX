@@ -10,19 +10,16 @@ import { History, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const ACTION_OPTIONS = [
   { value: '', label: '全部操作' },
+  // 系统自动操作
+  { value: 'received', label: '接入' },
   { value: 'fired', label: '触发' },
+  { value: 'filtered', label: '过滤' },
+  { value: 'escalated', label: '升级' },
+  // 人工操作
+  { value: 'acknowledged', label: '确认' },
   { value: 'resolved', label: '恢复' },
-  { value: 'deduplicated', label: '去重' },
-  { value: 'aggregated', label: '聚合' },
-  { value: 'dispose_note', label: '备注' },
-  { value: 'dispose_acknowledge', label: '确认' },
-  { value: 'dispose_resolve', label: '解决' },
-  { value: 'dispose_silence', label: '静默' },
-  { value: 'acknowledge_callback', label: '外部确认' },
-  { value: 'resolve_callback', label: '外部恢复' },
-  { value: 'silence_callback', label: '外部静默' },
-  { value: 'auto_assign', label: '自动分配' },
-  { value: 'update', label: '更新' },
+  { value: 'silenced', label: '静默' },
+  { value: 'updated', label: '更新' },
 ]
 
 const STATUS_OPTIONS = [

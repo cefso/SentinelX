@@ -210,7 +210,7 @@ class AlertHistoryResponse(BaseModel):
     id: int = Field(..., description="历史记录ID")
     tenant_id: str = Field(..., description="租户ID")
     alert_id: int = Field(..., description="告警ID")
-    action: str = Field(..., description="操作类型: state_change/assign/escalate/silence/annotate")
+    action: str = Field(..., description="操作类型: received/fired/filtered/escalated/acknowledged/resolved/silenced/updated")
     description: Optional[str] = Field(None, description="操作描述")
     operator_id: Optional[int] = Field(None, description="操作人ID")
     operator_name: Optional[str] = Field(None, description="操作人名称")

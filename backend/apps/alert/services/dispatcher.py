@@ -168,7 +168,7 @@ class AlertDispatcher:
         history = AlertHistory(
             tenant_id=alert.tenant_id,
             alert_id=alert.id,
-            action="deduplicated",
+            action="filtered",
             description=reason,
             new_value={
                 "status": "deduplicated",
@@ -198,6 +198,14 @@ class AlertDispatcher:
     async def _handle_suppressed(self, alert: Alert, trace_id: str, reason: str):
         """处理被抑制的告警"""
         alert.status = "suppressed"
+        history = AlertHistory(
+            tenant_id=alert.tenant_id,
+            alert_id=alert.id,
+            action="filtered",
+            description=reason,
+            new_value={"status": "suppressed"},
+        )
+        self.db.add(history)
         await self.db.commit()
 
         await self._finish_trace(trace_id, "suppressed", suppress_reason=reason)
@@ -219,7 +227,7 @@ class AlertDispatcher:
         history = AlertHistory(
             tenant_id=alert.tenant_id,
             alert_id=alert.id,
-            action="aggregated",
+            action="filtered",
             description=reason,
             new_value={
                 "status": "aggregated",
@@ -270,7 +278,7 @@ class AlertDispatcher:
         history = AlertHistory(
             tenant_id=alert.tenant_id,
             alert_id=alert.id,
-            action="aggregated",
+            action="filtered",
             description=f"策略聚合 rollup，已并入告警: {parent_id}",
             new_value={
                 "status": "aggregated",

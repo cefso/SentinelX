@@ -73,12 +73,30 @@ async def _create_single_alert(
     db.add(alert)
     await db.flush()
 
-    # 记录告警接入历史
+    # 检查该指纹是否存在 firing/suppressed 状态的告警
+    fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
+    existing_result = await db.execute(
+        select(Alert.id).where(
+            Alert.tenant_id == tenant_id,
+            Alert.fingerprint == fingerprint,
+            Alert.status.in_(["firing", "suppressed"]),
+        ).limit(1)
+    )
+    existing_alert = existing_result.scalar_one_or_none()
+
+    # 记录告警历史：首次收到记录 received，后续触发记录 fired
+    if existing_alert:
+        history_action = "fired"
+        history_desc = "告警触发"
+    else:
+        history_action = "received"
+        history_desc = "告警接入"
+
     history = AlertHistory(
         tenant_id=tenant_id,
         alert_id=alert.id,
-        action="received",
-        description="告警接入",
+        action=history_action,
+        description=history_desc,
         new_value={"status": status, "source": alert.source},
     )
     db.add(history)
@@ -1213,7 +1231,7 @@ async def update_alert(
     history = AlertHistory(
         tenant_id=str(tenant_id),
         alert_id=alert_id,
-        action="update",
+        action="updated",
         operator_id=current_user.id,
         operator_name=current_user.username,
         old_value={"status": alert.status, "severity": alert.severity},
@@ -1259,10 +1277,19 @@ async def dispose_alert(
         alert.resolved_at = now
 
     # 创建处置记录（使用 AlertHistory 存储）
+    # 将 dispose_* 映射到新的操作类型
+    action_mapping = {
+        'acknowledge': 'acknowledged',
+        'resolve': 'resolved',
+        'silence': 'silenced',
+        'note': 'updated',
+    }
+    history_action = action_mapping.get(request.action, 'updated')
+
     history = AlertHistory(
         tenant_id=str(tenant_id),
         alert_id=alert_id,
-        action=f"dispose_{request.action}",
+        action=history_action,
         description=request.comment,
         operator_id=current_user.id,
         operator_name=current_user.username,
