@@ -30,7 +30,7 @@ export function TenantTab() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-medium mb-1">当前租户</h3>
-            <p className="text-sm text-gray-500">查看租户配置</p>
+            <p className="text-sm text-muted-foreground">查看租户配置</p>
           </div>
         </div>
 
@@ -39,37 +39,37 @@ export function TenantTab() {
         ) : (
           <dl className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">租户名称</dt>
+              <dt className="text-sm text-muted-foreground">租户名称</dt>
               <dd className="text-sm font-medium">{tenant.name}</dd>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">Slug</dt>
+              <dt className="text-sm text-muted-foreground">Slug</dt>
               <dd className="text-sm font-mono">{tenant.slug}</dd>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">告警配额</dt>
+              <dt className="text-sm text-muted-foreground">告警配额</dt>
               <dd className="text-sm font-medium">{tenant.max_alerts.toLocaleString()}</dd>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">用户配额</dt>
+              <dt className="text-sm text-muted-foreground">用户配额</dt>
               <dd className="text-sm font-medium">{tenant.max_users}</dd>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">规则配额</dt>
+              <dt className="text-sm text-muted-foreground">规则配额</dt>
               <dd className="text-sm font-medium">{tenant.max_rules}</dd>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
-              <dt className="text-sm text-gray-500">渠道配额</dt>
+              <dt className="text-sm text-muted-foreground">渠道配额</dt>
               <dd className="text-sm font-medium">{tenant.max_channels}</dd>
             </div>
             <div className="flex items-center justify-between py-3">
-              <dt className="text-sm text-gray-500">告警QPS</dt>
+              <dt className="text-sm text-muted-foreground">告警QPS</dt>
               <dd className="text-sm font-medium">{tenant.alert_qps}</dd>
             </div>
             {tenant.webhook_url && (
               <div className="flex items-center justify-between py-3 border-t">
-                <dt className="text-sm text-gray-500">Webhook URL</dt>
-                <dd className="text-sm font-mono text-blue-600">{tenant.webhook_url}</dd>
+                <dt className="text-sm text-muted-foreground">Webhook URL</dt>
+                <dd className="text-sm font-mono text-primary">{tenant.webhook_url}</dd>
               </div>
             )}
           </dl>
@@ -101,11 +101,11 @@ function TenantList() {
     <div className="bg-white rounded-xl shadow-sm p-6">
       <h3 className="text-lg font-medium mb-4">所有租户</h3>
       {tenants.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">暂无租户</div>
+        <div className="p-8 text-center text-muted-foreground">暂无租户</div>
       ) : (
         <table className="w-full">
           <thead>
-            <tr className="text-left text-sm text-gray-500 border-b">
+            <tr className="text-left text-sm text-muted-foreground border-b">
               <th className="pb-3 font-medium">名称</th>
               <th className="pb-3 font-medium">Slug</th>
               <th className="pb-3 font-medium">启用</th>
@@ -115,15 +115,15 @@ function TenantList() {
           </thead>
           <tbody className="divide-y">
             {tenants.map((t) => (
-              <tr key={t.id} className="hover:bg-gray-50">
+              <tr key={t.id} className="hover:bg-muted">
                 <td className="py-3 font-medium">{t.name}</td>
-                <td className="py-3 font-mono text-sm text-gray-500">{t.slug}</td>
+                <td className="py-3 font-mono text-sm text-muted-foreground">{t.slug}</td>
                 <td className="py-3">
                   <button
                     onClick={() => toggleMutation.mutate({ id: t.id, is_active: !t.is_active })}
                     disabled={toggleMutation.isPending}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
-                      t.is_active ? 'bg-blue-600' : 'bg-gray-300'
+                      t.is_active ? 'bg-primary' : 'bg-gray-300'
                     }`}
                   >
                     <span

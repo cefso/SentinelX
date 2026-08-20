@@ -24,24 +24,24 @@ export function ApiKeysTab() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-medium mb-1">API Keys</h3>
-            <p className="text-sm text-gray-500">用于 Agent 和外部系统认证</p>
+            <p className="text-sm text-muted-foreground">用于 Agent 和外部系统认证</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
             创建 API Key
           </button>
         </div>
 
         {apiKeys.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             暂无 API Keys
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="text-left text-sm text-gray-500 border-b">
+              <tr className="text-left text-sm text-muted-foreground border-b">
                 <th className="pb-3 font-medium">名称</th>
                 <th className="pb-3 font-medium">Key ID</th>
                 <th className="pb-3 font-medium">创建时间</th>
@@ -51,9 +51,9 @@ export function ApiKeysTab() {
             </thead>
             <tbody className="divide-y">
               {apiKeys.map((key: any) => (
-                <tr key={key.key_id} className="hover:bg-gray-50">
+                <tr key={key.key_id} className="hover:bg-muted">
                   <td className="py-3 font-medium">{key.name}</td>
-                  <td className="py-3 font-mono text-sm text-gray-500">{key.key_id}</td>
+                  <td className="py-3 font-mono text-sm text-muted-foreground">{key.key_id}</td>
                   <td className="py-3 text-sm">
                     {key.created_at ? new Date(key.created_at).toLocaleDateString('zh-CN') : '-'}
                   </td>
@@ -122,13 +122,13 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
       size="md"
       footer={
         <>
-          <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+          <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-muted">
             取消
           </button>
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
             form="create-api-key-form"
           >
             创建
@@ -138,7 +138,7 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
     >
       <form id="create-api-key-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">名称</label>
             <input
               type="text"
               required
@@ -149,7 +149,7 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">有效期（天）</label>
+            <label className="block text-sm font-medium text-foreground mb-1">有效期（天）</label>
             <input
               type="number"
               min="1"

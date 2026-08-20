@@ -56,7 +56,7 @@ export function DisposeModal({ open, onOpenChange, alertId, onSuccess }: Dispose
         <DialogFooter>
           <button
             onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50"
+            className="px-4 py-2 border rounded-md hover:bg-muted"
             disabled={disposeMutation.isPending}
           >
             取消
@@ -72,7 +72,7 @@ export function DisposeModal({ open, onOpenChange, alertId, onSuccess }: Dispose
       }
     >
       <div className="py-2">
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-foreground">
           处理备注 <span className="text-red-500">*</span>
         </label>
         <textarea

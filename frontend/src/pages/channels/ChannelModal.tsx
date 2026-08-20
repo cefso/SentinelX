@@ -88,7 +88,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">渠道名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">渠道名称</label>
             <input
               type="text"
               {...register('name')}
@@ -100,7 +100,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">渠道类型</label>
+            <label className="block text-sm font-medium text-foreground mb-1">渠道类型</label>
             <Controller
               name="channel_type"
               control={control}
@@ -128,7 +128,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
           {channelType === 'dingtalk' && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
                 <input
                   type="url"
                   value={config?.webhook_url || ''}
@@ -138,7 +138,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Secret (可选)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Secret (可选)</label>
                 <input
                   type="text"
                   value={config?.secret || ''}
@@ -152,7 +152,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
 
           {channelType === 'feishu' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
               <input
                 type="url"
                 value={config?.webhook_url || ''}
@@ -165,7 +165,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
 
           {channelType === 'wecom' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
               <input
                 type="url"
                 value={config?.webhook_url || ''}
@@ -179,7 +179,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
           {channelType === 'email' && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SMTP 服务器</label>
+                <label className="block text-sm font-medium text-foreground mb-1">SMTP 服务器</label>
                 <input
                   type="text"
                   value={config?.smtp_host || ''}
@@ -190,7 +190,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMTP 端口</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">SMTP 端口</label>
                   <input
                     type="number"
                     value={config?.smtp_port || 587}
@@ -199,7 +199,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">发件人</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">发件人</label>
                   <input
                     type="email"
                     value={config?.from_addr || ''}
@@ -210,7 +210,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">用户名</label>
                   <input
                     type="text"
                     value={config?.username || ''}
@@ -219,7 +219,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">密码</label>
                   <input
                     type="password"
                     value={config?.password || ''}
@@ -229,7 +229,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">收件人 (逗号分隔)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">收件人 (逗号分隔)</label>
                 <input
                   type="text"
                   value={config?.recipients || ''}
@@ -243,7 +243,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
 
           {channelType === 'webhook' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
               <input
                 type="url"
                 value={config?.webhook_url || ''}
@@ -256,7 +256,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
 
           {channelType === 'slack' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
               <input
                 type="url"
                 value={config?.webhook_url || ''}
@@ -270,7 +270,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
           {channelType === 'aliyun_voice' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">AccessKey ID <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">AccessKey ID <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={config?.access_key_id || ''}
@@ -280,7 +280,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">AccessKey Secret <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">AccessKey Secret <span className="text-red-500">*</span></label>
                 <input
                   type="password"
                   value={config?.access_key_secret || ''}
@@ -290,7 +290,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">被叫号码 <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">被叫号码 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={config?.called_number || ''}
@@ -298,10 +298,10 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   className="w-full px-3 py-2 border rounded-md"
                   placeholder="13800138000,13900139000"
                 />
-                <p className="text-xs text-gray-500 mt-1">支持多个号码，逗号分隔</p>
+                <p className="text-xs text-muted-foreground mt-1">支持多个号码，逗号分隔</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">TTS 模板编码 <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">TTS 模板编码 <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={config?.template_code || ''}
@@ -309,10 +309,10 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   className="w-full px-3 py-2 border rounded-md"
                   placeholder="TTS_000000000"
                 />
-                <p className="text-xs text-gray-500 mt-1">在阿里云语音服务控制台创建的 TTS 模板编码</p>
+                <p className="text-xs text-muted-foreground mt-1">在阿里云语音服务控制台创建的 TTS 模板编码</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">模板参数映射 <span className="text-gray-400 font-normal">(可选)</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">模板参数映射 <span className="text-muted-foreground/70 font-normal">(可选)</span></label>
                 <textarea
                   value={config?.tts_param_template ? JSON.stringify(config.tts_param_template, null, 2) : ''}
                   onChange={(e) => {
@@ -326,7 +326,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
                   className="w-full px-3 py-2 border rounded-md font-mono text-sm"
                   placeholder={'{"alert_severity": "severity", "alert_info": "title"}'}
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   JSON 对象，key 为 TTS 模板变量名，value 为告警字段名。不填则使用默认映射：alert_severity→severity，alert_info→title
                 </p>
               </div>
@@ -367,7 +367,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md hover:bg-muted">
               取消
             </button>
             <button

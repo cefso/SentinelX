@@ -174,7 +174,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
           <div className="flex flex-wrap gap-3 mb-4">
             {/* 搜索框 */}
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
               <input
                 type="text"
                 placeholder="搜索日志内容..."
@@ -209,7 +209,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
             {/* 刷新按钮 */}
             <button
               onClick={() => refetch()}
-              className="px-3 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-2 border rounded-lg hover:bg-muted flex items-center gap-1"
               title="刷新"
             >
               <RotateCcw className="w-4 h-4" />
@@ -217,7 +217,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
           </div>
 
           {filteredLogs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <ScrollText className="w-12 h-12 mb-4 text-gray-300" />
               <p>暂无 Webhook 日志</p>
             </div>
@@ -226,22 +226,22 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
               {/* 表格 */}
               <div className="border rounded-lg overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-muted">
                     <tr>
                       <th className="w-10 px-3 py-3">
                         <button onClick={handleSelectAll} className="flex items-center justify-center">
                           {selectedIds.size === filteredLogs.length && filteredLogs.length > 0 ? (
-                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                            <CheckSquare className="w-4 h-4 text-primary" />
                           ) : (
-                            <Square className="w-4 h-4 text-gray-400" />
+                            <Square className="w-4 h-4 text-muted-foreground/70" />
                           )}
                         </button>
                       </th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">来源</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">告警ID</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">时间</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">告警ID</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase">操作</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -286,13 +286,13 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
                 {/* 分页 */}
                 {totalPages > 1 && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-muted-foreground">
                       共 {data?.total || 0} 条，第 {page} / {totalPages} 页
                     </span>
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -313,8 +313,8 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
                           onClick={() => setPage(pageNum)}
                           className={`w-8 h-8 text-sm rounded border ${
                             page === pageNum
-                              ? 'bg-blue-500 text-white border-blue-500'
-                              : 'hover:bg-gray-50'
+                              ? 'bg-primary text-white border-blue-500'
+                              : 'hover:bg-muted'
                           }`}
                         >
                           {pageNum}
@@ -324,7 +324,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page >= totalPages}
-                      className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -362,22 +362,22 @@ function LogRow({
   return (
     <>
       <tr
-        className={`hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+        className={`hover:bg-muted cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
         onClick={onToggleExpand}
       >
         <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
           <button onClick={onSelect} className="flex items-center justify-center">
             {isSelected ? (
-              <CheckSquare className="w-4 h-4 text-blue-600" />
+              <CheckSquare className="w-4 h-4 text-primary" />
             ) : (
-              <Square className="w-4 h-4 text-gray-400" />
+              <Square className="w-4 h-4 text-muted-foreground/70" />
             )}
           </button>
         </td>
-        <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
+        <td className="px-3 py-3 text-sm text-foreground whitespace-nowrap">
           {formatDate(log.created_at)}
         </td>
-        <td className="px-3 py-3 text-sm text-gray-500">
+        <td className="px-3 py-3 text-sm text-muted-foreground">
           {log.source_type}
         </td>
         <td className="px-3 py-3">
@@ -385,7 +385,7 @@ function LogRow({
             {statusLabels[log.status] || log.status}
           </span>
         </td>
-        <td className="px-3 py-3 text-sm text-gray-500">
+        <td className="px-3 py-3 text-sm text-muted-foreground">
           {log.alert_id || '-'}
         </td>
         <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -400,11 +400,11 @@ function LogRow({
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={6} className="px-3 py-3 bg-gray-50">
+          <td colSpan={6} className="px-3 py-3 bg-muted">
             <div className="space-y-3">
               {/* 原始数据 */}
               <div>
-                <h4 className="text-xs font-medium text-gray-500 mb-1">原始数据</h4>
+                <h4 className="text-xs font-medium text-muted-foreground mb-1">原始数据</h4>
                 <pre className="p-3 bg-white border rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-48">
                   {JSON.stringify(log.raw_data, null, 2)}
                 </pre>
@@ -412,7 +412,7 @@ function LogRow({
               {/* 错误详情 */}
               {log.error_message && (
                 <div>
-                  <h4 className="text-xs font-medium text-gray-500 mb-1">错误详情</h4>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-1">错误详情</h4>
                   <pre className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-32 text-red-800">
                     {log.error_message}
                   </pre>

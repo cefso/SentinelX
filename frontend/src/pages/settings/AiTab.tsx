@@ -116,7 +116,7 @@ export function AISettingsTab() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm p-6 text-center text-gray-500">
+      <div className="bg-white rounded-xl shadow-sm p-6 text-center text-muted-foreground">
         加载中...
       </div>
     )
@@ -125,13 +125,13 @@ export function AISettingsTab() {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
       <h3 className="text-lg font-medium mb-1">AI设置</h3>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-muted-foreground mb-6">
         配置租户级 AI 服务，用于告警根因分析、内容润色等功能。API Key 加密存储在服务端。
       </p>
 
       <div className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">AI提供商</label>
+          <label className="block text-sm font-medium text-foreground mb-3">AI提供商</label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {providers.map((p) => (
               <button
@@ -144,7 +144,7 @@ export function AISettingsTab() {
               >
                 <span className="font-medium text-sm">{p.name}</span>
                 {p.description && (
-                  <span className="text-xs text-gray-500 line-clamp-2">{p.description}</span>
+                  <span className="text-xs text-muted-foreground line-clamp-2">{p.description}</span>
                 )}
               </button>
             ))}
@@ -153,7 +153,7 @@ export function AISettingsTab() {
 
         {isCustom && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">显示名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">显示名称</label>
             <input
               type="text"
               value={displayName}
@@ -166,7 +166,7 @@ export function AISettingsTab() {
 
         {showBaseUrl && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               API Base URL {isCustom && <span className="text-red-500">*</span>}
             </label>
             <input
@@ -176,12 +176,12 @@ export function AISettingsTab() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="https://api.example.com/v1"
             />
-            <p className="text-xs text-gray-500 mt-1">OpenAI 兼容接口根路径，需包含 /v1</p>
+            <p className="text-xs text-muted-foreground mt-1">OpenAI 兼容接口根路径，需包含 /v1</p>
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+          <label className="block text-sm font-medium text-foreground mb-1">API Key</label>
           <input
             type="password"
             value={apiKey}
@@ -193,12 +193,12 @@ export function AISettingsTab() {
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm font-medium text-gray-700">模型</label>
+            <label className="block text-sm font-medium text-foreground">模型</label>
             <button
               type="button"
               onClick={handleLoadModels}
               disabled={modelsLoading}
-              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+              className="text-sm text-primary hover:text-blue-800 disabled:opacity-50"
             >
               {modelsLoading ? '加载中...' : '验证并加载模型'}
             </button>
@@ -231,9 +231,9 @@ export function AISettingsTab() {
             type="checkbox"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-gray-300 text-primary focus:ring-blue-500"
           />
-          <label htmlFor="ai-enabled" className="text-sm text-gray-700">
+          <label htmlFor="ai-enabled" className="text-sm text-foreground">
             启用 AI 功能（告警详情页可使用根因分析等）
           </label>
         </div>
@@ -241,9 +241,9 @@ export function AISettingsTab() {
         {promptMeta.length > 0 && (
           <div className="pt-6 border-t">
             <h4 className="text-sm font-semibold text-gray-800 mb-1">提示词（System Prompt）</h4>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-muted-foreground mb-4">
               自定义各 AI 模块的系统提示词。告警字段仍由系统自动注入；润色模块可使用占位符
-              <code className="mx-1 px-1 bg-gray-100 rounded">{'{style_instruction}'}</code>
+              <code className="mx-1 px-1 bg-secondary rounded">{'{style_instruction}'}</code>
             </p>
             <div className="flex flex-wrap gap-2 mb-3">
               {promptMeta.map((m) => (
@@ -254,7 +254,7 @@ export function AISettingsTab() {
                   className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
                     activePromptKey === m.key
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                      : 'border-border hover:border-gray-300 text-foreground'
                   }`}
                 >
                   {m.title}
@@ -264,9 +264,9 @@ export function AISettingsTab() {
             {(() => {
               const meta = promptMeta.find((m) => m.key === activePromptKey)
               return (
-                <div className="border rounded-lg p-4 bg-gray-50/50">
+                <div className="border rounded-lg p-4 bg-muted/50">
                   {meta?.description && (
-                    <p className="text-xs text-gray-500 mb-2">{meta.description}</p>
+                    <p className="text-xs text-muted-foreground mb-2">{meta.description}</p>
                   )}
                   <textarea
                     value={prompts[activePromptKey] ?? ''}
@@ -286,7 +286,7 @@ export function AISettingsTab() {
                           [activePromptKey]: promptDefaults[activePromptKey] || '',
                         }))
                       }
-                      className="text-sm text-gray-600 hover:text-blue-600"
+                      className="text-sm text-gray-600 hover:text-primary"
                     >
                       恢复该模块默认提示词
                     </button>
@@ -301,7 +301,7 @@ export function AISettingsTab() {
           <button
             type="button"
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
             保存配置
           </button>
@@ -313,11 +313,11 @@ export function AISettingsTab() {
       <div className="mt-8 pt-6 border-t">
         <h4 className="text-sm font-medium mb-4">AI功能说明</h4>
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-gray-50 rounded-lg">
+          <div className="p-4 bg-muted rounded-lg">
             <div className="font-medium mb-1">🔍 根因分析</div>
             <div className="text-sm text-gray-600">自动分析告警发生的可能原因</div>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg">
+          <div className="p-4 bg-muted rounded-lg">
             <div className="font-medium mb-1">✨ 内容润色</div>
             <div className="text-sm text-gray-600">将告警内容润色成更易读格式</div>
           </div>

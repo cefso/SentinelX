@@ -173,7 +173,7 @@ export function AlertDetailPage() {
     return (
       <div className="p-8 text-center">
         <div className="text-red-600">未找到该告警</div>
-        <button onClick={() => navigate('/alerts')} className="mt-4 text-blue-600 hover:underline">
+        <button onClick={() => navigate('/alerts')} className="mt-4 text-primary hover:underline">
           返回列表
         </button>
       </div>
@@ -213,10 +213,10 @@ export function AlertDetailPage() {
       {/* 顶部操作栏 */}
       <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/alerts')} className="text-gray-500 hover:text-gray-700">
+          <button onClick={() => navigate('/alerts')} className="text-muted-foreground hover:text-foreground">
             ← 返回
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">告警详情</h1>
+          <h1 className="text-2xl font-bold text-foreground">告警详情</h1>
           <SeverityBadge severity={alert.severity} />
           <StatusBadge status={alert.status} />
         </div>
@@ -250,7 +250,7 @@ export function AlertDetailPage() {
           {alert.trace_id && (
             <button
               onClick={() => navigate(`/diagnose?trace=${alert.trace_id}`)}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              className="px-4 py-2 border rounded-md hover:bg-muted"
             >
               诊断
             </button>
@@ -258,16 +258,16 @@ export function AlertDetailPage() {
           <div className="relative" ref={createRuleMenuRef}>
             <button
               onClick={() => setShowCreateRuleMenu(!showCreateRuleMenu)}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
+              className="px-4 py-2 border rounded-md hover:bg-muted flex items-center gap-1"
             >
               创建规则 <ChevronDown className="w-4 h-4" />
             </button>
             {showCreateRuleMenu && (
               <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border z-10">
-                <button onClick={() => handleCreateRule('route')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-t-lg">路由规则</button>
-                <button onClick={() => handleCreateRule('dedup')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">去重规则</button>
-                <button onClick={() => handleCreateRule('suppress')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">抑制规则</button>
-                <button onClick={() => handleCreateRule('aggregate')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm rounded-b-lg">策略聚合规则</button>
+                <button onClick={() => handleCreateRule('route')} className="w-full px-4 py-2 text-left hover:bg-muted text-sm rounded-t-lg">路由规则</button>
+                <button onClick={() => handleCreateRule('dedup')} className="w-full px-4 py-2 text-left hover:bg-muted text-sm">去重规则</button>
+                <button onClick={() => handleCreateRule('suppress')} className="w-full px-4 py-2 text-left hover:bg-muted text-sm">抑制规则</button>
+                <button onClick={() => handleCreateRule('aggregate')} className="w-full px-4 py-2 text-left hover:bg-muted text-sm rounded-b-lg">策略聚合规则</button>
               </div>
             )}
           </div>
@@ -292,47 +292,47 @@ export function AlertDetailPage() {
         <div className="col-span-2 space-y-4">
           {/* 基本信息卡片 */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">基本信息</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">基本信息</h2>
             <dl className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
               <div className="flex flex-col">
-                <dt className="text-gray-500">告警标题</dt>
+                <dt className="text-muted-foreground">告警标题</dt>
                 <dd className="font-medium break-words">{alert.title}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">告警来源</dt>
+                <dt className="text-muted-foreground">告警来源</dt>
                 <dd className="font-medium">{alert.source_name || alert.source}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">Alert Key</dt>
+                <dt className="text-muted-foreground">Alert Key</dt>
                 <dd className="font-mono text-xs">{alert.alert_key}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">命名空间</dt>
+                <dt className="text-muted-foreground">命名空间</dt>
                 <dd className="font-medium truncate">{namespaceDesc || alert?.namespace || '-'}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">实例</dt>
+                <dt className="text-muted-foreground">实例</dt>
                 <dd className="font-medium truncate">{alert?.instance_name || alert?.instance_id || '-'}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">触发次数</dt>
+                <dt className="text-muted-foreground">触发次数</dt>
                 <dd>{alert.fire_count} (重复: {alert.repeat_count})</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">升级次数</dt>
+                <dt className="text-muted-foreground">升级次数</dt>
                 <dd>{alert.escalation_count}</dd>
               </div>
               <div className="flex flex-col">
-                <dt className="text-gray-500">指纹</dt>
+                <dt className="text-muted-foreground">指纹</dt>
                 <dd className="font-mono text-xs break-all">{alert.fingerprint}</dd>
               </div>
               {alert.trace_id && (
                 <div className="flex flex-col">
-                  <dt className="text-gray-500">Trace ID</dt>
+                  <dt className="text-muted-foreground">Trace ID</dt>
                   <dd>
                     <button
                       onClick={() => navigate(`/diagnose?trace=${alert.trace_id}`)}
-                      className="font-mono text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                      className="font-mono text-xs text-primary hover:text-primary/80 hover:underline"
                     >
                       {alert.trace_id}
                     </button>
@@ -344,24 +344,24 @@ export function AlertDetailPage() {
 
           {/* 告警内容卡片 */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">告警内容</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">告警内容</h2>
             <div className="flex gap-6">
-              <div className="flex-1 text-gray-700 whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
+              <div className="flex-1 text-foreground whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
               {alert.metric_name && (
-                <div className="w-1/2 p-3 bg-gray-50 rounded text-sm">
-                  <div className="text-gray-500">指标名称</div>
+                <div className="w-1/2 p-3 bg-muted rounded text-sm">
+                  <div className="text-muted-foreground">指标名称</div>
                   <div className="font-mono">{metricNameDesc || alert.metric_name}</div>
                   {alert.metric_value && typeof alert.metric_value === 'object' && (
                     <div className="space-y-2">
                       {alert.metric_value.expression && (
                         <>
-                          <div className="text-gray-500">触发条件</div>
+                          <div className="text-muted-foreground">触发条件</div>
                           <div className="font-mono">{alert.metric_value.expression}</div>
                         </>
                       )}
                       {alert.metric_value.value !== undefined && alert.metric_value.value !== null && (
                         <>
-                          <div className="text-gray-500">当前值</div>
+                          <div className="text-muted-foreground">当前值</div>
                           <div className="font-mono">{String(alert.metric_value.value)}</div>
                         </>
                       )}
@@ -381,12 +381,12 @@ export function AlertDetailPage() {
           {/* 匹配规则卡片 */}
           {alert.matched_rules && alert.matched_rules.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">匹配规则</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">匹配规则</h2>
               <div className="grid grid-cols-2 gap-2">
                 {alert.matched_rules.map((rule: any, index: number) => (
-                  <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                  <div key={index} className="p-2 bg-muted rounded text-sm">
                     <div className="font-medium">{rule.name}</div>
-                    <div className="text-gray-500 text-xs">优先级: {rule.priority}</div>
+                    <div className="text-muted-foreground text-xs">优先级: {rule.priority}</div>
                   </div>
                 ))}
               </div>
@@ -396,7 +396,7 @@ export function AlertDetailPage() {
           {/* 通知渠道卡片 */}
           {alert.notification_channels && alert.notification_channels.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">通知渠道</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">通知渠道</h2>
               <div className="flex flex-wrap gap-2">
                 {alert.notification_channels.map((channel: any, index: number) => (
                   <span key={index} className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm">
@@ -413,7 +413,7 @@ export function AlertDetailPage() {
         <div className="space-y-4">
           {/* 处理人卡片 */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">处理人</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">处理人</h2>
             <select
               value={alert.assignee_id || ''}
               onChange={(e) => handleAssign(e.target.value ? Number(e.target.value) : null)}
@@ -430,8 +430,8 @@ export function AlertDetailPage() {
           {fullHistory.length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center gap-2 mb-4">
-                <History className="w-4 h-4 text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">生命周期 ({fullHistory.length})</h2>
+                <History className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">生命周期 ({fullHistory.length})</h2>
               </div>
               <div className="relative">
                 <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
@@ -443,19 +443,19 @@ export function AlertDetailPage() {
                         <div className="absolute left-0 top-0">
                           <ActionBadge action={record.action} />
                         </div>
-                        <div className="text-xs text-gray-400 mb-0.5">
+                        <div className="text-xs text-muted-foreground/70 mb-0.5">
                           {formatLocalDateTime(record.created_at)}
                           {record.operator_name && <span className="ml-1">· {record.operator_name}</span>}
                         </div>
                         <div className="text-sm text-gray-600">{record.description || record.action}</div>
                         {record.old_value && record.new_value && (
-                          <div className="text-xs text-gray-400 mt-0.5">
+                          <div className="text-xs text-muted-foreground/70 mt-0.5">
                             {Object.entries(record.new_value).map(([key, value]) => {
                               const oldValue = record.old_value?.[key]
                               if (oldValue !== undefined && oldValue !== value) {
                                 return (
                                   <span key={key}>
-                                    {key}: <span className="text-gray-500">{String(oldValue)}</span> → <span className="text-blue-600">{String(value)}</span>
+                                    {key}: <span className="text-muted-foreground">{String(oldValue)}</span> → <span className="text-primary">{String(value)}</span>
                                   </span>
                                 )
                               }
@@ -473,7 +473,7 @@ export function AlertDetailPage() {
           {/* 原始数据卡片 */}
           {alert.raw_data && Object.keys(alert.raw_data).length > 0 && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">原始数据</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">原始数据</h2>
               <pre className="bg-gray-900 text-gray-100 p-3 rounded overflow-auto text-xs max-h-40">
                 {JSON.stringify(alert.raw_data, null, 2)}
               </pre>
@@ -485,13 +485,13 @@ export function AlertDetailPage() {
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-gray-500" />
-                  <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">同指纹告警 ({fpAlerts.total})</h2>
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">同指纹告警 ({fpAlerts.total})</h2>
                 </div>
                 {fpAlerts.total > 20 && (
                   <button
                     onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}&aggregate=false`)}
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-xs text-primary hover:text-primary/80"
                   >
                     查看全部
                   </button>
@@ -506,7 +506,7 @@ export function AlertDetailPage() {
                     .map((item) => (
                       <div
                         key={item.id}
-                        className={`relative flex items-start gap-2 pl-8 py-1.5 cursor-pointer hover:bg-gray-50 rounded ${
+                        className={`relative flex items-start gap-2 pl-8 py-1.5 cursor-pointer hover:bg-muted rounded ${
                           item.id === alert.id ? 'bg-blue-50' : ''
                         }`}
                         onClick={() => item.id !== alert.id && navigate(`/alerts/${item.id}`)}
@@ -521,17 +521,17 @@ export function AlertDetailPage() {
                           ) : item.status === 'acknowledged' ? (
                             <Circle className="w-2.5 h-2.5 text-blue-500 fill-blue-100" />
                           ) : (
-                            <Circle className="w-2.5 h-2.5 text-gray-400 fill-gray-100" />
+                            <Circle className="w-2.5 h-2.5 text-muted-foreground/70 fill-gray-100" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <SeverityBadge severity={item.severity} />
-                            <span className="text-xs text-gray-400 truncate">
+                            <span className="text-xs text-muted-foreground/70 truncate">
                               {formatLocalDateTime(item.fired_at)}
                             </span>
                             {item.id === alert.id && (
-                              <span className="text-xs text-blue-600 font-medium shrink-0">当前</span>
+                              <span className="text-xs text-primary font-medium shrink-0">当前</span>
                             )}
                           </div>
                           <div className="text-xs text-gray-600 truncate">{item.title}</div>
@@ -541,10 +541,10 @@ export function AlertDetailPage() {
                 </div>
               </div>
               {fpAlerts.total > 10 && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="mt-3 pt-3 border-t border-border">
                   <button
                     onClick={() => navigate(`/alerts?fingerprint=${alert.fingerprint}&aggregate=false`)}
-                    className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-1"
+                    className="w-full text-center text-sm text-primary hover:text-primary/80 py-1"
                   >
                     查看更多 ({fpAlerts.total - 10} 条)
                   </button>
@@ -560,21 +560,21 @@ export function AlertDetailPage() {
         <div ref={aggregateMembersRef} className="bg-white rounded-lg shadow overflow-hidden scroll-mt-4">
           <button
             onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-700">策略聚合告警</span>
+              <span className="text-sm font-semibold text-foreground">策略聚合告警</span>
               <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full">
                 {aggregateGroupCount}条
               </span>
               {aggregateMembersData?.group_key && (
-                <span className="text-xs text-gray-400 font-mono truncate max-w-xs">
+                <span className="text-xs text-muted-foreground/70 font-mono truncate max-w-xs">
                   {aggregateMembersData.group_key}
                 </span>
               )}
             </div>
             <ChevronDown
-              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+              className={`w-5 h-5 text-muted-foreground/70 transition-transform duration-200 ${
                 aggregatedExpanded ? 'rotate-180' : ''
               }`}
             />
@@ -586,7 +586,7 @@ export function AlertDetailPage() {
                   <div
                     key={item.alert_id}
                     className={`flex items-center gap-3 px-6 py-3 ${
-                      item.alert_id === alert.id ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                      item.alert_id === alert.id ? 'bg-yellow-50' : 'hover:bg-muted'
                     } cursor-pointer transition-colors`}
                     onClick={() => item.alert_id !== alert.id && navigate(`/alerts/${item.alert_id}`)}
                   >
@@ -595,7 +595,7 @@ export function AlertDetailPage() {
                       item.severity === 'high' ? 'bg-orange-500' :
                       item.severity === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                     }`} />
-                    <span className="text-xs text-gray-500 shrink-0">
+                    <span className="text-xs text-muted-foreground shrink-0">
                       {formatLocalDateTime(item.fired_at)}
                     </span>
                     <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${

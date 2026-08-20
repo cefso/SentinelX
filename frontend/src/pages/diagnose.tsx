@@ -54,8 +54,8 @@ export function DiagnosePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">告警诊断</h1>
-        <p className="text-sm text-gray-500 mt-0.5">输入 Trace ID 查看告警处理全流程</p>
+        <h1 className="text-2xl font-bold text-foreground">告警诊断</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">输入 Trace ID 查看告警处理全流程</p>
       </div>
 
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -88,20 +88,20 @@ export function DiagnosePage() {
             <h2 className="text-lg font-medium mb-4">处理结果</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <div className="text-sm text-gray-500">状态</div>
+                <div className="text-sm text-muted-foreground">状态</div>
                 <div className="text-lg font-medium">
                   <TraceStatusBadge status={data.summary?.status} />
                 </div>
               </div>
               {data.summary?.suppress_reason && (
                 <div className="col-span-2">
-                  <div className="text-sm text-gray-500">抑制原因</div>
+                  <div className="text-sm text-muted-foreground">抑制原因</div>
                   <div className="text-red-600">{data.summary.suppress_reason}</div>
                 </div>
               )}
               {data.summary?.deduction_reason && (
                 <div className="col-span-2">
-                  <div className="text-sm text-gray-500">去重原因</div>
+                  <div className="text-sm text-muted-foreground">去重原因</div>
                   <div className="text-yellow-600">{data.summary.deduction_reason}</div>
                 </div>
               )}
@@ -113,17 +113,17 @@ export function DiagnosePage() {
             <div className="space-y-3">
               {data.flow_steps?.map((step: any, index: number) => (
                 <div key={index} className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-primary flex items-center justify-center text-sm font-medium">
                     {step.step}
                   </div>
                   <div className="flex-1">
                     <div className="font-medium">{step.title}</div>
-                    <div className="text-sm text-gray-500">{step.description}</div>
+                    <div className="text-sm text-muted-foreground">{step.description}</div>
                     {step.reason && (
                       <div className="text-sm text-red-500 mt-1">{step.reason}</div>
                     )}
                     {step.details && (
-                      <div className="mt-2 text-xs text-gray-500 space-y-1">
+                      <div className="mt-2 text-xs text-muted-foreground space-y-1">
                         {step.details.rule_name && (
                           <div>规则: {step.details.rule_name}</div>
                         )}
@@ -166,7 +166,7 @@ function TraceStatusBadge({ status }: { status?: string }) {
     failed: { className: 'bg-red-100 text-red-800', label: '失败' },
     no_channels: { className: 'bg-gray-100 text-gray-800', label: '无通知渠道' },
   }
-  if (!status) return <span className="text-gray-500">-</span>
+  if (!status) return <span className="text-muted-foreground">-</span>
   const item = config[status] || { className: 'bg-gray-100 text-gray-800', label: status }
   return (
     <span className={`inline-flex px-2 py-1 text-sm rounded ${item.className}`}>

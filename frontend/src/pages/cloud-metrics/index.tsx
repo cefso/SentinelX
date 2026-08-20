@@ -127,8 +127,8 @@ export function CloudMetricsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">云产品指标管理</h1>
-          <p className="text-sm text-gray-500 mt-0.5">管理云产品监控指标的中文描述和启用状态</p>
+          <h1 className="text-2xl font-bold text-foreground">云产品指标管理</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">管理云产品监控指标的中文描述和启用状态</p>
         </div>
         <div className="flex gap-2">
           {selectedIds.size > 0 && (
@@ -150,7 +150,7 @@ export function CloudMetricsPage() {
               <button
                 onClick={() => syncAllMutation.mutate()}
                 disabled={syncAllMutation.isPending}
-                className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 border rounded-md hover:bg-muted flex items-center gap-2 disabled:opacity-50"
               >
                 {syncAllMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -175,9 +175,9 @@ export function CloudMetricsPage() {
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">产品名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">产品名称</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
               <input
                 type="text"
                 value={productSearch}
@@ -189,7 +189,7 @@ export function CloudMetricsPage() {
               {productSearch && (
                 <button
                   onClick={() => { setProductSearch(''); setPage(1) }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-gray-600"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -197,9 +197,9 @@ export function CloudMetricsPage() {
             </div>
           </div>
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">命名空间</label>
+            <label className="block text-sm font-medium text-foreground mb-1">命名空间</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
               <input
                 type="text"
                 value={namespaceSearch}
@@ -211,7 +211,7 @@ export function CloudMetricsPage() {
               {namespaceSearch && (
                 <button
                   onClick={() => { setNamespaceSearch(''); setPage(1) }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-gray-600"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -220,14 +220,14 @@ export function CloudMetricsPage() {
           </div>
           <button
             onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 text-sm"
           >
             搜索
           </button>
           {(productSearch || namespaceSearch) && (
             <button
               onClick={clearSearch}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50 text-sm"
+              className="px-4 py-2 border rounded-md hover:bg-muted text-sm"
             >
               清除
             </button>
@@ -235,15 +235,15 @@ export function CloudMetricsPage() {
         </div>
         {/* 状态筛选 */}
         <div className="flex gap-2 mt-3">
-          <span className="text-sm text-gray-500">状态:</span>
+          <span className="text-sm text-muted-foreground">状态:</span>
           {(['all', 'active', 'inactive'] as const).map((s) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setPage(1) }}
               className={`px-3 py-1 text-sm rounded ${
                 statusFilter === s
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-primary text-white'
+                  : 'bg-secondary text-gray-600 hover:bg-gray-200'
               }`}
             >
               {s === 'all' ? '全部' : s === 'active' ? '启用' : '停用'}
@@ -255,21 +255,21 @@ export function CloudMetricsPage() {
       {/* Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
             加载中...
           </div>
         ) : !data || !data.items || data.items.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             {productSearch || namespaceSearch ? '未找到匹配的指标' : '暂无指标数据'}
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 w-8">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-8">
                       <input
                         type="checkbox"
                         checked={data?.items?.length ? selectedIds.size === data.items.length : false}
@@ -277,22 +277,22 @@ export function CloudMetricsPage() {
                         className="rounded"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500 w-8"></th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">产品名称</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">命名空间</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">命名空间中文名</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">指标名称</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">指标名称中文名</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">中文描述</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">单位</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">状态</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">操作</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-8"></th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">产品名称</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">命名空间</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">命名空间中文名</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">指标名称</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">指标名称中文名</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">中文描述</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">单位</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">状态</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {data.items.map((metric) => (
                     <>
-                      <tr key={metric.id} className="hover:bg-gray-50">
+                      <tr key={metric.id} className="hover:bg-muted">
                         <td className="px-4 py-3">
                           <input
                             type="checkbox"
@@ -304,7 +304,7 @@ export function CloudMetricsPage() {
                         <td className="px-4 py-3">
                           <button
                             onClick={() => setExpandedRow(expandedRow === metric.id ? null : metric.id)}
-                            className="text-gray-400 hover:text-gray-600"
+                            className="text-muted-foreground/70 hover:text-gray-600"
                           >
                             {expandedRow === metric.id ? (
                               <ChevronDown className="w-4 h-4" />
@@ -313,7 +313,7 @@ export function CloudMetricsPage() {
                             )}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        <td className="px-4 py-3 text-sm font-medium text-foreground">
                           {metric.product || '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 font-mono text-xs">
@@ -323,7 +323,7 @@ export function CloudMetricsPage() {
                           {metric.namespace_desc ? (
                             metric.namespace_desc
                           ) : (
-                            <span className="text-gray-400 italic">-</span>
+                            <span className="text-muted-foreground/70 italic">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 font-mono">
@@ -333,17 +333,17 @@ export function CloudMetricsPage() {
                           {metric.metric_name_desc ? (
                             metric.metric_name_desc
                           ) : (
-                            <span className="text-gray-400 italic">-</span>
+                            <span className="text-muted-foreground/70 italic">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
                           {metric.metric_desc ? (
                             metric.metric_desc
                           ) : (
-                            <span className="text-gray-400 italic">未填写</span>
+                            <span className="text-muted-foreground/70 italic">未填写</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
                           {metric.unit || '-'}
                         </td>
                         <td className="px-4 py-3">
@@ -358,7 +358,7 @@ export function CloudMetricsPage() {
                             className={`px-2 py-1 text-xs rounded disabled:opacity-50 ${
                               metric.is_active === 1
                                 ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
+                                : 'bg-secondary text-gray-800'
                             }`}
                           >
                             {metric.is_active === 1 ? '启用' : '停用'}
@@ -368,7 +368,7 @@ export function CloudMetricsPage() {
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={() => handleEdit(metric)}
-                              className="text-blue-600 hover:text-blue-800 text-sm"
+                              className="text-primary hover:text-blue-800 text-sm"
                             >
                               编辑
                             </button>
@@ -388,41 +388,41 @@ export function CloudMetricsPage() {
                       </tr>
                       {expandedRow === metric.id && (
                         <tr key={`${metric.id}-expanded`}>
-                          <td colSpan={11} className="px-4 py-4 bg-gray-50">
+                          <td colSpan={11} className="px-4 py-4 bg-muted">
                             <div className="grid grid-cols-3 gap-4 text-sm">
                               <div>
-                                <div className="text-gray-500 mb-1">产品名称</div>
-                                <div className="text-gray-900">{metric.product || '-'}</div>
+                                <div className="text-muted-foreground mb-1">产品名称</div>
+                                <div className="text-foreground">{metric.product || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">命名空间</div>
-                                <div className="text-gray-900 font-mono">{metric.namespace || '-'}</div>
+                                <div className="text-muted-foreground mb-1">命名空间</div>
+                                <div className="text-foreground font-mono">{metric.namespace || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">命名空间中文名</div>
-                                <div className="text-gray-900">{metric.namespace_desc || '-'}</div>
+                                <div className="text-muted-foreground mb-1">命名空间中文名</div>
+                                <div className="text-foreground">{metric.namespace_desc || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">指标名称</div>
-                                <div className="text-gray-900 font-mono">{metric.metric_name || '-'}</div>
+                                <div className="text-muted-foreground mb-1">指标名称</div>
+                                <div className="text-foreground font-mono">{metric.metric_name || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">指标名称中文名</div>
-                                <div className="text-gray-900">{metric.metric_name_desc || '-'}</div>
+                                <div className="text-muted-foreground mb-1">指标名称中文名</div>
+                                <div className="text-foreground">{metric.metric_name_desc || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">中文描述</div>
-                                <div className="text-gray-900">
-                                  {metric.metric_desc || <span className="text-gray-400 italic">未填写</span>}
+                                <div className="text-muted-foreground mb-1">中文描述</div>
+                                <div className="text-foreground">
+                                  {metric.metric_desc || <span className="text-muted-foreground/70 italic">未填写</span>}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">单位</div>
-                                <div className="text-gray-900">{metric.unit || '-'}</div>
+                                <div className="text-muted-foreground mb-1">单位</div>
+                                <div className="text-foreground">{metric.unit || '-'}</div>
                               </div>
                               <div>
-                                <div className="text-gray-500 mb-1">维度</div>
-                                <div className="text-gray-900">
+                                <div className="text-muted-foreground mb-1">维度</div>
+                                <div className="text-foreground">
                                   {metric.dimensions?.length ? metric.dimensions.join(', ') : '-'}
                                 </div>
                               </div>
@@ -438,7 +438,7 @@ export function CloudMetricsPage() {
 
             {/* Pagination */}
             <div className="p-4 border-t flex items-center justify-between">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 共 {data.total} 条记录
                 {isFetching && !isLoading && (
                   <span className="ml-2 text-blue-500">
@@ -450,7 +450,7 @@ export function CloudMetricsPage() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-muted"
                 >
                   上一页
                 </button>
@@ -460,7 +460,7 @@ export function CloudMetricsPage() {
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={page >= totalPages}
-                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-muted"
                 >
                   下一页
                 </button>
@@ -490,7 +490,7 @@ export function CloudMetricsPage() {
             <>
               <button
                 onClick={() => setShowBatchDeleteConfirm(false)}
-                className="px-4 py-2 border rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border rounded-md hover:bg-muted"
               >
                 取消
               </button>

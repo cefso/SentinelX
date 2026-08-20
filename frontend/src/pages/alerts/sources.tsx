@@ -225,10 +225,10 @@ export function AlertSourcesPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">告警提供商</h1>
-          <p className="text-sm text-gray-500 mt-0.5">配置和管理告警接入渠道</p>
+          <h1 className="text-2xl font-bold text-foreground">告警提供商</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">配置和管理告警接入渠道</p>
           {currentTenant && (
-            <div className="mt-2 text-sm text-blue-600">
+            <div className="mt-2 text-sm text-primary">
               当前租户：{currentTenant.name} (Slug: {currentTenant.slug})
             </div>
           )}
@@ -236,7 +236,7 @@ export function AlertSourcesPage() {
         {canWrite && (
           <button
             onClick={handleCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
           >
             <Plus className="w-4 h-4" />
             添加配置
@@ -249,7 +249,7 @@ export function AlertSourcesPage() {
         <div>
           <h2 className="text-lg font-semibold mb-4">已配置的告警源</h2>
           {sourcesLoading ? (
-            <div className="p-8 text-center text-gray-500">加载中...</div>
+            <div className="p-8 text-center text-muted-foreground">加载中...</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {sources.map((source) => {
@@ -257,24 +257,24 @@ export function AlertSourcesPage() {
                 const Icon = typeInfo?.icon || Code
                 const stat = sourceStats[source.id] || { total: 0, firing: 0 }
                 return (
-                  <div key={source.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
+                  <div key={source.id} className="bg-white rounded-xl shadow-sm border border-border p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-3">
-                      <div className={`p-2 rounded-lg ${source.is_active === 'active' ? 'bg-green-50' : 'bg-gray-50'}`}>
-                        <Icon className={`w-5 h-5 ${source.is_active === 'active' ? 'text-green-600' : 'text-gray-400'}`} />
+                      <div className={`p-2 rounded-lg ${source.is_active === 'active' ? 'bg-green-50' : 'bg-muted'}`}>
+                        <Icon className={`w-5 h-5 ${source.is_active === 'active' ? 'text-green-600' : 'text-muted-foreground/70'}`} />
                       </div>
                       {canWrite && (
                         <div className="flex gap-1">
                           <button
                             onClick={() => toggleSourceMutation.mutate(source.id)}
                             disabled={toggleSourceMutation.isPending}
-                            className={`p-1.5 rounded-lg ${source.is_active === 'active' ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                            className={`p-1.5 rounded-lg ${source.is_active === 'active' ? 'text-green-600 hover:bg-green-50' : 'text-muted-foreground/70 hover:bg-muted'}`}
                             title={source.is_active === 'active' ? '已启用' : '已停用'}
                           >
                             {source.is_active === 'active' ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
                           </button>
                           <button
                             onClick={() => handleEdit(source)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                            className="p-1.5 text-primary hover:bg-blue-50 rounded-lg"
                           >
                             <Settings className="w-4 h-4" />
                           </button>
@@ -282,15 +282,15 @@ export function AlertSourcesPage() {
                       )}
                     </div>
                     <div className="font-medium text-sm mb-1">{source.name}</div>
-                    <div className="text-xs text-gray-500 mb-3">{typeInfo?.name || source.source_type}</div>
+                    <div className="text-xs text-muted-foreground mb-3">{typeInfo?.name || source.source_type}</div>
                     <div className="flex gap-4 mb-3">
                       <div className="text-center">
                         <div className="text-lg font-bold">{stat.total}</div>
-                        <div className="text-xs text-gray-500">总告警</div>
+                        <div className="text-xs text-muted-foreground">总告警</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-bold text-red-600">{stat.firing}</div>
-                        <div className="text-xs text-gray-500">触发中</div>
+                        <div className="text-xs text-muted-foreground">触发中</div>
                       </div>
                     </div>
                     {canWrite && (
@@ -316,8 +316,8 @@ export function AlertSourcesPage() {
       {/* 告警源类型 - 卡片式响应式布局 */}
       <div>
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">支持的告警源类型</h2>
-          <p className="text-sm text-gray-500">点击添加配置来查看 Webhook 地址</p>
+          <h2 className="text-lg font-semibold text-foreground">支持的告警源类型</h2>
+          <p className="text-sm text-muted-foreground">点击添加配置来查看 Webhook 地址</p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {alertSourceTypes.map((sourceType) => {
@@ -327,18 +327,18 @@ export function AlertSourcesPage() {
             return (
               <div
                 key={sourceType.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition-all duration-200 flex flex-col"
+                className="bg-white rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md hover:border-blue-200 transition-all duration-200 flex flex-col"
               >
                 {/* 卡片头部 */}
                 <div className="p-4 flex-1">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-lg ${isConfigured ? 'bg-green-50' : 'bg-blue-50'}`}>
-                        <Icon className={`w-5 h-5 ${isConfigured ? 'text-green-600' : 'text-blue-600'}`} />
+                        <Icon className={`w-5 h-5 ${isConfigured ? 'text-green-600' : 'text-primary'}`} />
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-900">{sourceType.name}</div>
-                        <div className="text-xs text-gray-500">{sourceType.description}</div>
+                        <div className="font-semibold text-foreground">{sourceType.name}</div>
+                        <div className="text-xs text-muted-foreground">{sourceType.description}</div>
                       </div>
                     </div>
                   </div>
@@ -363,7 +363,7 @@ export function AlertSourcesPage() {
                       </div>
                     ))}
                     {sourceType.配置说明.length > 2 && (
-                      <div className="text-xs text-gray-400 pl-5">+{sourceType.配置说明.length - 2} 更多步骤</div>
+                      <div className="text-xs text-muted-foreground/70 pl-5">+{sourceType.配置说明.length - 2} 更多步骤</div>
                     )}
                   </div>
 
@@ -371,7 +371,7 @@ export function AlertSourcesPage() {
 
                 {/* 卡片底部操作 */}
                 {canWrite && (
-                  <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
+                  <div className="px-4 py-3 bg-muted border-t border-border">
                     <button
                       onClick={() => {
                         setEditingSource(null)
@@ -379,7 +379,7 @@ export function AlertSourcesPage() {
                         setDefaultSourceType(sourceType.id)
                         setShowCreateModal(true)
                       }}
-                      className="w-full flex items-center justify-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                      className="w-full flex items-center justify-center gap-1 text-sm font-medium text-primary hover:text-primary/80"
                     >
                       <Plus className="w-4 h-4" />
                       {isConfigured ? '编辑配置' : '添加配置'}
@@ -393,37 +393,37 @@ export function AlertSourcesPage() {
       </div>
 
       {/* 接入统计 */}
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="p-6 bg-white rounded-xl shadow-sm border border-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">接入统计</h3>
           <button
             onClick={() => queryClient.invalidateQueries()}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className="w-4 h-4" />
             刷新
           </button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
-            <div className="text-2xl font-bold text-gray-900">{sources.length}</div>
-            <div className="text-sm text-gray-500">已配置来源</div>
+          <div className="p-4 bg-muted rounded-lg text-center">
+            <div className="text-2xl font-bold text-foreground">{sources.length}</div>
+            <div className="text-sm text-muted-foreground">已配置来源</div>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
+          <div className="p-4 bg-muted rounded-lg text-center">
             <div className="text-2xl font-bold text-green-600">{sources.filter(s => s.is_active === 'active').length}</div>
-            <div className="text-sm text-gray-500">活跃连接</div>
+            <div className="text-sm text-muted-foreground">活跃连接</div>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
-            <div className="text-2xl font-bold text-blue-600">{stats?.total || 0}</div>
-            <div className="text-sm text-gray-500">总告警</div>
+          <div className="p-4 bg-muted rounded-lg text-center">
+            <div className="text-2xl font-bold text-primary">{stats?.total || 0}</div>
+            <div className="text-sm text-muted-foreground">总告警</div>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
+          <div className="p-4 bg-muted rounded-lg text-center">
             <div className="text-2xl font-bold text-yellow-600">{stats?.firing || 0}</div>
-            <div className="text-sm text-gray-500">触发中</div>
+            <div className="text-sm text-muted-foreground">触发中</div>
           </div>
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
+          <div className="p-4 bg-muted rounded-lg text-center">
             <div className="text-2xl font-bold text-red-600">{stats?.critical || 0}</div>
-            <div className="text-sm text-gray-500">严重告警</div>
+            <div className="text-sm text-muted-foreground">严重告警</div>
           </div>
         </div>
       </div>
@@ -432,14 +432,14 @@ export function AlertSourcesPage() {
       <div className="p-6 bg-blue-50 rounded-xl border border-blue-100">
         <div className="flex items-start gap-4">
           <div className="p-2 bg-blue-100 rounded-lg">
-            <Zap className="w-6 h-6 text-blue-600" />
+            <Zap className="w-6 h-6 text-primary" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-blue-900 mb-2">快速开始</h3>
             <p className="text-sm text-blue-700 mb-4">
               选择一个告警提供商，按照配置步骤完成接入。配置完成后，告警数据将自动同步到平台。
             </p>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+            <button className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm font-medium">
               查看接入文档
             </button>
           </div>
@@ -545,7 +545,7 @@ function SourceModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">名称</label>
             <input
               type="text"
               required
@@ -556,7 +556,7 @@ function SourceModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">告警源类型</label>
+            <label className="block text-sm font-medium text-foreground mb-1">告警源类型</label>
             <select
               value={formData.source_type}
               onChange={(e) => setFormData({ ...formData, source_type: e.target.value })}
@@ -569,7 +569,7 @@ function SourceModal({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+            <label className="block text-sm font-medium text-foreground mb-1">描述</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -579,9 +579,9 @@ function SourceModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Webhook URL</label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-gray-50 px-3 py-2 rounded font-mono break-all">
+              <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
                 {webhookUrl}
               </code>
               <button
@@ -605,13 +605,13 @@ function SourceModal({
                     toast.error('复制失败')
                   }
                 }}
-                className="shrink-0 p-2 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                className="shrink-0 p-2 text-primary border border-blue-200 rounded-lg hover:bg-blue-50"
                 title="复制"
               >
                 <Copy className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               在 {currentType?.name} 中配置此 URL 作为 Webhook 回调地址
             </p>
           </div>
@@ -630,13 +630,13 @@ function SourceModal({
             <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</div>
           )}
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-muted">
               取消
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
             >
               {source ? '保存' : '创建'}
             </button>

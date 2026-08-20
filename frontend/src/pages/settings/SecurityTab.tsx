@@ -47,11 +47,11 @@ export function SecurityTab() {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
       <h3 className="text-lg font-medium mb-1">安全设置</h3>
-      <p className="text-sm text-gray-500 mb-6">管理您的账户安全</p>
+      <p className="text-sm text-muted-foreground mb-6">管理您的账户安全</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+          <label className="block text-sm font-medium text-foreground mb-1">当前密码</label>
           <input
             type="password"
             {...register('current_password')}
@@ -62,7 +62,7 @@ export function SecurityTab() {
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+          <label className="block text-sm font-medium text-foreground mb-1">新密码</label>
           <input
             type="password"
             {...register('new_password')}
@@ -73,7 +73,7 @@ export function SecurityTab() {
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+          <label className="block text-sm font-medium text-foreground mb-1">确认新密码</label>
           <input
             type="password"
             {...register('confirm_password')}
@@ -96,7 +96,7 @@ export function SecurityTab() {
           <button
             type="submit"
             disabled={isSubmitting || updateMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {updateMutation.isPending ? '修改中...' : '修改密码'}
           </button>
