@@ -6,6 +6,7 @@ import { EditModal } from './components/EditModal'
 import { Button } from '@/components/ui/button'
 import { Loader2, Plus, RefreshCw, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
+import { Pagination } from '@/components/common/Pagination'
 
 const PAGE_SIZE = 20
 
@@ -438,34 +439,18 @@ export function CloudMetricsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="p-4 border-t flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                共 {data.total} 条记录
-                {isFetching && !isLoading && (
-                  <span className="ml-2 text-blue-500">
-                    <Loader2 className="w-3 h-3 animate-spin inline" /> 刷新中...
-                  </span>
-                )}
-              </div>
-              <div className="flex gap-2 items-center">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-muted"
-                >
-                  上一页
-                </button>
-                <span className="text-sm text-gray-600">
-                  第 {page} / {totalPages || 1} 页
-                </span>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page >= totalPages}
-                  className="px-3 py-1 border rounded text-sm disabled:opacity-40 hover:bg-muted"
-                >
-                  下一页
-                </button>
-              </div>
+            <div className="p-4 border-t">
+              <Pagination
+                page={page}
+                totalPages={totalPages || 1}
+                total={data.total}
+                onPageChange={setPage}
+              />
+              {isFetching && !isLoading && (
+                <div className="text-xs text-muted-foreground mt-2 text-right">
+                  <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> 刷新中...
+                </div>
+              )}
             </div>
           </>
         )}
