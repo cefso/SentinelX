@@ -319,7 +319,7 @@ export function AlertsPage() {
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg border shadow-sm">
         {/* 过滤栏 - 分段控件风格 */}
         <div className="p-4 border-b space-y-3">
           <div className="flex gap-3 items-center">
@@ -492,26 +492,26 @@ export function AlertsPage() {
         {/* 告警列表 - 表格布局 */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr className="bg-muted">
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">#</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">告警名称</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">级别</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-28">来源</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">命名空间</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">实例</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-40">时间</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">状态</th>
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">#</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">告警名称</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">级别</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-28">来源</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">命名空间</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">实例</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-40">时间</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">状态</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">加载中...</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
                 </tr>
               ) : alerts?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">暂无告警</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">暂无告警</td>
                 </tr>
               ) : aggregateMode ? (
                 (alerts?.items as unknown as AlertAggregatedItem[] || []).map((item, idx) => {
@@ -522,8 +522,8 @@ export function AlertsPage() {
                     className={`hover:bg-muted cursor-pointer ${isStrategyGroup ? 'bg-violet-50/20' : ''}`}
                     onClick={() => navigate(`/alerts/${item.latest.id}`)}
                   >
-                    <td className="px-3 py-2 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate max-w-md">{item.latest.title}</span>
                         {item.flapping && (
@@ -565,14 +565,14 @@ export function AlertsPage() {
                           : item.fingerprint}
                       </div>
                     </td>
-                    <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground">{getSourceDisplayName(item.latest)}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-3"><SeverityBadge severity={item.latest.severity} /></td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{getSourceDisplayName(item.latest)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {item.latest.fired_at ? formatLocalDateTime(item.latest.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
+                    <td className="px-4 py-3 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
                   </tr>
                   )
                 })
@@ -583,8 +583,8 @@ export function AlertsPage() {
                     className="hover:bg-muted cursor-pointer"
                     onClick={() => navigate(`/alerts/${alert.id}`)}
                   >
-                    <td className="px-3 py-2 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate max-w-md">{alert.title}</span>
                         {alert.fire_count > 1 && (
@@ -598,14 +598,14 @@ export function AlertsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2"><SeverityBadge severity={alert.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground">{getSourceDisplayName(alert)}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-3"><SeverityBadge severity={alert.severity} /></td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{getSourceDisplayName(alert)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {alert.fired_at ? formatLocalDateTime(alert.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={alert.status} /></td>
+                    <td className="px-4 py-3 whitespace-nowrap w-20"><StatusBadge status={alert.status} /></td>
                   </tr>
                 ))
               )}

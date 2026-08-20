@@ -228,7 +228,7 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-muted">
                     <tr>
-                      <th className="w-10 px-3 py-3">
+                      <th className="w-10 px-4 py-3">
                         <button onClick={handleSelectAll} className="flex items-center justify-center">
                           {selectedIds.size === filteredLogs.length && filteredLogs.length > 0 ? (
                             <CheckSquare className="w-4 h-4 text-primary" />
@@ -237,11 +237,11 @@ export function WebhookLogModal({ open, onOpenChange }: WebhookLogModalProps) {
                           )}
                         </button>
                       </th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">时间</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">告警ID</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase">操作</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">时间</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">告警ID</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">操作</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -365,7 +365,7 @@ function LogRow({
         className={`hover:bg-muted cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
         onClick={onToggleExpand}
       >
-        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
           <button onClick={onSelect} className="flex items-center justify-center">
             {isSelected ? (
               <CheckSquare className="w-4 h-4 text-primary" />
@@ -374,21 +374,21 @@ function LogRow({
             )}
           </button>
         </td>
-        <td className="px-3 py-3 text-sm text-foreground whitespace-nowrap">
+        <td className="px-4 py-3 text-sm text-foreground whitespace-nowrap">
           {formatDate(log.created_at)}
         </td>
-        <td className="px-3 py-3 text-sm text-muted-foreground">
+        <td className="px-4 py-3 text-sm text-muted-foreground">
           {log.source_type}
         </td>
-        <td className="px-3 py-3">
+        <td className="px-4 py-3">
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[log.status] || ''}`}>
             {statusLabels[log.status] || log.status}
           </span>
         </td>
-        <td className="px-3 py-3 text-sm text-muted-foreground">
+        <td className="px-4 py-3 text-sm text-muted-foreground">
           {log.alert_id || '-'}
         </td>
-        <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onDismiss}
             disabled={isDismissing}
@@ -400,7 +400,7 @@ function LogRow({
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={6} className="px-3 py-3 bg-muted">
+          <td colSpan={6} className="px-4 py-3 bg-muted">
             <div className="space-y-3">
               {/* 原始数据 */}
               <div>

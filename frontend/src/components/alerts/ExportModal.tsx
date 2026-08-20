@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal, DialogFooter } from '@/components/common/Modal'
+import { Button } from '@/components/ui/button'
 import { Download, Calendar } from 'lucide-react'
 
 type ExportRange = 'current_page' | 'all' | 'last_7_days' | 'last_30_days' | 'custom'
@@ -75,13 +76,14 @@ export function ExportModal({
       size="sm"
       footer={
         <DialogFooter>
-          <button
+          <Button
+            type="button"
+            variant="outline"
             onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-muted"
             disabled={isExporting}
           >
             取消
-          </button>
+          </Button>
           <button
             onClick={handleExport}
             disabled={isExporting || (selectedRange === 'custom' && (!customStart || !customEnd))}

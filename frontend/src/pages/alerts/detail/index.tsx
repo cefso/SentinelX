@@ -211,7 +211,7 @@ export function AlertDetailPage() {
         </div>
       )}
       {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between bg-card rounded-lg border shadow-sm p-4">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate('/alerts')} className="text-muted-foreground hover:text-foreground">
             ← 返回
@@ -291,7 +291,7 @@ export function AlertDetailPage() {
         {/* 左列 - col-span-2，所有卡片 */}
         <div className="col-span-2 space-y-4">
           {/* 基本信息卡片 */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">基本信息</h2>
             <dl className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
               <div className="flex flex-col">
@@ -343,7 +343,7 @@ export function AlertDetailPage() {
           </div>
 
           {/* 告警内容卡片 */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">告警内容</h2>
             <div className="flex gap-6">
               <div className="flex-1 text-foreground whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
@@ -380,7 +380,7 @@ export function AlertDetailPage() {
 
           {/* 匹配规则卡片 */}
           {alert.matched_rules && alert.matched_rules.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-card rounded-lg border shadow-sm p-6">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">匹配规则</h2>
               <div className="grid grid-cols-2 gap-2">
                 {alert.matched_rules.map((rule: any, index: number) => (
@@ -395,7 +395,7 @@ export function AlertDetailPage() {
 
           {/* 通知渠道卡片 */}
           {alert.notification_channels && alert.notification_channels.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-card rounded-lg border shadow-sm p-6">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">通知渠道</h2>
               <div className="flex flex-wrap gap-2">
                 {alert.notification_channels.map((channel: any, index: number) => (
@@ -412,7 +412,7 @@ export function AlertDetailPage() {
         {/* 右列 - 三个卡片：处理人 / 原始数据 / 同指纹告警 */}
         <div className="space-y-4">
           {/* 处理人卡片 */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">处理人</h2>
             <select
               value={alert.assignee_id || ''}
@@ -428,7 +428,7 @@ export function AlertDetailPage() {
 
           {/* 生命周期记录卡片 */}
           {fullHistory.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-card rounded-lg border shadow-sm p-6">
               <div className="flex items-center gap-2 mb-4">
                 <History className="w-4 h-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">生命周期 ({fullHistory.length})</h2>
@@ -472,7 +472,7 @@ export function AlertDetailPage() {
 
           {/* 原始数据卡片 */}
           {alert.raw_data && Object.keys(alert.raw_data).length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-card rounded-lg border shadow-sm p-6">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">原始数据</h2>
               <pre className="bg-gray-900 text-gray-100 p-3 rounded overflow-auto text-xs max-h-40">
                 {JSON.stringify(alert.raw_data, null, 2)}
@@ -482,7 +482,7 @@ export function AlertDetailPage() {
 
           {/* 同指纹告警卡片 */}
           {fpAlerts && fpAlerts.items.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-card rounded-lg border shadow-sm p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-muted-foreground" />
@@ -557,7 +557,7 @@ export function AlertDetailPage() {
       </div>
       {/* 策略聚合组成员 */}
       {!aggregatedLoading && aggregateGroupCount > 1 && (
-        <div ref={aggregateMembersRef} className="bg-white rounded-lg shadow overflow-hidden scroll-mt-4">
+        <div ref={aggregateMembersRef} className="bg-card rounded-lg border shadow-sm overflow-hidden scroll-mt-4">
           <button
             onClick={() => setAggregatedExpanded(!aggregatedExpanded)}
             className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted transition-colors"

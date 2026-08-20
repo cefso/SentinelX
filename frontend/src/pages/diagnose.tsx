@@ -84,7 +84,7 @@ export function DiagnosePage() {
 
       {data && (
         <div className="space-y-4">
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-lg font-medium mb-4">处理结果</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -108,7 +108,7 @@ export function DiagnosePage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-lg font-medium mb-4">处理流程</h2>
             <div className="space-y-3">
               {data.flow_steps?.map((step: any, index: number) => (

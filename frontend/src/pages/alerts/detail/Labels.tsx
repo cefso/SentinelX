@@ -19,7 +19,7 @@ export function Labels({
     <>
       {/* 标签卡片 */}
       {labelEntries.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-card rounded-lg border shadow-sm p-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">标签</h2>
             {labelEntries.length > 5 && (
@@ -44,7 +44,7 @@ export function Labels({
 
       {/* 注解卡片 */}
       {annotationEntries.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-card rounded-lg border shadow-sm p-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">注解</h2>
             {annotationEntries.length > 5 && (

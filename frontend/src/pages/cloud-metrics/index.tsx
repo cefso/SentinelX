@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient, CloudMetricRecord, CloudProductMetricInput } from '@/services/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { EditModal } from './components/EditModal'
+import { Button } from '@/components/ui/button'
 import { Loader2, Plus, RefreshCw, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
 
@@ -172,7 +173,7 @@ export function CloudMetricsPage() {
       </div>
 
       {/* Search filters */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-card rounded-lg border shadow-sm p-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-foreground mb-1">产品名称</label>
@@ -253,7 +254,7 @@ export function CloudMetricsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-lg border shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
@@ -488,12 +489,13 @@ export function CloudMetricsPage() {
           size="sm"
           footer={
             <>
-              <button
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => setShowBatchDeleteConfirm(false)}
-                className="px-4 py-2 border rounded-md hover:bg-muted"
               >
                 取消
-              </button>
+              </Button>
               <button
                 onClick={confirmBatchDelete}
                 disabled={batchDeleteMutation.isPending}
