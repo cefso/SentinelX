@@ -28,6 +28,9 @@ class LcmdbAdapter(AlertAdapter):
         markdown = raw_data["markdown"]
         text = markdown.get("text", "")
 
+        # 处理转义的换行符（\n 变成实际换行）
+        text = text.replace("\\n", "\n")
+
         # 全局去除 HTML 标签（如 <font color='green'>正常</font>）
         text = re.sub(r"<[^>]+>", "", text)
 
