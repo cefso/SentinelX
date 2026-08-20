@@ -109,7 +109,7 @@ async def acknowledge_alert_callback(
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
-        action="acknowledge_callback",
+        action="acknowledged",
         description="通过回调确认告警",
         old_value={"status": old_status},
         new_value={"status": "acknowledged"},
@@ -153,7 +153,7 @@ async def resolve_alert_callback(
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
-        action="resolve_callback",
+        action="resolved",
         description="通过回调解决告警",
         old_value={"status": "acknowledged"},
         new_value={"status": "resolved"},
@@ -197,7 +197,7 @@ async def silence_alert_callback(
     history = AlertHistory(
         tenant_id=alert.tenant_id,
         alert_id=alert.id,
-        action="silence_callback",
+        action="silenced",
         description=f"通过回调静默告警 {duration_hours} 小时",
         old_value={"status": old_status, "silenced_until": None},
         new_value={"status": old_status, "silenced_until": alert.silenced_until.isoformat()},

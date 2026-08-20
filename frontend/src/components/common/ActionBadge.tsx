@@ -1,6 +1,6 @@
 import {
-  AlertCircle, CheckCircle, Copy, Layers, MessageSquare, Check,
-  BellOff, ExternalLink, ArrowUp, UserPlus, Bell, Send,
+  AlertCircle, CheckCircle, MessageSquare, Check,
+  BellOff, ExternalLink, ArrowUp, Bell, Send, Filter,
 } from 'lucide-react'
 
 interface ActionBadgeProps {
@@ -15,20 +15,16 @@ interface ActionConfig {
 }
 
 const actionConfigs: Record<string, ActionConfig> = {
-  fired: { label: '触发', color: 'bg-red-100 text-red-700', icon: AlertCircle },
-  resolved: { label: '恢复', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  // 系统自动操作
   received: { label: '接入', color: 'bg-blue-100 text-blue-700', icon: Bell },
-  deduplicated: { label: '去重', color: 'bg-yellow-100 text-yellow-700', icon: Copy },
-  aggregated: { label: '聚合', color: 'bg-purple-100 text-purple-700', icon: Layers },
-  dispose_note: { label: '备注', color: 'bg-blue-100 text-blue-700', icon: MessageSquare },
-  dispose_acknowledge: { label: '确认', color: 'bg-yellow-100 text-yellow-700', icon: Check },
-  dispose_resolve: { label: '解决', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  dispose_silence: { label: '静默', color: 'bg-gray-100 text-gray-700', icon: BellOff },
-  acknowledge_callback: { label: '外部确认', color: 'bg-orange-100 text-orange-700', icon: ExternalLink },
-  resolve_callback: { label: '外部恢复', color: 'bg-green-100 text-green-700', icon: ExternalLink },
-  silence_callback: { label: '外部静默', color: 'bg-gray-100 text-gray-700', icon: ExternalLink },
-  auto_assign: { label: '自动分配', color: 'bg-blue-100 text-blue-700', icon: UserPlus },
-  update: { label: '更新', color: 'bg-blue-100 text-blue-700', icon: MessageSquare },
+  fired: { label: '触发', color: 'bg-red-100 text-red-700', icon: AlertCircle },
+  filtered: { label: '过滤', color: 'bg-yellow-100 text-yellow-700', icon: Filter },
+  escalated: { label: '升级', color: 'bg-orange-100 text-orange-700', icon: ArrowUp },
+  // 人工操作
+  acknowledged: { label: '确认', color: 'bg-yellow-100 text-yellow-700', icon: Check },
+  resolved: { label: '恢复', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  silenced: { label: '静默', color: 'bg-gray-100 text-gray-700', icon: BellOff },
+  updated: { label: '更新', color: 'bg-blue-100 text-blue-700', icon: MessageSquare },
 }
 
 function getActionConfig(action: string): ActionConfig {
@@ -37,7 +33,7 @@ function getActionConfig(action: string): ActionConfig {
     return actionConfigs[action]
   }
 
-  // 前缀匹配
+  // 前缀匹配（兼容旧数据）
   if (action.startsWith('escalate_level_')) {
     const level = action.replace('escalate_level_', '')
     return { label: `升级 L${level}`, color: 'bg-orange-100 text-orange-700', icon: ArrowUp }
@@ -46,6 +42,31 @@ function getActionConfig(action: string): ActionConfig {
   if (action.startsWith('notification_')) {
     const channel = action.replace('notification_', '')
     return { label: `通知 (${channel})`, color: 'bg-blue-100 text-blue-700', icon: Send }
+  }
+
+  // 兼容旧的 dispose_* 类型
+  if (action.startsWith('dispose_')) {
+    const disposeAction = action.replace('dispose_', '')
+    const disposeConfigs: Record<string, ActionConfig> = {
+      note: { label: '备注', color: 'bg-blue-100 text-blue-700', icon: MessageSquare },
+      acknowledge: { label: '确认', color: 'bg-yellow-100 text-yellow-700', icon: Check },
+      resolve: { label: '解决', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+      silence: { label: '静默', color: 'bg-gray-100 text-gray-700', icon: BellOff },
+    }
+    if (disposeConfigs[disposeAction]) {
+      return disposeConfigs[disposeAction]
+    }
+  }
+
+  // 兼容旧的 callback 类型
+  if (action === 'acknowledge_callback') {
+    return { label: '外部确认', color: 'bg-orange-100 text-orange-700', icon: ExternalLink }
+  }
+  if (action === 'resolve_callback') {
+    return { label: '外部恢复', color: 'bg-green-100 text-green-700', icon: ExternalLink }
+  }
+  if (action === 'silence_callback') {
+    return { label: '外部静默', color: 'bg-gray-100 text-gray-700', icon: ExternalLink }
   }
 
   // 默认

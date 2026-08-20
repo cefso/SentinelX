@@ -107,7 +107,7 @@ class EscalationService:
         history = AlertHistory(
             tenant_id=alert.tenant_id,
             alert_id=alert.id,
-            action=f"escalate_level_{alert.escalation_count}",
+            action="escalated",
             description=f"告警升级至第 {alert.escalation_count} 级",
             old_value={"escalation_count": old_count},
             new_value={"escalation_count": alert.escalation_count},
@@ -180,7 +180,7 @@ class EscalationService:
         history = AlertHistory(
             tenant_id=alert.tenant_id,
             alert_id=alert.id,
-            action="auto_assign",
+            action="updated",
             description=f"自动指派给 {user_name}",
             operator_id=user_id,
             operator_name=user_name,
