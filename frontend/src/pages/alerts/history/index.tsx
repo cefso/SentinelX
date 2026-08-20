@@ -5,17 +5,25 @@ import { apiClient } from '@/services/api'
 import { AlertHistoryListResponse } from '@/types/alert'
 import { ActionBadge } from '@/components/common/ActionBadge'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
+import { Pagination } from '@/components/common/Pagination'
 import { formatLocalDateTime } from '@/utils/datetime'
-import { History, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { History, Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const ACTION_OPTIONS = [
-  { value: '', label: '全部操作' },
-  // 系统自动操作
+  { value: 'all', label: '全部操作' },
   { value: 'received', label: '接入' },
   { value: 'fired', label: '触发' },
   { value: 'filtered', label: '过滤' },
   { value: 'escalated', label: '升级' },
-  // 人工操作
   { value: 'acknowledged', label: '确认' },
   { value: 'resolved', label: '恢复' },
   { value: 'silenced', label: '静默' },
@@ -23,7 +31,7 @@ const ACTION_OPTIONS = [
 ]
 
 const STATUS_OPTIONS = [
-  { value: '', label: '全部状态' },
+  { value: 'all', label: '全部状态' },
   { value: 'firing', label: '触发中' },
   { value: 'resolved', label: '已恢复' },
   { value: 'acknowledged', label: '已确认' },
@@ -34,8 +42,8 @@ export function AlertHistoryPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
-  const [action, setAction] = useState('')
-  const [alertStatus, setAlertStatus] = useState('')
+  const [action, setAction] = useState('all')
+  const [alertStatus, setAlertStatus] = useState('all')
   const [keyword, setKeyword] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
 
@@ -44,8 +52,8 @@ export function AlertHistoryPage() {
     queryFn: () => apiClient.getAlertHistory({
       page,
       page_size: pageSize,
-      action: action || undefined,
-      alert_status: alertStatus || undefined,
+      action: action === 'all' ? undefined : action,
+      alert_status: alertStatus === 'all' ? undefined : alertStatus,
       keyword: keyword || undefined,
     }),
   })
@@ -68,110 +76,109 @@ export function AlertHistoryPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <History className="w-6 h-6 text-gray-500" />
-          <h1 className="text-2xl font-bold text-gray-900">告警操作记录</h1>
+          <History className="w-6 h-6 text-muted-foreground" />
+          <h1 className="text-2xl font-bold text-foreground">告警操作记录</h1>
         </div>
       </div>
 
       {/* 筛选栏 */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-card rounded-lg border shadow-sm p-4">
         <div className="flex flex-wrap gap-4 items-center">
           {/* 搜索框 */}
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
               type="text"
               placeholder="搜索告警标题..."
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="pl-9"
             />
           </div>
 
           {/* 操作类型筛选 */}
-          <select
-            value={action}
-            onChange={(e) => { setAction(e.target.value); setPage(1) }}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            {ACTION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <Select value={action} onValueChange={(v) => { setAction(v); setPage(1) }}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACTION_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* 告警状态筛选 */}
-          <select
-            value={alertStatus}
-            onChange={(e) => { setAlertStatus(e.target.value); setPage(1) }}
-            className="px-3 py-2 border rounded-lg text-sm"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <Select value={alertStatus} onValueChange={(v) => { setAlertStatus(v); setPage(1) }}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* 搜索按钮 */}
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-          >
+          <Button onClick={handleSearch}>
             搜索
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* 统计信息 */}
       {data && (
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted-foreground">
           共 {data.total} 条记录
         </div>
       )}
 
       {/* 数据表格 */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-lg border shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">加载中...</div>
+          <div className="p-8 text-center text-muted-foreground">加载中...</div>
         ) : !data || data.items.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">暂无操作记录</div>
+          <div className="p-8 text-center text-muted-foreground">暂无操作记录</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="w-full">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     时间
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     告警标题
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     级别
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     状态
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     操作类型
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     操作人
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     描述
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y">
                 {data.items.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                  <tr key={item.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {formatLocalDateTime(item.created_at)}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <button
                         onClick={() => navigate(`/alerts/${item.alert_id}`)}
-                        className="text-blue-600 hover:text-blue-700 hover:underline truncate max-w-[300px] block"
+                        className="text-primary hover:text-primary/80 hover:underline truncate max-w-[300px] block text-left"
                         title={item.alert_title}
                       >
                         {item.alert_title || `告警 #${item.alert_id}`}
@@ -181,23 +188,23 @@ export function AlertHistoryPage() {
                       {item.alert_severity ? (
                         <SeverityBadge severity={item.alert_severity} />
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {item.alert_status ? (
                         <StatusBadge status={item.alert_status} />
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <ActionBadge action={item.action} />
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {item.operator_name || <span className="text-gray-400">系统</span>}
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                      {item.operator_name || <span className="text-muted-foreground">系统</span>}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px] truncate" title={item.description || ''}>
+                    <td className="px-4 py-3 text-sm text-muted-foreground max-w-[200px] truncate" title={item.description || ''}>
                       {item.description || '-'}
                     </td>
                   </tr>
@@ -211,28 +218,10 @@ export function AlertHistoryPage() {
       {/* 分页 */}
       {data && data.total > pageSize && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted-foreground">
             第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, data.total)} 条，共 {data.total} 条
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm text-gray-700">
-              {page} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
     </div>
