@@ -217,11 +217,13 @@ export function AlertHistoryPage() {
 
       {/* 分页 */}
       {data && data.total > pageSize && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, data.total)} 条，共 {data.total} 条
-          </div>
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        <div className="mt-4">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={data.total}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>

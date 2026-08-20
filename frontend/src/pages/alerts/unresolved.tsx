@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { SeverityBadge } from '@/components/common/Badges'
 import { formatLocalDateTime } from '@/utils/datetime'
-import { Clock, Zap, ArrowRight, ChevronDown, ArrowUpDown, LayoutDashboard } from 'lucide-react'
+import { Clock, Zap, ArrowRight, ArrowUpDown, LayoutDashboard } from 'lucide-react'
+import { Pagination } from '@/components/common/Pagination'
 
 // ============ Types ============
 
@@ -58,15 +59,6 @@ export function UnresolvedAlertsPage() {
     ? new Date(Date.now() - parseInt(durationFilter) * 3600000).toISOString()
     : undefined
 
-  const filterKey = `${maxFiredAt ?? ''}|${severityFilter ?? ''}|${flappingOnly}|${staleOnly}|${sortBy ?? ''}|${sortOrder}`
-  const prevFilterKeyRef = useRef(filterKey)
-  const accumulatedRef = useRef<AggregatedAlertItem[]>([])
-
-  if (prevFilterKeyRef.current !== filterKey) {
-    prevFilterKeyRef.current = filterKey
-    accumulatedRef.current = []
-  }
-
   const { data: recentAlerts, isLoading: alertsLoading } = useQuery<{ items: AggregatedAlertItem[]; total: number; alert_total: number }>({
     queryKey: ['recentFiringAlerts', maxFiredAt, severityFilter, flappingOnly, staleOnly, sortBy, sortOrder, page],
     queryFn: () => {
@@ -86,28 +78,10 @@ export function UnresolvedAlertsPage() {
     placeholderData: (prev) => prev,
   })
 
-  useEffect(() => {
-    if (recentAlerts?.items) {
-      if (page === 1) {
-        accumulatedRef.current = recentAlerts.items
-      } else {
-        const existing = new Set(accumulatedRef.current.map((i) => i.fingerprint))
-        const newItems = recentAlerts.items.filter((i) => !existing.has(i.fingerprint))
-        if (newItems.length > 0) {
-          accumulatedRef.current = [...accumulatedRef.current, ...newItems]
-        }
-      }
-    }
-  }, [recentAlerts, page])
-
-  const alertItems = page === 1 ? (recentAlerts?.items || []) : accumulatedRef.current
+  const alertItems = recentAlerts?.items || []
   const total = recentAlerts?.total || 0
   const alertTotal = recentAlerts?.alert_total || 0
-  const hasMore = alertItems.length < total
-
-  const handleLoadMore = useCallback(() => {
-    setPage((p) => p + 1)
-  }, [])
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
   return (
     <div className="space-y-6">
@@ -253,22 +227,15 @@ export function UnresolvedAlertsPage() {
         </div>
       )}
 
-      {/* Load More */}
+      {/* 分页 */}
       {(alertItems.length > 0 || page > 1) && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground/70">
-            已加载 {alertItems.length} / 共 {total} 条
-          </span>
-          {hasMore && (
-            <button
-              onClick={handleLoadMore}
-              disabled={alertsLoading}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm text-primary border border-blue-200 rounded-md hover:bg-blue-50 transition-colors disabled:opacity-50"
-            >
-              <ChevronDown className="w-4 h-4" />
-              加载更多
-            </button>
-          )}
+        <div className="mt-4">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>

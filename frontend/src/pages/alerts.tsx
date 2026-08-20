@@ -32,8 +32,9 @@ interface AlertSource {
   last_alert_at?: string
   created_at: string
 }
-import { Bell, AlertTriangle, AlertCircle, XCircle, ChevronLeft, ChevronRight, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download, ArrowUp, ArrowDown } from 'lucide-react'
+import { Bell, AlertTriangle, AlertCircle, XCircle, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download, ArrowUp, ArrowDown } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
+import { Pagination } from '@/components/common/Pagination'
 import { WebhookLogModal } from '@/components/common/WebhookLogModal'
 
 export function AlertsPage() {
@@ -613,53 +614,15 @@ export function AlertsPage() {
           </table>
         </div>
 
-        {/* 紧凑分页 */}
+        {/* 分页 */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              共 {alerts?.total} 条，第 {page} / {totalPages} 页
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="p-1.5 border rounded hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number
-                if (totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (page <= 3) {
-                  pageNum = i + 1
-                } else if (page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
-                } else {
-                  pageNum = page - 2 + i
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setPage(pageNum)}
-                    className={`w-8 h-8 text-sm rounded border ${
-                      page === pageNum
-                        ? 'bg-primary text-white border-primary'
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                )
-              })}
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                className="p-1.5 border rounded hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="px-4 py-3 border-t">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={alerts?.total}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>

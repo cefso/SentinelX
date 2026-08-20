@@ -6,6 +6,7 @@ import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { ChannelModal, CHANNEL_TYPES } from './ChannelModal'
 import { Modal } from '@/components/common/Modal'
 import { FilterTabs } from '@/components/common/FilterTabs'
+import { Pagination } from '@/components/common/Pagination'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -183,29 +184,13 @@ export function ChannelsPage() {
             </tbody>
           </table>
         </div>
-        <div className="p-4 border-t flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            共 {notificationRecords.total} 条记录
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRecordPage(p => Math.max(0, p - 1))}
-              disabled={recordPage === 0}
-            >
-              上一页
-            </Button>
-            <span className="px-3 py-1 text-sm text-muted-foreground">第 {recordPage + 1} 页</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRecordPage(p => p + 1)}
-              disabled={notificationRecords.items.length < 20}
-            >
-              下一页
-            </Button>
-          </div>
+        <div className="p-4 border-t">
+          <Pagination
+            page={recordPage + 1}
+            totalPages={Math.ceil(notificationRecords.total / 20)}
+            total={notificationRecords.total}
+            onPageChange={(p) => setRecordPage(p - 1)}
+          />
         </div>
       </div>
     )
