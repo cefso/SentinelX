@@ -139,7 +139,7 @@ export function AggregateConfigForm({ config, onChange, onModeChange }: Aggregat
           onChange={(e) => update({ window_seconds: parseInt(e.target.value) || 0 })}
           className="px-2 py-1 border rounded text-sm w-24"
         />
-        <span className="text-sm text-gray-500">秒</span>
+        <span className="text-sm text-muted-foreground">秒</span>
       </div>
 
       <div className="flex items-center gap-4">
@@ -166,7 +166,7 @@ export function AggregateConfigForm({ config, onChange, onModeChange }: Aggregat
 
       {config.mode === 'group_by' && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             相同分组字段值的告警在时间窗口内归入同一聚合组
           </p>
           <div className="flex items-center gap-2 flex-wrap">
@@ -206,7 +206,7 @@ export function AggregateConfigForm({ config, onChange, onModeChange }: Aggregat
             <button
               type="button"
               onClick={addLabelField}
-              className="px-2 py-1 text-sm border rounded hover:bg-gray-50"
+              className="px-2 py-1 text-sm border rounded hover:bg-muted"
             >
               添加
             </button>
@@ -232,7 +232,7 @@ export function AggregateConfigForm({ config, onChange, onModeChange }: Aggregat
 
       {config.mode === 'condition' && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             满足以下条件的告警在窗口内共用一个聚合桶
           </p>
           <ConditionEditor

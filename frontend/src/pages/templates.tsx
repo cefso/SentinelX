@@ -5,6 +5,18 @@ import { useAuthStore } from '@/stores/auth-store'
 import { FileText, Plus, Edit2, Trash2, Eye } from 'lucide-react'
 import { CHANNEL_TYPES, CHANNEL_TYPE_LABELS, VARIABLE_DOCS, EXAMPLE_ALERT, renderJinja2Preview } from './templates/constants'
 import { Modal } from '@/components/common/Modal'
+import { FilterTabs } from '@/components/common/FilterTabs'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export interface NotificationTemplate {
   id: number
@@ -55,131 +67,114 @@ export function TemplatesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">通知模板</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">通知模板</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             管理各渠道的通知模板，支持 Jinja2 变量
           </p>
         </div>
         {canWrite && (
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 bg-primary text-white text-sm rounded-md hover:bg-primary/90 flex items-center gap-2"
-          >
+          <Button onClick={handleCreate} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
             创建模板
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Channel type filter */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-3 py-1.5 rounded text-sm transition-colors ${
-            filter === 'all'
-              ? 'bg-blue-100 text-blue-700 font-medium'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          全部 ({templates.length})
-        </button>
-        {CHANNEL_TYPES.map((type) => {
-          const count = templates.filter(t => t.channel_type === type.value).length
-          return (
-            <button
-              key={type.value}
-              onClick={() => setFilter(type.value)}
-              className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                filter === type.value
-                  ? 'bg-blue-100 text-blue-700 font-medium'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {type.label} ({count})
-            </button>
-          )
-        })}
-      </div>
+      <FilterTabs
+        tabs={[
+          { key: 'all', label: '全部', count: templates.length },
+          ...CHANNEL_TYPES.map((type) => ({
+            key: type.value,
+            label: type.label,
+            count: templates.filter(t => t.channel_type === type.value).length,
+          })),
+        ]}
+        active={filter}
+        onChange={setFilter}
+      />
 
       {/* Templates table */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg border shadow-sm">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">加载中...</div>
+          <div className="p-8 text-center text-muted-foreground">加载中...</div>
         ) : filteredTemplates.length === 0 ? (
           <div className="p-12 text-center">
-            <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-            <div className="text-gray-500 font-medium">暂无通知模板</div>
-            <div className="text-sm text-gray-400 mt-1">创建模板为不同渠道定制通知内容</div>
+            <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+            <div className="text-muted-foreground font-medium">暂无通知模板</div>
+            <div className="text-sm text-muted-foreground/70 mt-1">创建模板为不同渠道定制通知内容</div>
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">模板名称</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">渠道类型</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">内容预览</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">默认模板</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-32">操作</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTemplates.map((template) => (
-                <tr key={template.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{template.name}</div>
-                    <div className="text-xs text-gray-400">
-                      更新于 {new Date(template.updated_at).toLocaleDateString('zh-CN')}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-1 text-xs rounded bg-blue-50 text-blue-700 font-medium">
-                      {CHANNEL_TYPE_LABELS[template.channel_type] || template.channel_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm text-gray-500 max-w-md truncate font-mono">
-                      {template.content || '-'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {template.is_default ? (
-                      <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-medium">默认</span>
-                    ) : (
-                      <span className="text-xs text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    {canWrite && (
-                      <>
-                        <button
-                          onClick={() => handleEdit(template)}
-                          className="text-blue-600 hover:text-blue-800 mr-3 inline-flex items-center gap-1"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm('确定要删除该模板吗？')) {
-                              deleteMutation.mutate(template.id)
-                            }
-                          }}
-                          disabled={deleteMutation.isPending}
-                          className="text-red-600 hover:text-red-800 disabled:opacity-50 inline-flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          删除
-                        </button>
-                      </>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">模板名称</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">渠道类型</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">内容预览</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-24">默认模板</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground w-32">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {filteredTemplates.map((template) => (
+                  <tr key={template.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{template.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        更新于 {new Date(template.updated_at).toLocaleDateString('zh-CN')}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 text-xs rounded bg-primary/10 text-primary font-medium">
+                        {CHANNEL_TYPE_LABELS[template.channel_type] || template.channel_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm text-muted-foreground max-w-md truncate font-mono">
+                        {template.content || '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {template.is_default ? (
+                        <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-medium">默认</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {canWrite && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(template)}
+                            className="text-primary hover:text-primary/80 mr-3 inline-flex items-center gap-1"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            编辑
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('确定要删除该模板吗？')) {
+                                deleteMutation.mutate(template.id)
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            className="text-destructive hover:text-destructive/80 disabled:opacity-50 inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            删除
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -252,50 +247,44 @@ function TemplateModal({
         size="xl"
         footer={
           <>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
-            >
+            <Button type="button" variant="outline" onClick={onClose}>
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               form="template-form"
             >
               {template ? '保存' : '创建'}
-            </button>
+            </Button>
           </>
         }
       >
         <form id="template-form" onSubmit={handleSubmit} className="space-y-4">
             {/* Name and channel type */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">模板名称</label>
-                <input
+              <div className="space-y-2">
+                <Label>模板名称</Label>
+                <Input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
                   placeholder="如: 严重告警通知"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">渠道类型</label>
-                <select
-                  value={formData.channel_type}
-                  onChange={(e) => setFormData({ ...formData, channel_type: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                  disabled={!!template}
-                >
-                  {CHANNEL_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <Label>渠道类型</Label>
+                <Select value={formData.channel_type} onValueChange={(v) => setFormData({ ...formData, channel_type: v })} disabled={!!template}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHANNEL_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -309,45 +298,45 @@ function TemplateModal({
                   className="rounded"
                 />
                 <span className="text-sm">设为默认模板</span>
-                <span className="text-xs text-gray-400">（该渠道未指定模板时使用）</span>
+                <span className="text-xs text-muted-foreground">（该渠道未指定模板时使用）</span>
               </label>
             </div>
 
             {/* Content editor */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">模板内容 (Jinja2)</label>
+              <div className="flex items-center justify-between mb-2">
+                <Label>模板内容 (Jinja2)</Label>
                 <button
                   type="button"
                   onClick={handlePreview}
-                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   预览
                 </button>
               </div>
-              <textarea
+              <Textarea
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                className="font-mono text-sm"
                 rows={12}
                 placeholder={`如: 【{{ alert.severity | upper }}】{{ alert.title }}\n\n告警内容: {{ alert.content }}\n来源: {{ alert.source }}\n时间: {{ alert.fired_at }}`}
               />
             </div>
 
             {/* Variables docs */}
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-muted rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-gray-700">{varDocs.label}</span>
+                <span className="text-sm font-medium text-foreground">{varDocs.label}</span>
               </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-1">
                 {varDocs.variables.map((v, i) => (
-                  <div key={i} className="text-xs text-gray-600 font-mono">{v}</div>
+                  <div key={i} className="text-xs text-muted-foreground font-mono">{v}</div>
                 ))}
               </div>
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <div className="text-xs font-medium text-gray-500 mb-1">Jinja2 条件示例</div>
-                <div className="text-xs text-gray-500 font-mono">
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="text-xs font-medium text-muted-foreground mb-1">Jinja2 条件示例</div>
+                <div className="text-xs text-muted-foreground font-mono">
                   {`{% if alert.severity == 'critical' %}`}<br />
                   {'  【紧急】{{ alert.title }}'}<br />
                   {`{% endif %}`}
@@ -366,12 +355,12 @@ function TemplateModal({
           size="lg"
         >
           <div className="space-y-4">
-            <div className="text-xs text-gray-400 mb-2">示例告警数据:</div>
-            <div className="bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 mb-4 overflow-x-auto whitespace-pre">
+            <div className="text-xs text-muted-foreground mb-2">示例告警数据:</div>
+            <div className="bg-muted rounded p-2 text-xs font-mono text-muted-foreground mb-4 overflow-x-auto whitespace-pre">
 {JSON.stringify(EXAMPLE_ALERT, null, 2)}
             </div>
-            <div className="text-xs text-gray-400 mb-2">渲染结果:</div>
-            <pre className="bg-blue-50 rounded p-4 text-sm whitespace-pre-wrap break-all border border-blue-100">
+            <div className="text-xs text-muted-foreground mb-2">渲染结果:</div>
+            <pre className="bg-primary/5 rounded p-4 text-sm whitespace-pre-wrap break-all border border-primary/20">
               {previewContent || '(空)'}
             </pre>
           </div>

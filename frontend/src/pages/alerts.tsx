@@ -263,12 +263,12 @@ export function AlertsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">告警列表</h1>
-          <p className="text-sm text-gray-500 mt-0.5">查看和管理所有告警，支持指纹视图和明细视图</p>
+          <h1 className="text-2xl font-bold text-foreground">告警列表</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">查看和管理所有告警，支持指纹视图和明细视图</p>
         </div>
         <button
           onClick={() => setShowWebhookLogModal(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground bg-white border border-border rounded-lg hover:bg-muted"
         >
           <ScrollText className="w-4 h-4" />
           Webhook 日志
@@ -319,11 +319,11 @@ export function AlertsPage() {
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg border shadow-sm">
         {/* 过滤栏 - 分段控件风格 */}
         <div className="p-4 border-b space-y-3">
           <div className="flex gap-3 items-center">
-            <Search className="w-4 h-4 text-gray-400" />
+            <Search className="w-4 h-4 text-muted-foreground/70" />
             <input
               type="text"
               placeholder="搜索告警标题或内容..."
@@ -351,14 +351,14 @@ export function AlertsPage() {
                 })
                 setPage(1)
               }}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
+              className="px-4 py-2 border rounded-md hover:bg-muted flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
               重置
             </button>
             <button
               onClick={() => setShowExportModal(true)}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50 flex items-center gap-1"
+              className="px-4 py-2 border rounded-md hover:bg-muted flex items-center gap-1"
             >
               <Download className="w-4 h-4" />
               导出
@@ -367,8 +367,8 @@ export function AlertsPage() {
 
           <div className="flex gap-2 flex-wrap items-center">
             {/* 列表视图切换（按 fingerprint 分组，与策略聚合规则无关） */}
-            <span className="text-sm text-gray-500 py-1.5">视图:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <span className="text-sm text-muted-foreground py-1.5">视图:</span>
+            <div className="flex gap-1 bg-secondary p-1 rounded-lg">
               {[
                 { value: true, label: '指纹视图' },
                 { value: false, label: '明细视图' },
@@ -378,8 +378,8 @@ export function AlertsPage() {
                   onClick={() => { setAggregateMode(opt.value); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     aggregateMode === opt.value
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white shadow text-foreground font-medium'
+                      : 'text-gray-600 hover:text-foreground'
                   }`}
                 >
                   {opt.label}
@@ -387,8 +387,8 @@ export function AlertsPage() {
               ))}
             </div>
 
-            <span className="text-sm text-gray-500 py-1.5">排序:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <span className="text-sm text-muted-foreground py-1.5">排序:</span>
+            <div className="flex gap-1 bg-secondary p-1 rounded-lg">
               {[
                 { value: 'duration', label: '触发时间' },
                 { value: 'severity', label: '严重级别' },
@@ -399,8 +399,8 @@ export function AlertsPage() {
                   onClick={() => setSortBy(opt.value as any)}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     sortBy === opt.value
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white shadow text-foreground font-medium'
+                      : 'text-gray-600 hover:text-foreground'
                   }`}
                 >
                   {opt.label}
@@ -409,14 +409,14 @@ export function AlertsPage() {
             </div>
             <button
               onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-              className="p-1.5 border rounded hover:bg-gray-50"
+              className="p-1.5 border rounded hover:bg-muted"
               title={sortOrder === 'asc' ? '升序' : '降序'}
             >
               {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
             </button>
 
-            <span className="text-sm text-gray-500 py-1.5">状态:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <span className="text-sm text-muted-foreground py-1.5">状态:</span>
+            <div className="flex gap-1 bg-secondary p-1 rounded-lg">
               {[
                 { value: '', label: '全部' },
                 { value: 'firing', label: '触发中' },
@@ -431,8 +431,8 @@ export function AlertsPage() {
                   onClick={() => { setFilters({ ...filters, status: opt.value }); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     filters.status === opt.value
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white shadow text-foreground font-medium'
+                      : 'text-gray-600 hover:text-foreground'
                   }`}
                 >
                   {opt.label}
@@ -440,8 +440,8 @@ export function AlertsPage() {
               ))}
             </div>
 
-            <span className="text-sm text-gray-500 py-1.5">级别:</span>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <span className="text-sm text-muted-foreground py-1.5">级别:</span>
+            <div className="flex gap-1 bg-secondary p-1 rounded-lg">
               {[
                 { value: '', label: '全部' },
                 { value: 'critical', label: '严重' },
@@ -454,8 +454,8 @@ export function AlertsPage() {
                   onClick={() => { setFilters({ ...filters, severity: opt.value }); setPage(1); }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     filters.severity === opt.value
-                      ? 'bg-white shadow text-gray-900 font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white shadow text-foreground font-medium'
+                      : 'text-gray-600 hover:text-foreground'
                   }`}
                 >
                   {opt.label}
@@ -492,26 +492,26 @@ export function AlertsPage() {
         {/* 告警列表 - 表格布局 */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">#</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">告警名称</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">级别</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">来源</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">命名空间</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">实例</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">时间</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">状态</th>
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">#</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">告警名称</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">级别</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-28">来源</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">命名空间</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">实例</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-40">时间</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">状态</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-gray-500">加载中...</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
                 </tr>
               ) : alerts?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-gray-500">暂无告警</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">暂无告警</td>
                 </tr>
               ) : aggregateMode ? (
                 (alerts?.items as unknown as AlertAggregatedItem[] || []).map((item, idx) => {
@@ -519,13 +519,13 @@ export function AlertsPage() {
                   return (
                   <tr
                     key={isStrategyGroup ? `strategy-group-${item.aggregate_group_id}` : item.fingerprint}
-                    className={`hover:bg-gray-50 cursor-pointer ${isStrategyGroup ? 'bg-violet-50/20' : ''}`}
+                    className={`hover:bg-muted cursor-pointer ${isStrategyGroup ? 'bg-violet-50/20' : ''}`}
                     onClick={() => navigate(`/alerts/${item.latest.id}`)}
                   >
-                    <td className="px-3 py-2 text-sm text-gray-400">{(page - 1) * pageSize + idx + 1}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 truncate max-w-md">{item.latest.title}</span>
+                        <span className="text-sm font-medium text-foreground truncate max-w-md">{item.latest.title}</span>
                         {item.flapping && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded animate-pulse shrink-0">
                             <Zap className="w-3 h-3" />
@@ -533,7 +533,7 @@ export function AlertsPage() {
                           </span>
                         )}
                         {item.stale && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded shrink-0">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium bg-secondary text-gray-600 rounded shrink-0">
                             <Clock className="w-3 h-3" />
                             长时间未更新
                           </span>
@@ -559,20 +559,20 @@ export function AlertsPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5 font-mono truncate max-w-md">
+                      <div className="text-xs text-muted-foreground/70 mt-0.5 font-mono truncate max-w-md">
                         {isStrategyGroup
                           ? (item.group_label ? `策略聚合组 · ${item.group_label}` : '策略聚合组 · 含多个指纹')
                           : item.fingerprint}
                       </div>
                     </td>
-                    <td className="px-3 py-2"><SeverityBadge severity={item.latest.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-gray-500">{getSourceDisplayName(item.latest)}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3"><SeverityBadge severity={item.latest.severity} /></td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{getSourceDisplayName(item.latest)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(item.latest.namespace || '')}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{item.latest.instance_name || item.latest.instance_id || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {item.latest.fired_at ? formatLocalDateTime(item.latest.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
+                    <td className="px-4 py-3 whitespace-nowrap w-20"><StatusBadge status={item.latest.status} /></td>
                   </tr>
                   )
                 })
@@ -580,13 +580,13 @@ export function AlertsPage() {
                 alerts?.items?.map((alert, idx) => (
                   <tr
                     key={alert.id}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className="hover:bg-muted cursor-pointer"
                     onClick={() => navigate(`/alerts/${alert.id}`)}
                   >
-                    <td className="px-3 py-2 text-sm text-gray-400">{(page - 1) * pageSize + idx + 1}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-sm text-muted-foreground/70">{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 truncate max-w-md">{alert.title}</span>
+                        <span className="text-sm font-medium text-foreground truncate max-w-md">{alert.title}</span>
                         {alert.fire_count > 1 && (
                           <span className="text-xs text-orange-500 font-medium">×{alert.fire_count}</span>
                         )}
@@ -598,14 +598,14 @@ export function AlertsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2"><SeverityBadge severity={alert.severity} /></td>
-                    <td className="px-3 py-2 text-sm text-gray-500">{getSourceDisplayName(alert)}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3"><SeverityBadge severity={alert.severity} /></td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{getSourceDisplayName(alert)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{getProductDisplayName(alert.namespace || '')}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-32">{alert.instance_name || alert.instance_id || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {alert.fired_at ? formatLocalDateTime(alert.fired_at) : '-'}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap w-20"><StatusBadge status={alert.status} /></td>
+                    <td className="px-4 py-3 whitespace-nowrap w-20"><StatusBadge status={alert.status} /></td>
                   </tr>
                 ))
               )}
@@ -616,14 +616,14 @@ export function AlertsPage() {
         {/* 紧凑分页 */}
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t flex items-center justify-between">
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               共 {alerts?.total} 条，第 {page} / {totalPages} 页
             </div>
             <div className="flex items-center gap-1">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-1.5 border rounded hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -645,7 +645,7 @@ export function AlertsPage() {
                     className={`w-8 h-8 text-sm rounded border ${
                       page === pageNum
                         ? 'bg-primary text-white border-primary'
-                        : 'hover:bg-gray-50'
+                        : 'hover:bg-muted'
                     }`}
                   >
                     {pageNum}
@@ -655,7 +655,7 @@ export function AlertsPage() {
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                className="p-1.5 border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-1.5 border rounded hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

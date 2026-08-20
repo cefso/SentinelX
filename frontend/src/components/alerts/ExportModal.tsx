@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal, DialogFooter } from '@/components/common/Modal'
+import { Button } from '@/components/ui/button'
 import { Download, Calendar } from 'lucide-react'
 
 type ExportRange = 'current_page' | 'all' | 'last_7_days' | 'last_30_days' | 'custom'
@@ -75,17 +76,18 @@ export function ExportModal({
       size="sm"
       footer={
         <DialogFooter>
-          <button
+          <Button
+            type="button"
+            variant="outline"
             onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50"
             disabled={isExporting}
           >
             取消
-          </button>
+          </Button>
           <button
             onClick={handleExport}
             disabled={isExporting || (selectedRange === 'custom' && (!customStart || !customEnd))}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
           >
             {isExporting ? (
               <>
@@ -104,7 +106,7 @@ export function ExportModal({
     >
       <div className="space-y-4 py-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">导出范围</label>
+          <label className="text-sm font-medium text-foreground">导出范围</label>
           <div className="space-y-2">
             {EXPORT_OPTIONS.map((option) => (
               <label
@@ -112,7 +114,7 @@ export function ExportModal({
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                   selectedRange === option.value
                     ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    : 'border-border hover:border-gray-300'
                 }`}
               >
                 <input
@@ -121,14 +123,14 @@ export function ExportModal({
                   value={option.value}
                   checked={selectedRange === option.value}
                   onChange={() => setSelectedRange(option.value)}
-                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  className="w-4 h-4 text-primary focus:ring-blue-500"
                 />
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                  <div className="text-xs text-gray-500">{option.description}</div>
+                  <div className="text-sm font-medium text-foreground">{option.label}</div>
+                  <div className="text-xs text-muted-foreground">{option.description}</div>
                 </div>
                 {option.value === selectedRange && (
-                  <span className="text-xs text-blue-600 font-medium">{getEstimatedCount()}</span>
+                  <span className="text-xs text-primary font-medium">{getEstimatedCount()}</span>
                 )}
               </label>
             ))}
@@ -136,8 +138,8 @@ export function ExportModal({
         </div>
 
         {selectedRange === 'custom' && (
-          <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
-            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <div className="space-y-2 p-3 bg-muted rounded-lg">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               选择时间范围
             </label>
@@ -149,7 +151,7 @@ export function ExportModal({
                 className="flex-1 px-3 py-2 border rounded-md text-sm"
                 placeholder="开始日期"
               />
-              <span className="text-gray-500">至</span>
+              <span className="text-muted-foreground">至</span>
               <input
                 type="date"
                 value={customEnd}
@@ -161,8 +163,8 @@ export function ExportModal({
           </div>
         )}
 
-        <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
-          <p className="font-medium text-gray-700 mb-1">导出说明：</p>
+        <div className="text-xs text-muted-foreground bg-muted p-3 rounded-lg">
+          <p className="font-medium text-foreground mb-1">导出说明：</p>
           <ul className="list-disc list-inside space-y-0.5">
             <li>导出格式为 CSV，可用 Excel 或 WPS 打开</li>
             <li>包含处置记录列，多条记录用分号分隔</li>

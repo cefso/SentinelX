@@ -146,7 +146,7 @@ export function AIAnalysisPanel({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-card rounded-lg border shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-6 py-3 border-b bg-gray-50/80">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
           AI 分析

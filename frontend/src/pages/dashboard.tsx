@@ -6,6 +6,7 @@ import { AlertStats } from '@/types/alert'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { Bell, AlertTriangle, XCircle, AlertCircle, Info, ArrowRight } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { cn } from '@/lib/utils'
 
 // ============ Types ============
 
@@ -87,8 +88,8 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">告警看板</h1>
-        <p className="text-sm text-gray-500 mt-0.5">未恢复告警统计、趋势分析与异常检测</p>
+        <h1 className="text-2xl font-bold text-foreground">告警看板</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">未恢复告警统计、趋势分析与异常检测</p>
       </div>
 
       {/* Stat Cards */}
@@ -101,10 +102,10 @@ export function DashboardPage() {
       </div>
 
       {/* Trend Chart */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-card rounded-xl shadow-sm border p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">告警趋势</h2>
-          <div className="flex gap-1">
+          <h2 className="text-lg font-semibold text-foreground">告警趋势</h2>
+          <div className="flex gap-1 bg-muted p-1 rounded-lg">
             {[
               { label: '1天', value: 1 },
               { label: '7天', value: 7 },
@@ -113,11 +114,12 @@ export function DashboardPage() {
               <button
                 key={opt.value}
                 onClick={() => setTrendDays(opt.value)}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                className={cn(
+                  "px-3 py-1 text-sm rounded-md transition-colors font-medium",
                   trendDays === opt.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                    ? "bg-background text-foreground shadow"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
               >
                 {opt.label}
               </button>
@@ -126,7 +128,7 @@ export function DashboardPage() {
         </div>
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={trendItems}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="time"
               tickFormatter={(v) => {
@@ -142,7 +144,7 @@ export function DashboardPage() {
               labelFormatter={(v: any) => formatLocalDateTime(v)}
               formatter={(value: any) => [`${value} 条`, '告警数']}
             />
-            <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.6} />
+            <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.2} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -150,22 +152,22 @@ export function DashboardPage() {
       {/* Bottom Row: Source Stats + Unresolved Summary */}
       <div className="grid grid-cols-3 gap-6">
         {/* Source Stats */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">按告警源统计</h2>
+        <div className="bg-card rounded-xl shadow-sm border p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-4">按告警源统计</h2>
           {sourceItems.length === 0 ? (
-            <p className="text-gray-400 text-sm py-8 text-center">暂无未恢复告警</p>
+            <p className="text-muted-foreground text-sm py-8 text-center">暂无未恢复告警</p>
           ) : (
             <div className="space-y-3">
               {sourceItems.map((item) => (
-                <div key={`${item.source}-${item.source_id}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div key={`${item.source}-${item.source_id}`} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div>
-                    <div className="font-medium text-sm text-gray-900">{item.source_name || item.source}</div>
-                    <div className="text-xs text-gray-500">{item.source}</div>
+                    <div className="font-medium text-sm text-foreground">{item.source_name || item.source}</div>
+                    <div className="text-xs text-muted-foreground">{item.source}</div>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
-                    {item.critical > 0 && <span className="text-red-600 font-medium">{item.critical} 严重</span>}
+                    {item.critical > 0 && <span className="text-destructive font-medium">{item.critical} 严重</span>}
                     {item.high > 0 && <span className="text-amber-600 font-medium">{item.high} 重要</span>}
-                    <span className="text-gray-900 font-bold">{item.total}</span>
+                    <span className="text-foreground font-bold">{item.total}</span>
                   </div>
                 </div>
               ))}
@@ -174,25 +176,25 @@ export function DashboardPage() {
         </div>
 
         {/* Unresolved Alerts Summary */}
-        <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="col-span-2 bg-card rounded-xl shadow-sm border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">最近未恢复告警</h2>
+            <h2 className="text-lg font-semibold text-foreground">最近未恢复告警</h2>
             <button
               onClick={() => navigate('/alerts/unresolved')}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 transition-colors"
+              className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
             >
               查看全部
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
           <div className="text-center py-6">
-            <p className="text-4xl font-bold text-gray-900 mb-2">{stats?.firing ?? 0}</p>
-            <p className="text-sm text-gray-500 mb-4">条未恢复告警（{aggregateData?.total ?? 0} 个唯一指纹）</p>
+            <p className="text-4xl font-bold text-foreground mb-2">{stats?.firing ?? 0}</p>
+            <p className="text-sm text-muted-foreground mb-4">条未恢复告警（{aggregateData?.total ?? 0} 个唯一指纹）</p>
             <div className="flex items-center justify-center gap-4 text-sm">
-              <span className="text-red-600 font-medium">{stats?.critical ?? 0} 严重</span>
+              <span className="text-destructive font-medium">{stats?.critical ?? 0} 严重</span>
               <span className="text-amber-600 font-medium">{stats?.high ?? 0} 重要</span>
               <span className="text-yellow-600 font-medium">{stats?.medium ?? 0} 次要</span>
-              <span className="text-blue-600 font-medium">{stats?.low ?? 0} 提示</span>
+              <span className="text-primary font-medium">{stats?.low ?? 0} 提示</span>
             </div>
           </div>
         </div>

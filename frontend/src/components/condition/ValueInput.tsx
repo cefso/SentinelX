@@ -55,7 +55,7 @@ export function ValueInput({
   }
 
   if (['exists', 'is_empty'].includes(condition.operator)) {
-    return <span className="text-gray-400 text-sm flex-1 px-2 py-1">无需输入值</span>
+    return <span className="text-muted-foreground/70 text-sm flex-1 px-2 py-1">无需输入值</span>
   }
 
   // Labels with dropdown mode (for dedup/agg)
@@ -145,7 +145,7 @@ export function ValueInput({
                 )
               })
             ) : (
-              <span className="text-gray-400 text-sm">无可选值</span>
+              <span className="text-muted-foreground/70 text-sm">无可选值</span>
             )}
           </div>
         ) : (
@@ -263,7 +263,7 @@ export function ValueInput({
     if (config?.valueSource === 'api' && config.apiField) {
       const cached = fieldValuesCache.current[config.apiField]
       if (!cached) {
-        return <span className="text-gray-400 text-sm flex-1 px-2 py-1">加载中...</span>
+        return <span className="text-muted-foreground/70 text-sm flex-1 px-2 py-1">加载中...</span>
       }
       if (cached.data.length === 0) {
         return (
@@ -389,7 +389,7 @@ export function ValueInput({
           <button
             type="button"
             onClick={() => toggleFieldValuesDropdown(condition.field)}
-            className="px-1.5 border rounded text-gray-500 hover:bg-gray-50 text-sm"
+            className="px-1.5 border rounded text-muted-foreground hover:bg-muted text-sm"
             title="获取可选值"
           >
             ▼
@@ -397,7 +397,7 @@ export function ValueInput({
           {openFieldKey === `${index}-${condition.field}` && (
             <div className="absolute z-10 top-full left-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
               {!cached || cached.data.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-gray-500">
+                <div className="px-3 py-2 text-sm text-muted-foreground">
                   {!cached ? '加载中...' : '无可选值'}
                 </div>
               ) : (
@@ -409,9 +409,9 @@ export function ValueInput({
                       updateCondition(index, 'value', item.value)
                       setOpenFieldKey('')
                     }}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 truncate"
+                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-secondary/80 truncate"
                   >
-                    {item.value} <span className="text-gray-400 text-xs">({item.count})</span>
+                    {item.value} <span className="text-muted-foreground/70 text-xs">({item.count})</span>
                   </button>
                 ))
               )}
@@ -437,7 +437,7 @@ export function ValueInput({
         <button
           type="button"
           onClick={() => toggleFieldValuesDropdown(condition.field)}
-          className="px-1.5 border rounded text-gray-500 hover:bg-gray-50 text-sm"
+          className="px-1.5 border rounded text-muted-foreground hover:bg-muted text-sm"
           title="获取可选值"
         >
           ▼
@@ -445,7 +445,7 @@ export function ValueInput({
         {openFieldKey === `${index}-${condition.field}` && (
           <div className="absolute z-10 top-full left-0 mt-1 w-64 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
             {!cached || cached.data.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-500">
+              <div className="px-3 py-2 text-sm text-muted-foreground">
                 {!cached ? '加载中...' : '无可选值'}
               </div>
             ) : (
@@ -457,9 +457,9 @@ export function ValueInput({
                     updateCondition(index, 'value', item.value)
                     setOpenFieldKey('')
                   }}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 truncate"
+                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-secondary/80 truncate"
                 >
-                  {item.value} <span className="text-gray-400 text-xs">({item.count})</span>
+                  {item.value} <span className="text-muted-foreground/70 text-xs">({item.count})</span>
                 </button>
               ))
             )}

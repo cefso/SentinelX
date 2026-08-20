@@ -30,7 +30,7 @@ export function Timeline({ timeline }: { timeline: TimelineItem[] }) {
   if (timeline.length === 0) return null
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-card rounded-lg border shadow-sm p-6">
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">处理时间线</h2>
       <div className="relative">
         <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />

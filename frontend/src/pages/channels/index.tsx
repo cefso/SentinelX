@@ -5,6 +5,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { ChannelModal, CHANNEL_TYPES } from './ChannelModal'
 import { Modal } from '@/components/common/Modal'
+import { FilterTabs } from '@/components/common/FilterTabs'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 interface Channel {
   id: number
@@ -117,85 +122,89 @@ export function ChannelsPage() {
 
   const renderRecordsContent = () => {
     if (recordsLoading) {
-      return <div className="p-8 text-center">加载中...</div>
+      return <div className="p-8 text-center text-muted-foreground">加载中...</div>
     }
     if (!notificationRecords || notificationRecords.items.length === 0) {
-      return <div className="p-8 text-center text-gray-500">暂无通知记录</div>
+      return <div className="p-8 text-center text-muted-foreground">暂无通知记录</div>
     }
     return (
       <div>
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">时间</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">渠道</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">告警ID</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">状态</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">错误信息</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">重试</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {notificationRecords.items.map((record) => {
-              const typeInfo = CHANNEL_TYPES.find(t => t.value === record.channel_type)
-              const statusStyle = record.status === 'sent'
-                ? 'bg-green-100 text-green-800'
-                : record.status === 'failed'
-                ? 'bg-red-100 text-red-800'
-                : record.status === 'pending'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-gray-100 text-gray-800'
-              const statusLabel = record.status === 'sent' ? '已发送'
-                : record.status === 'failed' ? '失败'
-                : record.status === 'pending' ? '待发送'
-                : record.status
-              return (
-                <tr key={record.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(record.created_at).toLocaleString('zh-CN')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-sm">
-                      {typeInfo?.icon} {typeInfo?.label || record.channel_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-blue-600">#{record.alert_id}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 text-xs rounded ${statusStyle}`}>
-                      {statusLabel}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-red-600 max-w-xs truncate">
-                    {record.error_message || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {record.retry_count} 次
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">时间</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">渠道</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">告警ID</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">状态</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">错误信息</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">重试</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {notificationRecords.items.map((record) => {
+                const typeInfo = CHANNEL_TYPES.find(t => t.value === record.channel_type)
+                const statusStyle = record.status === 'sent'
+                  ? 'bg-green-100 text-green-800'
+                  : record.status === 'failed'
+                  ? 'bg-destructive/10 text-destructive'
+                  : record.status === 'pending'
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-secondary text-secondary-foreground'
+                const statusLabel = record.status === 'sent' ? '已发送'
+                  : record.status === 'failed' ? '失败'
+                  : record.status === 'pending' ? '待发送'
+                  : record.status
+                return (
+                  <tr key={record.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {new Date(record.created_at).toLocaleString('zh-CN')}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm">
+                        {typeInfo?.icon} {typeInfo?.label || record.channel_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-primary">#{record.alert_id}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("px-2 py-0.5 text-xs rounded", statusStyle)}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-destructive max-w-xs truncate">
+                      {record.error_message || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {record.retry_count} 次
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
         <div className="p-4 border-t flex items-center justify-between">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted-foreground">
             共 {notificationRecords.total} 条记录
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setRecordPage(p => Math.max(0, p - 1))}
               disabled={recordPage === 0}
-              className="px-3 py-1 border rounded disabled:opacity-50"
             >
               上一页
-            </button>
-            <span className="px-3 py-1 text-sm">第 {recordPage + 1} 页</span>
-            <button
+            </Button>
+            <span className="px-3 py-1 text-sm text-muted-foreground">第 {recordPage + 1} 页</span>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setRecordPage(p => p + 1)}
               disabled={notificationRecords.items.length < 20}
-              className="px-3 py-1 border rounded disabled:opacity-50"
             >
               下一页
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -206,76 +215,59 @@ export function ChannelsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">通知渠道</h1>
-          <p className="text-sm text-gray-500 mt-0.5">管理钉钉、飞书、企业微信等通知渠道</p>
+          <h1 className="text-2xl font-bold text-foreground">通知渠道</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">管理钉钉、飞书、企业微信等通知渠道</p>
         </div>
         {canWrite && (
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
-          >
-            创建渠道
-          </button>
+          <Button onClick={handleCreate}>创建渠道</Button>
         )}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => setActiveTab('channels')}
-          className={`px-3 py-1 rounded ${activeTab === 'channels' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-        >
-          渠道管理 ({channels.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('records')}
-          className={`px-3 py-1 rounded ${activeTab === 'records' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-        >
-          通知记录 {notificationRecords && `(${notificationRecords.total})`}
-        </button>
+        <FilterTabs
+          tabs={[
+            { key: 'channels', label: `渠道管理 (${channels.length})` },
+            { key: 'records', label: `通知记录 (${notificationRecords?.total || 0})` },
+          ]}
+          active={activeTab}
+          onChange={(k) => setActiveTab(k as 'channels' | 'records')}
+        />
       </div>
 
       {activeTab === 'channels' ? (
         <div className="space-y-4">
           {/* Channel type filter */}
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded ${filter === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-            >
-              全部 ({channels.length})
-            </button>
-            {CHANNEL_TYPES.map((type) => {
-              const count = channels.filter(c => c.channel_type === type.value).length
-              return (
-                <button
-                  key={type.value}
-                  onClick={() => setFilter(type.value)}
-                  className={`px-3 py-1 rounded ${filter === type.value ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-                >
-                  {type.icon} {type.label} ({count})
-                </button>
-              )
-            })}
-          </div>
+          <FilterTabs
+            tabs={[
+              { key: 'all', label: `全部 (${channels.length})` },
+              ...CHANNEL_TYPES.map((type) => ({
+                key: type.value,
+                label: `${type.icon} ${type.label}`,
+                count: channels.filter(c => c.channel_type === type.value).length,
+              })),
+            ]}
+            active={filter}
+            onChange={setFilter}
+          />
 
           {/* Channel grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {isLoading ? (
-              <div className="col-span-full p-8 text-center">加载中...</div>
+              <div className="col-span-full p-8 text-center text-muted-foreground">加载中...</div>
             ) : filteredChannels.length === 0 ? (
-              <div className="col-span-full p-8 text-center text-gray-500">暂无渠道</div>
+              <div className="col-span-full p-8 text-center text-muted-foreground">暂无渠道</div>
             ) : (
               filteredChannels.map((channel) => {
                 const typeInfo = CHANNEL_TYPES.find(t => t.value === channel.channel_type)
                 return (
-                  <div key={channel.id} className="bg-white rounded-lg shadow p-4">
+                  <div key={channel.id} className="bg-card rounded-lg border shadow-sm p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{typeInfo?.icon || '📢'}</span>
                         <div>
                           <div className="font-medium">{channel.name}</div>
-                          <div className="text-sm text-gray-500">{channel.code}</div>
+                          <div className="text-sm text-muted-foreground">{channel.code}</div>
                         </div>
                       </div>
                       {(canTest || canWrite) && (
@@ -293,7 +285,7 @@ export function ChannelsPage() {
                           {canWrite && (
                             <button
                               onClick={() => handleEdit(channel)}
-                              className="text-blue-600 hover:text-blue-800 text-sm"
+                              className="text-primary hover:text-primary/80 text-sm"
                             >
                               编辑
                             </button>
@@ -306,7 +298,7 @@ export function ChannelsPage() {
                                 }
                               }}
                               disabled={deleteMutation.isPending}
-                              className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
+                              className="text-destructive hover:text-destructive/80 text-sm disabled:opacity-50"
                             >
                               删除
                             </button>
@@ -317,58 +309,66 @@ export function ChannelsPage() {
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">类型</span>
+                        <span className="text-muted-foreground">类型</span>
                         <span>{typeInfo?.label || channel.channel_type}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">状态</span>
+                        <span className="text-muted-foreground">状态</span>
                         {canWrite ? (
                           <button
                             onClick={() => toggleMutation.mutate({ channelId: channel.id, is_active: !channel.is_active })}
                             disabled={toggleMutation.isPending}
-                            className={`px-2 py-0.5 text-xs rounded disabled:opacity-50 ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                            className={cn(
+                              "px-2 py-0.5 text-xs rounded transition-colors disabled:opacity-50",
+                              channel.is_active 
+                                ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                            )}
                           >
                             {channel.is_active ? '启用' : '停用'}
                           </button>
                         ) : (
-                          <span className={`px-2 py-0.5 text-xs rounded ${channel.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          <span className={cn(
+                            "px-2 py-0.5 text-xs rounded",
+                            channel.is_active ? "bg-green-100 text-green-800" : "bg-secondary text-secondary-foreground"
+                          )}>
                             {channel.is_active ? '已启用' : '已停用'}
                           </span>
                         )}
                       </div>
                       {channel.is_default && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">默认</span>
-                          <span className="text-blue-600">是</span>
+                          <span className="text-muted-foreground">默认</span>
+                          <span className="text-primary">是</span>
                         </div>
                       )}
                       <div className="flex justify-between">
-                        <span className="text-gray-500">发送统计</span>
+                        <span className="text-muted-foreground">发送统计</span>
                         <span>
                           <span className="text-green-600">{channel.success_count}</span>
                           {' / '}
-                          <span className="text-red-600">{channel.fail_count}</span>
+                          <span className="text-destructive">{channel.fail_count}</span>
                           {' / '}
                           <span>{channel.send_count}</span>
                         </span>
                       </div>
                       {channel.last_send_at && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">最后发送</span>
+                          <span className="text-muted-foreground">最后发送</span>
                           <span className="text-xs">{new Date(channel.last_send_at).toLocaleString('zh-CN')}</span>
                         </div>
                       )}
                     </div>
 
                     {channel.config && Object.keys(channel.config).length > 0 && (
-                      <div className="mt-3 pt-3 border-t">
-                        <div className="text-xs text-gray-500 mb-1">配置信息</div>
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <div className="text-xs text-muted-foreground mb-1">配置信息</div>
                         <div className="text-xs space-y-1">
                           {channel.config.webhook_url && (
-                            <div className="truncate text-gray-600">URL: {channel.config.webhook_url}</div>
+                            <div className="truncate text-muted-foreground">URL: {channel.config.webhook_url}</div>
                           )}
                           {channel.config.recipients && (
-                            <div className="text-gray-600"> recipients: {channel.config.recipients}</div>
+                            <div className="text-muted-foreground"> recipients: {channel.config.recipients}</div>
                           )}
                         </div>
                       </div>
@@ -382,26 +382,20 @@ export function ChannelsPage() {
       ) : (
         <div className="space-y-4">
           {/* Records filter */}
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => { setRecordFilter('all'); setRecordPage(0) }}
-              className={`px-3 py-1 rounded ${recordFilter === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-            >
-              全部
-            </button>
-            {CHANNEL_TYPES.map((type) => (
-              <button
-                key={type.value}
-                onClick={() => { setRecordFilter(type.value); setRecordPage(0) }}
-                className={`px-3 py-1 rounded ${recordFilter === type.value ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
-              >
-                {type.icon} {type.label}
-              </button>
-            ))}
-          </div>
+          <FilterTabs
+            tabs={[
+              { key: 'all', label: '全部' },
+              ...CHANNEL_TYPES.map((type) => ({
+                key: type.value,
+                label: `${type.icon} ${type.label}`,
+              })),
+            ]}
+            active={recordFilter}
+            onChange={(k) => { setRecordFilter(k); setRecordPage(0) }}
+          />
 
           {/* Records table */}
-          <div className="bg-white rounded-lg shadow">
+          <div className="bg-card rounded-lg border shadow-sm">
             {renderRecordsContent()}
           </div>
         </div>
@@ -434,57 +428,54 @@ export function ChannelsPage() {
           size="md"
           footer={
             <>
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setShowTestModal(false)
                   setTestChannel(null)
                   setTestContent('')
                   setTestResult(null)
                 }}
-                className="px-4 py-2 border rounded-md hover:bg-gray-50"
               >
                 关闭
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => testMutation.mutate({ channelId: testChannel.id, content: testContent })}
                 disabled={testMutation.isPending}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                className="flex items-center gap-2"
               >
                 {testMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                 {testMutation.isPending ? '发送中...' : '发送测试消息'}
-              </button>
+              </Button>
             </>
           }
         >
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                测试消息内容 (可选)
-              </label>
-              <textarea
+            <div className="space-y-2">
+              <Label>测试消息内容 (可选)</Label>
+              <Textarea
                 value={testContent}
                 onChange={(e) => setTestContent(e.target.value)}
                 placeholder="留空将使用默认测试内容"
-                className="w-full px-3 py-2 border rounded-md text-sm"
                 rows={3}
               />
             </div>
 
             {testResult && (
-              <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+              <div className={cn("p-3 rounded-lg", testResult.success ? 'bg-green-50' : 'bg-destructive/10')}>
                 <div className="flex items-center gap-2">
                   {testResult.success ? (
                     <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                   ) : (
-                    <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    <XCircle className="w-5 h-5 text-destructive shrink-0" />
                   )}
-                  <span className={`font-medium ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                  <span className={cn("font-medium", testResult.success ? 'text-green-700' : 'text-destructive')}>
                     {testResult.success ? '发送成功' : '发送失败'}
                   </span>
                 </div>
                 {testResult.error && (
-                  <p className="text-sm text-red-600 mt-1 ml-7">{testResult.error}</p>
+                  <p className="text-sm text-destructive mt-1 ml-7">{testResult.error}</p>
                 )}
               </div>
             )}

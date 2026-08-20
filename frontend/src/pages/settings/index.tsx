@@ -39,7 +39,7 @@ export function SettingsPage() {
       {/* 左侧导航 */}
       <div className="w-56 border-r bg-white shrink-0">
         <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">系统设置</h2>
+          <h2 className="text-lg font-semibold text-foreground">系统设置</h2>
         </div>
         <nav className="p-2 space-y-1">
           {menuItems.map((item) => {
@@ -53,7 +53,7 @@ export function SettingsPage() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === item.key
                     ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    : 'text-foreground hover:bg-muted'
                 }`}
               >
                 <Icon className="w-5 h-5" />
@@ -73,7 +73,7 @@ export function SettingsPage() {
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       activeTab === item.key
                         ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        : 'text-foreground hover:bg-muted'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -87,7 +87,7 @@ export function SettingsPage() {
       </div>
 
       {/* 右侧内容 */}
-      <div className="flex-1 overflow-auto bg-gray-50 p-4 md:p-6 lg:p-8">
+      <div className="flex-1 overflow-auto bg-muted p-4 md:p-6 lg:p-8">
         {/* 内容区域 */}
         <div className="max-w-full">
           {activeTab === 'profile' && <ProfileTab />}

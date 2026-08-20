@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/stores/toast-store'
 import { apiClient } from '@/services/api'
+import { Button } from '@/components/ui/button'
 import { Modal, DialogFooter } from '@/components/common/Modal'
 
 interface DisposeModalProps {
@@ -54,13 +55,14 @@ export function DisposeModal({ open, onOpenChange, alertId, onSuccess }: Dispose
       size="sm"
       footer={
         <DialogFooter>
-          <button
+          <Button
+            type="button"
+            variant="outline"
             onClick={handleClose}
-            className="px-4 py-2 border rounded-md hover:bg-gray-50"
             disabled={disposeMutation.isPending}
           >
             取消
-          </button>
+          </Button>
           <button
             onClick={handleSubmit}
             disabled={disposeMutation.isPending || !comment.trim()}
@@ -72,7 +74,7 @@ export function DisposeModal({ open, onOpenChange, alertId, onSuccess }: Dispose
       }
     >
       <div className="py-2">
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-foreground">
           处理备注 <span className="text-red-500">*</span>
         </label>
         <textarea

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
+import { Button } from '@/components/ui/button'
 import {
   buildSuppressConfigPayload,
   mergeLegacySuppressConditions,
@@ -86,7 +87,7 @@ export function SuppressRulesPage() {
   return (
     <RulesLayout>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           抑制规则在指定条件下静默告警，避免重复或计划内运维告警产生干扰
         </p>
         {canWrite && (
@@ -99,20 +100,20 @@ export function SuppressRulesPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg border shadow-sm">
         {isError ? (
           <div className="p-8 text-center text-rose-600 text-sm">
             加载抑制规则失败：{(error as Error)?.message || '请刷新重试'}
           </div>
         ) : isLoading ? (
-          <div className="p-8 text-center text-gray-500">加载中...</div>
+          <div className="p-8 text-center text-muted-foreground">加载中...</div>
         ) : rules.length === 0 ? (
           <div className="p-12 text-center">
             <svg className="w-12 h-12 mx-auto text-rose-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
-            <div className="text-gray-500 font-medium">暂无抑制规则</div>
-            <div className="text-sm text-gray-400 mt-1">创建抑制规则在维护期间静默告警</div>
+            <div className="text-muted-foreground font-medium">暂无抑制规则</div>
+            <div className="text-sm text-muted-foreground/70 mt-1">创建抑制规则在维护期间静默告警</div>
           </div>
         ) : (
           <table className="w-full">
@@ -132,7 +133,7 @@ export function SuppressRulesPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium">{rule.name}</div>
                     {rule.description && (
-                      <div className="text-sm text-gray-500">{rule.description}</div>
+                      <div className="text-sm text-muted-foreground">{rule.description}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -146,7 +147,7 @@ export function SuppressRulesPage() {
                   <td className="px-4 py-3">
                     <div className="text-sm">{rule.match_count}</div>
                     {rule.last_match_at && (
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-muted-foreground/70">
                         最近 {new Date(rule.last_match_at).toLocaleString('zh-CN')}
                       </div>
                     )}
@@ -295,7 +296,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
     >
       <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">规则名称</label>
             <input
               type="text"
               required
@@ -306,7 +307,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+            <label className="block text-sm font-medium text-foreground mb-1">描述</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -316,7 +317,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">抑制时长（分钟）</label>
+            <label className="block text-sm font-medium text-foreground mb-1">抑制时长（分钟）</label>
             <input
               type="number"
               min={0}
@@ -324,8 +325,8 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
               onChange={(e) => setDurationMinutes(Math.max(0, parseInt(e.target.value, 10) || 0))}
               className="w-full px-3 py-2 border rounded-md"
             />
-            <p className="text-xs text-gray-500 mt-1">0 表示永久抑制</p>
-            <p className="text-xs text-gray-500 mt-1">{SUPPRESS_DURATION_HELP}</p>
+            <p className="text-xs text-muted-foreground mt-1">0 表示永久抑制</p>
+            <p className="text-xs text-muted-foreground mt-1">{SUPPRESS_DURATION_HELP}</p>
             {effectiveUntilLabel && (
               <p className="text-xs text-rose-700 mt-2">
                 当前生效至：{effectiveUntilLabel}（保存后将按新时长重算）
@@ -335,7 +336,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">条件组合方式</label>
+              <label className="block text-sm font-medium text-foreground mb-1">条件组合方式</label>
               <select
                 value={conditionMode}
                 onChange={(e) => setConditionMode(e.target.value)}
@@ -346,7 +347,7 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">优先级</label>
+              <label className="block text-sm font-medium text-foreground mb-1">优先级</label>
               <input
                 type="number"
                 min="0"
@@ -359,8 +360,8 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">抑制条件</label>
-            <p className="text-xs text-gray-500 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-1">抑制条件</label>
+            <p className="text-xs text-muted-foreground mb-2">
               告警满足以下条件时将被抑制（不发送通知），适用于各类告警源
             </p>
             <ConditionEditor
@@ -377,9 +378,9 @@ export function SuppressRuleModal({ rule, initialConditions, onClose, onSuccess 
           )}
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md hover:bg-gray-50">
+            <Button type="button" variant="outline" onClick={onClose}>
               取消
-            </button>
+            </Button>
             <button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}

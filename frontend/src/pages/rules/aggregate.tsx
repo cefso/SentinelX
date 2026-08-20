@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ConditionEditor, Condition } from '@/components/condition/ConditionEditor'
 import { FIELD_CONFIGS } from '@/components/condition/constants'
 import { RulesLayout } from '@/components/rules/RulesLayout'
+import { Button } from '@/components/ui/button'
 import {
   AggregateConfigForm,
   aggregateConfigToPayload,
@@ -116,7 +117,7 @@ export function AggregateRulesPage() {
   return (
     <RulesLayout>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           策略聚合规则在时间窗口内将相似告警合并为组，子告警默认不再重复通知
         </p>
         {canWrite && (
@@ -129,16 +130,16 @@ export function AggregateRulesPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg border shadow-sm">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">加载中...</div>
+          <div className="p-8 text-center text-muted-foreground">加载中...</div>
         ) : rules.length === 0 ? (
           <div className="p-12 text-center">
             <svg className="w-12 h-12 mx-auto text-violet-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            <div className="text-gray-500 font-medium">暂无聚合规则</div>
-            <div className="text-sm text-gray-400 mt-1">创建聚合规则合并相似告警减少噪音</div>
+            <div className="text-muted-foreground font-medium">暂无聚合规则</div>
+            <div className="text-sm text-muted-foreground/70 mt-1">创建聚合规则合并相似告警减少噪音</div>
           </div>
         ) : (
           <table className="w-full">
@@ -159,7 +160,7 @@ export function AggregateRulesPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium">{rule.name}</div>
                     {rule.description && (
-                      <div className="text-sm text-gray-500">{rule.description}</div>
+                      <div className="text-sm text-muted-foreground">{rule.description}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -310,7 +311,7 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
     >
       <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">规则名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">规则名称</label>
             <input
               type="text"
               required
@@ -321,7 +322,7 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+            <label className="block text-sm font-medium text-foreground mb-1">描述</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -333,7 +334,7 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
           <div className={`grid gap-4 ${isGroupByMode ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {isGroupByMode && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">条件组合方式</label>
+                <label className="block text-sm font-medium text-foreground mb-1">条件组合方式</label>
                 <select
                   value={conditionMode}
                   onChange={(e) => setConditionMode(e.target.value)}
@@ -345,7 +346,7 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">优先级</label>
+              <label className="block text-sm font-medium text-foreground mb-1">优先级</label>
               <input
                 type="number"
                 min="0"
@@ -359,7 +360,7 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
 
           {isGroupByMode && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">触发条件（可选，仅当条件满足时此规则才生效）</label>
+              <label className="block text-sm font-medium text-foreground mb-2">触发条件（可选，仅当条件满足时此规则才生效）</label>
               <ConditionEditor
                 conditions={conditions}
                 onChange={setConditions}
@@ -369,14 +370,14 @@ export function AggregateRuleModal({ rule, initialConditions, onClose, onSuccess
           )}
 
           <div className="border-t pt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">聚合配置</label>
+            <label className="block text-sm font-medium text-foreground mb-2">聚合配置</label>
             <AggregateConfigForm config={config} onChange={setConfig} onModeChange={handleModeChange} />
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md hover:bg-gray-50">
+            <Button type="button" variant="outline" onClick={onClose}>
               取消
-            </button>
+            </Button>
             <button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}

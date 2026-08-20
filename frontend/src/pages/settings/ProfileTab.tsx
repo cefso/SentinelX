@@ -31,20 +31,20 @@ export function ProfileTab() {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
       <h3 className="text-lg font-medium mb-1">个人信息</h3>
-      <p className="text-sm text-gray-500 mb-6">管理您的账户信息</p>
+      <p className="text-sm text-muted-foreground mb-6">管理您的账户信息</p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+          <label className="block text-sm font-medium text-foreground mb-1">用户名</label>
           <input
             type="text"
             value={user?.username || ''}
-            className="w-full px-3 py-2 border rounded-lg bg-gray-50"
+            className="w-full px-3 py-2 border rounded-lg bg-muted"
             disabled
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+          <label className="block text-sm font-medium text-foreground mb-1">邮箱</label>
           <input
             type="email"
             value={formData.email}
@@ -56,7 +56,7 @@ export function ProfileTab() {
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {updateMutation.isPending ? '保存中...' : '保存修改'}
           </button>
