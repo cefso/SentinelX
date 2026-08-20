@@ -327,18 +327,19 @@ class AlertDispatcher:
         trace_id: str
     ):
         """完成告警处理"""
-        # 检查是否为 OK 恢复消息（阿里云云监控1.0）
+        # 检查是否为 OK 恢复消息
         alert_state = alert.annotations.get("alert_state") if alert.annotations else None
         if alert_state == "OK":
             alert.status = "resolved"
             alert.fire_count = 1
             alert.notification_channels = channel_ids
+
             # 记录恢复历史
             history = AlertHistory(
                 tenant_id=alert.tenant_id,
                 alert_id=alert.id,
                 action="resolved",
-                description="阿里云云监控告警恢复",
+                description="告警恢复",
                 new_value={"status": "resolved", "alert_state": "OK"},
             )
             self.db.add(history)

@@ -223,8 +223,8 @@ async def _create_alerts_from_parsed(
                 tenant_id=tenant_id,
                 alert_id=alert.id,
                 action="resolved",
-                description="阿里云云监控告警恢复",
-                new_value={"alert_state": "OK", "resolved_by": "aliyun_cms_recovery"},
+                description="告警恢复",
+                new_value={"alert_state": "OK", "resolved_by": "recovery"},
             )
             db.add(history)
             results.append({"id": alert.id, "trace_id": trace_id})
@@ -272,10 +272,10 @@ async def _resolve_firing_alerts(
             tenant_id=tenant_id,
             alert_id=alert.id,
             action="resolved",
-            description="阿里云云监控告警恢复",
+            description="告警恢复",
             new_value={
                 "alert_state": "OK",
-                "resolved_by": "aliyun_cms_recovery",
+                "resolved_by": "recovery",
                 "previous_status": alert.status,
             },
         )
