@@ -31,13 +31,16 @@ class LcmdbAdapter(AlertAdapter):
         # 处理转义的换行符（\n 变成实际换行）
         text = text.replace("\\n", "\n")
 
-        # 全局去除 HTML 标签（如 <font color='green'>正常</font>）
-        text = re.sub(r"<[^>]+>", "", text)
+        # 保留原始 text 用于 content（含 HTML 标签，如 <font color='yellow'>警告</font>）
+        content = text
+
+        # 用于解析的 text（去除 HTML 标签）
+        text_for_parse = re.sub(r"<(/?[a-zA-Z][^>]*)>", "", text)
 
         # 解析 key：value 对（中文冒号）+ 收集独立描述行
         fields: Dict[str, str] = {}
         desc_lines: list[str] = []
-        for line in text.split("\n"):
+        for line in text_for_parse.split("\n"):
             stripped = line.strip()
             if not stripped:
                 continue
@@ -123,7 +126,7 @@ class LcmdbAdapter(AlertAdapter):
             alert_key=alert_key,
             source="lcmdb",
             title=title,
-            content=text,
+            content=content,  # 保留 HTML 标签用于前端渲染
             severity=severity,
             labels=labels,
             annotations=annotations,
