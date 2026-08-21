@@ -14,6 +14,7 @@ import { Send, Circle, ChevronDown, Clock, History } from 'lucide-react'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { ActionBadge } from '@/components/common/ActionBadge'
+import { SafeHtml } from '@/components/common/SafeHtml'
 import { buildTimeline, Timeline } from './Timeline'
 import { Labels } from './Labels'
 import { useAlertAI, AIActionsButton, AIAnalysisPanel } from './AIActions'
@@ -346,7 +347,9 @@ export function AlertDetailPage() {
           <div className="bg-card rounded-lg border shadow-sm p-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">告警内容</h2>
             <div className="flex gap-6">
-              <div className="flex-1 text-foreground whitespace-pre-wrap text-sm">{alert.content || '无'}</div>
+              <div className="flex-1 text-foreground whitespace-pre-wrap text-sm">
+                <SafeHtml html={alert.content || '无'} />
+              </div>
               {alert.metric_name && (
                 <div className="w-1/2 p-3 bg-muted rounded text-sm">
                   <div className="text-muted-foreground">指标名称</div>
