@@ -23,7 +23,7 @@ class HuaweiAdapter(AlertAdapter):
     }
 
     async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
-        if not self.validate(raw_data):
+        if not await self.validate(raw_data):
             return None
 
         msg_type = raw_data.get("type")

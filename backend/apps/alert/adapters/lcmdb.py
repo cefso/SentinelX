@@ -3,10 +3,53 @@ SentinelX - 绿城CMDB告警适配器
 解析 markdown 格式的 webhook，text 字段为换行分隔的 key：value 对
 支持告警和恢复两种模板格式
 """
+import hashlib
 import re
 from typing import Dict, Any, Optional, List
 from .base import AlertAdapter
 from apps.alert.schemas import AlertCreate
+
+# 与 AlertCreate.alert_key / alerts.alert_key 列长度一致
+MAX_ALERT_KEY_LENGTH = 256
+MAX_SHORT_NAME_LENGTH = 80
+
+
+def _extract_short_name(title: str) -> str:
+    """从告警对象提取 alert_key 用简称。
+
+    进程类告警对象常为超长命令行，优先提取 jar 文件名，保证稳定且不超长。
+    """
+    bracket_match = re.search(r"\[([^:]+):(.+?)\]", title)
+    if not bracket_match:
+        return title[:20]
+
+    item_type = bracket_match.group(1).strip()
+    item_value = bracket_match.group(2).strip()
+
+    # 优先取 -jar 指定的应用 jar，避免误抓 javaagent 路径
+    jar_arg = re.search(r"-jar\s+(\S+\.jar)", item_value)
+    if jar_arg:
+        jar_name = jar_arg.group(1).rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        return f"{item_type}-{jar_name}"
+
+    jar_match = re.search(r"([^\s\\/]+\.jar)", item_value)
+    if jar_match:
+        return f"{item_type}-{jar_match.group(1)}"
+
+    if len(item_value) <= MAX_SHORT_NAME_LENGTH:
+        return item_value
+
+    digest = hashlib.sha256(item_value.encode("utf-8")).hexdigest()[:8]
+    return f"{item_value[:MAX_SHORT_NAME_LENGTH]}-{digest}"
+
+
+def _clamp_alert_key(alert_key: str) -> str:
+    """兜底裁剪，保证 alert_key 不超过 256 字符且仍可区分。"""
+    if len(alert_key) <= MAX_ALERT_KEY_LENGTH:
+        return alert_key
+    digest = hashlib.sha256(alert_key.encode("utf-8")).hexdigest()[:8]
+    budget = MAX_ALERT_KEY_LENGTH - 9  # '-' + 8 位哈希
+    return f"{alert_key[:budget]}-{digest}"
 
 
 class LcmdbAdapter(AlertAdapter):
@@ -22,7 +65,7 @@ class LcmdbAdapter(AlertAdapter):
     }
 
     async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
-        if not self.validate(raw_data):
+        if not await self.validate(raw_data):
             return None
 
         markdown = raw_data["markdown"]
@@ -61,16 +104,10 @@ class LcmdbAdapter(AlertAdapter):
         # 告警对象 / 恢复对象 → title
         title = fields.get("告警对象") or fields.get("恢复对象") or "CMDB Alert"
 
-        # 从告警对象提取简称用于 alert_key，如 "企业知识库-测试环境 的 [磁盘:Disk]" → "磁盘"
-        short_name = ""
-        bracket_match = re.search(r"\[.+?:(.+?)\]", title)
-        if bracket_match:
-            short_name = bracket_match.group(1)
-        else:
-            short_name = title[:20]
-
+        # 从告警对象提取简称用于 alert_key，如 "企业知识库-测试环境 的 [磁盘:Disk]" → "Disk"
+        short_name = _extract_short_name(title)
         ip = fields.get("IP地址", "unknown")
-        alert_key = f"lcmdb-{ip}-{short_name}"
+        alert_key = _clamp_alert_key(f"lcmdb-{ip}-{short_name}")
 
         # 当前指标：从独立描述行提取，如 "当前:5分平均值=[22.95];"
         metric_name = None
