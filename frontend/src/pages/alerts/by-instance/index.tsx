@@ -57,7 +57,7 @@ function TypeBadge({
         if (status) params.set('status', status)
         if (ip) params.set('ip', ip)
         if (instanceName) params.set('name', instanceName)
-        navigate(`/instance-alerts/detail?${params.toString()}`)
+        navigate(`/instance/alerts/detail?${params.toString()}`)
       }}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium hover:opacity-80 transition-opacity ${color}`}
     >
@@ -76,7 +76,7 @@ function InstanceCard({ item, status }: { item: InstanceAlertGroup; status: stri
     if (status) params.set('status', status)
     if (item.ip) params.set('ip', item.ip)
     if (item.instance_name) params.set('name', item.instance_name)
-    return `/instance-alerts/detail?${params.toString()}`
+    return `/instance/alerts/detail?${params.toString()}`
   })()
 
   return (
