@@ -140,7 +140,7 @@ Response：
 
 ### 前端页面（独立页面，非内联展开）
 
-**列表页 ` /alerts/by-instance`**
+**列表页 `/instance/alerts`**
 
 - 导航：侧边栏「告警」子项「实例告警」
 - 布局：实例卡片网格（响应式，1–3 列）
@@ -150,7 +150,7 @@ Response：
 - 顶部筛选：状态 Tab（全部/未恢复/已恢复）、实例关键词搜索、手动刷新
 - 卡片整体可点击进入该实例全部类型明细（type 省略=全部）
 
-**明细页 `/alerts/by-instance/detail?instance_key=...&type=...&status=...`**
+**明细页 `/instance/alerts/detail?instance_key=...&type=...&status=...`**
 
 - 必须注册在 `/alerts/:id` 之前
 - 页头：实例展示名（`name` query）、IP、类型筛选 Chip（全部 + 各类型）、状态 Tab、返回列表

@@ -77,7 +77,7 @@ export function AlertsByInstanceDetailPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">实例告警明细</h1>
         <p className="text-sm text-muted-foreground">缺少实例参数，请从实例列表进入。</p>
-        <Link to="/alerts/by-instance" className="text-sm text-primary inline-flex items-center gap-1">
+        <Link to="/instance/alerts" className="text-sm text-primary inline-flex items-center gap-1">
           <ArrowLeft className="w-4 h-4" />
           返回实例告警
         </Link>
@@ -90,7 +90,7 @@ export function AlertsByInstanceDetailPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <button
-            onClick={() => navigate('/alerts/by-instance')}
+            onClick={() => navigate('/instance/alerts')}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
           >
             <ArrowLeft className="w-4 h-4" />
