@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.alert.models import Alert, AlertSource
@@ -23,6 +23,15 @@ SEVERITY_ORDER = {
     "medium": 2,
     "low": 3,
     "info": 4,
+}
+
+TYPE_LABELS = {
+    "cpu": "CPU",
+    "memory": "内存",
+    "disk": "磁盘",
+    "process": "进程",
+    "network": "网络",
+    "other": "其他",
 }
 
 # 按优先级匹配；首个命中即返回。
@@ -138,6 +147,31 @@ def max_severity(severities: Iterable[str]) -> Optional[str]:
             best = severity
             best_rank = rank
     return best
+
+
+def severity_rank(severity: Optional[str]) -> int:
+    """critical=0 … unknown/None=5；与 SQL CASE 保持一致。"""
+    if not severity:
+        return 5
+    return SEVERITY_ORDER.get(severity, 5)
+
+
+def severity_from_rank(rank: Optional[int]) -> Optional[str]:
+    if rank is None or rank < 0 or rank >= len(SEVERITY_ORDER):
+        return None
+    inverse = {v: k for k, v in SEVERITY_ORDER.items()}
+    return inverse.get(rank)
+
+
+def apply_instance_denorm(alert: Alert) -> None:
+    """就地写入 alert.instance_key / alert.alert_type。
+
+    与查询期 extract_instance / classify_alert_type 同源；无法识别写 __unknown__/other。
+    """
+    info = extract_instance(alert)
+    alert.instance_key = info["instance_key"] or UNKNOWN_INSTANCE_KEY
+    alert_type, _ = classify_alert_type(alert)
+    alert.alert_type = alert_type or "other"
 
 
 def group_alerts_by_instance(
@@ -381,3 +415,207 @@ def paginate_alerts(
     total = len(alerts)
     start = (page - 1) * page_size
     return alerts[start : start + page_size], total
+
+
+def _severity_rank_case():
+    return case(
+        (Alert.severity == "critical", 0),
+        (Alert.severity == "high", 1),
+        (Alert.severity == "medium", 2),
+        (Alert.severity == "low", 3),
+        (Alert.severity == "info", 4),
+        else_=5,
+    )
+
+
+def _instance_key_col():
+    return func.coalesce(Alert.instance_key, UNKNOWN_INSTANCE_KEY)
+
+
+def _ip_col():
+    return Alert.labels.op("->>")("ip")
+
+
+def _base_filters(
+    tenant_id: int,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    source: Optional[str] = None,
+    keyword: Optional[str] = None,
+    window_days: Optional[int] = SCAN_WINDOW_DAYS,
+) -> List[Any]:
+    filters: List[Any] = [
+        Alert.tenant_id == tenant_id,
+        Alert.status != "aggregated",
+    ]
+    if window_days:
+        since = datetime.now(timezone.utc) - timedelta(days=window_days)
+        filters.append(Alert.fired_at >= since)
+    if status:
+        filters.append(Alert.status == status)
+    if severity:
+        filters.append(Alert.severity == severity)
+    if source:
+        filters.append(Alert.source == source)
+    if keyword:
+        kw = keyword.strip()
+        if kw:
+            pattern = f"%{kw}%"
+            filters.append(
+                or_(
+                    _instance_key_col().ilike(pattern),
+                    Alert.instance_name.ilike(pattern),
+                    _ip_col().ilike(pattern),
+                )
+            )
+    return filters
+
+
+async def list_instances_sql(
+    db: AsyncSession,
+    tenant_id: int,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    source: Optional[str] = None,
+    keyword: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str = "alert_count",
+    sort_order: str = "desc",
+    window_days: int = SCAN_WINDOW_DAYS,
+) -> Tuple[List[Dict[str, Any]], int, int]:
+    """SQL 聚合实例卡片。返回 (page_items, total_instances, scanned_alerts)。"""
+    filters = _base_filters(tenant_id, status, severity, source, keyword, window_days)
+    instance_key_col = _instance_key_col()
+    rank_col = _severity_rank_case()
+    source_label = func.coalesce(AlertSource.name, Alert.source)
+
+    base = (
+        select(
+            instance_key_col.label("instance_key"),
+            func.count(Alert.id).label("alert_count"),
+            func.count(Alert.id).filter(Alert.status == "firing").label("firing_count"),
+            func.max(Alert.fired_at).label("last_fired_at"),
+            func.max(Alert.instance_name)
+            .filter(Alert.instance_name.isnot(None) & (Alert.instance_name != ""))
+            .label("instance_name"),
+            func.max(Alert.instance_id)
+            .filter(Alert.instance_id.isnot(None) & (Alert.instance_id != ""))
+            .label("instance_id"),
+            func.max(_ip_col()).filter(_ip_col().isnot(None) & (_ip_col() != "")).label("ip"),
+            func.min(rank_col).label("severity_rank"),
+            func.array_agg(func.distinct(source_label)).label("sources"),
+            func.count(func.distinct(Alert.id)).label("row_count"),
+        )
+        .select_from(Alert)
+        .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .where(and_(*filters))
+        .group_by(instance_key_col)
+    )
+
+    if sort_by == "max_severity":
+        order = (func.min(rank_col).asc() if sort_order != "asc" else func.min(rank_col).desc())
+        order_by = [order, func.count(Alert.id).desc(), instance_key_col.asc()]
+    elif sort_by == "last_fired_at":
+        order = func.max(Alert.fired_at).desc() if sort_order != "asc" else func.max(Alert.fired_at).asc()
+        order_by = [order, instance_key_col.asc()]
+    else:
+        order = func.count(Alert.id).desc() if sort_order != "asc" else func.count(Alert.id).asc()
+        order_by = [order, instance_key_col.asc()]
+
+    count_q = select(func.count()).select_from(base.subquery())
+    total = int((await db.execute(count_q)).scalar() or 0)
+
+    scanned_q = select(func.count(Alert.id)).where(and_(*filters))
+    scanned = int((await db.execute(scanned_q)).scalar() or 0)
+
+    offset = (page - 1) * page_size
+    page_q = base.order_by(*order_by).limit(page_size).offset(offset)
+    rows = (await db.execute(page_q)).all()
+
+    page_keys = [row.instance_key for row in rows]
+    types_by_key: Dict[str, List[Dict[str, Any]]] = {}
+    if page_keys:
+        type_rank = _severity_rank_case()
+        alert_type_col = func.coalesce(Alert.alert_type, "other")
+        type_q = (
+            select(
+                instance_key_col.label("instance_key"),
+                alert_type_col.label("alert_type"),
+                func.count(Alert.id).label("count"),
+                func.count(Alert.id).filter(Alert.status == "firing").label("firing_count"),
+                func.min(type_rank).label("severity_rank"),
+            )
+            .select_from(Alert)
+            .where(and_(*filters, instance_key_col.in_(page_keys)))
+            .group_by(instance_key_col, alert_type_col)
+        )
+        for trow in (await db.execute(type_q)).all():
+            code = trow.alert_type or "other"
+            types_by_key.setdefault(trow.instance_key, []).append(
+                {
+                    "type": code,
+                    "type_label": TYPE_LABELS.get(code, "其他"),
+                    "count": trow.count,
+                    "firing_count": trow.firing_count or 0,
+                    "max_severity": severity_from_rank(trow.severity_rank),
+                }
+            )
+
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        types_sorted = sorted(
+            types_by_key.get(row.instance_key, []),
+            key=lambda t: (-t["count"], t["type"]),
+        )
+        items.append(
+            {
+                "instance_key": row.instance_key,
+                "instance_name": row.instance_name,
+                "instance_id": row.instance_id,
+                "ip": row.ip,
+                "sources": sorted(s for s in (row.sources or []) if s),
+                "alert_count": row.alert_count,
+                "firing_count": row.firing_count or 0,
+                "max_severity": severity_from_rank(row.severity_rank),
+                "last_fired_at": row.last_fired_at,
+                "types": types_sorted,
+            }
+        )
+    return items, total, scanned
+
+
+async def list_instance_alerts_sql(
+    db: AsyncSession,
+    tenant_id: int,
+    instance_key: str,
+    alert_type: Optional[str] = None,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    source: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    window_days: int = SCAN_WINDOW_DAYS,
+) -> Tuple[List[AlertResponse], int]:
+    """某实例（可选某类型）告警明细：SQL 过滤 + 分页。"""
+    filters = _base_filters(tenant_id, status, severity, source, keyword=None, window_days=window_days)
+    filters.append(_instance_key_col() == instance_key)
+    if alert_type:
+        filters.append(func.coalesce(Alert.alert_type, "other") == alert_type)
+
+    total = int(
+        (await db.execute(select(func.count(Alert.id)).where(and_(*filters)))).scalar() or 0
+    )
+
+    offset = (page - 1) * page_size
+    q = (
+        select(Alert, AlertSource.name.label("source_name"))
+        .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
+        .where(and_(*filters))
+        .order_by(Alert.fired_at.desc(), Alert.id.desc())
+        .limit(page_size)
+        .offset(offset)
+    )
+    rows = (await db.execute(q)).all()
+    items = [build_alert_response(row[0], row[1]) for row in rows]
+    return items, total

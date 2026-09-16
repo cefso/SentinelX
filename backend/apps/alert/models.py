@@ -54,6 +54,15 @@ class Alert(Base):
         Index("idx_alerts_labels", "tenant_id", "labels"),
         Index("idx_alerts_fired_at", "tenant_id", "fired_at"),
         Index("idx_alerts_status_severity", "tenant_id", "status", "severity"),
+        # 实例告警聚合/明细查询
+        Index("idx_alerts_tenant_instance_key", "tenant_id", "instance_key"),
+        Index(
+            "idx_alerts_by_instance_detail",
+            "tenant_id",
+            "instance_key",
+            "alert_type",
+            "fired_at",
+        ),
         # GIN索引用于JSONB labels查询
         Index("ix_alerts_labels_gin", "labels", postgresql_using="gin"),
     )
@@ -88,6 +97,10 @@ class Alert(Base):
     namespace = Column(String(64), nullable=True, index=True)  # 云产品命名空间
     instance_id = Column(String(128), nullable=True)  # 实例ID
     instance_name = Column(String(256), nullable=True)  # 实例名称
+
+    # 实例告警反规范化（写入时固化；历史行回填前可为 NULL）
+    instance_key = Column(String(256), nullable=True)  # 实例聚合键；__unknown__ 表示未识别
+    alert_type = Column(String(32), nullable=True)  # cpu/memory/disk/process/network/other
 
     # 追踪
     trace_id = Column(String(12), nullable=True, index=True)
