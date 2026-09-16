@@ -54,7 +54,7 @@ async def login(
             from apps.auth.services.auth import AuditService
             audit = AuditService(db)
             await audit.log(
-                tenant_id=str(current_tenant["id"]),
+                tenant_id=current_tenant["id"],
                 user_id=user.id,
                 username=user.username,
                 action="login",
@@ -133,7 +133,7 @@ async def switch_tenant(
         from apps.auth.services.auth import AuditService
         audit = AuditService(db)
         await audit.log(
-            tenant_id=str(request.tenant_id),
+            tenant_id=request.tenant_id,
             user_id=current_user.id,
             username=current_user.username,
             action="switch_tenant",

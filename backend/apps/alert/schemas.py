@@ -80,7 +80,7 @@ class AlertUpdate(BaseModel):
 class AlertResponse(AlertBase):
     """告警响应"""
     id: int = Field(..., description="告警ID")
-    tenant_id: str = Field(..., description="租户ID")
+    tenant_id: int = Field(..., description="租户ID")
     source_id: Optional[int] = Field(None, description="告警源ID")
     source_name: Optional[str] = Field(None, description="告警源名称（用户配置）")
     status: str = Field(..., description="状态: firing/resolved/suppressed/acknowledged/deduplicated/aggregated")
@@ -208,7 +208,7 @@ class SourceAlertStatsResponse(BaseModel):
 class AlertHistoryResponse(BaseModel):
     """告警历史"""
     id: int = Field(..., description="历史记录ID")
-    tenant_id: str = Field(..., description="租户ID")
+    tenant_id: int = Field(..., description="租户ID")
     alert_id: int = Field(..., description="告警ID")
     action: str = Field(..., description="操作类型: received/fired/filtered/escalated/acknowledged/resolved/silenced/updated")
     description: Optional[str] = Field(None, description="操作描述")
@@ -225,7 +225,7 @@ class AlertHistoryResponse(BaseModel):
 class AlertHistoryItemResponse(BaseModel):
     """告警历史记录项（含告警基本信息）"""
     id: int = Field(..., description="历史记录ID")
-    tenant_id: str = Field(..., description="租户ID")
+    tenant_id: int = Field(..., description="租户ID")
     alert_id: int = Field(..., description="告警ID")
     alert_title: Optional[str] = Field(None, description="告警标题")
     alert_status: Optional[str] = Field(None, description="告警当前状态")

@@ -18,7 +18,7 @@ class AlertSource(Base):
     __tablename__ = "alert_sources"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     code = Column(String(64), nullable=False, unique=True)  # 如: prometheus-01
@@ -59,7 +59,7 @@ class Alert(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     # 核心字段
     alert_key = Column(String(256), nullable=False, index=True)  # 告警唯一标识
@@ -130,7 +130,7 @@ class AlertHistory(Base):
     __tablename__ = "alert_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
     alert_id = Column(Integer, nullable=False, index=True)
 
     # 操作类型: state_change/assign/escalate/silence/annotate
@@ -156,7 +156,7 @@ class AlertTrace(Base):
     id = Column(Integer, primary_key=True, index=True)
     trace_id = Column(String(12), unique=True, index=True)  # 短Trace ID
     alert_id = Column(String(64), index=True)  # 关联告警ID
-    tenant_id = Column(String(64), index=True)
+    tenant_id = Column(Integer, index=True)
 
     # 处理结果
     final_status = Column(String(32))  # sent/suppressed/duplicate/failed
@@ -179,7 +179,7 @@ class AlertAggregateGroup(Base):
     __tablename__ = "alert_aggregate_groups"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
     group_key = Column(String(256), nullable=False, index=True)
     rule_id = Column(Integer, ForeignKey("alert_rules.id"), nullable=True)
     alert_count = Column(Integer, default=1)
@@ -225,7 +225,7 @@ class WebhookLog(Base):
     __tablename__ = "webhook_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
     source_type = Column(String(32), nullable=False)  # prometheus/zabbix/custom 等
     source_id = Column(Integer, nullable=True)  # 关联的 AlertSource ID
     client_id = Column(String(32), nullable=True)  # 告警源 client_id

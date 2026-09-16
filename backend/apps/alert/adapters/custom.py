@@ -9,7 +9,7 @@ from apps.alert.schemas import AlertCreate
 class CustomWebhookAdapter(AlertAdapter):
     """自定义Webhook适配器 - 通用JSON格式"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析自定义格式告警
         支持灵活配置的JSON格式

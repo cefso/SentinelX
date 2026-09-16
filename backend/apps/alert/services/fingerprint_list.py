@@ -27,7 +27,7 @@ def _strategy_group_fingerprint(group_id: int) -> str:
 
 async def _detect_flapping_fingerprints(
     db: AsyncSession,
-    tenant_id: str,
+    tenant_id: int,
     fingerprints: List[str],
 ) -> set:
     """检测抖动告警的 fingerprint 集合。
@@ -107,7 +107,7 @@ async def _detect_flapping_fingerprints(
 
 async def list_alerts_fingerprint_aggregate(
     db: AsyncSession,
-    tenant_id: str,
+    tenant_id: int,
     base_filter: List,
     page: int,
     page_size: int,
@@ -117,7 +117,6 @@ async def list_alerts_fingerprint_aggregate(
     sort_order: str = "desc",
 ) -> AlertAggregatedResponse:
     """指纹视图：真实 fingerprint 分组 + 虚拟策略聚合指纹行合并分页。"""
-    tenant_str = str(tenant_id)
 
     strategy_member_ids = (
         select(AlertAggregateMember.alert_id)
@@ -126,7 +125,7 @@ async def list_alerts_fingerprint_aggregate(
             AlertAggregateGroup.id == AlertAggregateMember.group_id,
         )
         .where(
-            AlertAggregateGroup.tenant_id == tenant_str,
+            AlertAggregateGroup.tenant_id == tenant_id,
             AlertAggregateGroup.alert_count > 1,
         )
     )
@@ -176,7 +175,7 @@ async def list_alerts_fingerprint_aggregate(
         .join(Alert, Alert.id == AlertAggregateMember.alert_id)
         .outerjoin(AlertRule, AlertRule.id == AlertAggregateGroup.rule_id)
         .where(
-            AlertAggregateGroup.tenant_id == tenant_str,
+            AlertAggregateGroup.tenant_id == tenant_id,
             AlertAggregateGroup.alert_count > 1,
             and_(*base_filter),
         )
@@ -239,7 +238,7 @@ async def list_alerts_fingerprint_aggregate(
 
     # 检测抖动告警
     fp_list = [row.row_key for row in page_rows if row.row_type == "fingerprint"]
-    flapping_fps = await _detect_flapping_fingerprints(db, tenant_str, fp_list)
+    flapping_fps = await _detect_flapping_fingerprints(db, tenant_id, fp_list)
 
     # 检测长时间未更新告警（最新消息超24h且未恢复）
     now = datetime.now(timezone.utc)

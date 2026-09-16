@@ -16,7 +16,7 @@ def _make_alert(alert_id: int, **kwargs) -> Alert:
     now = datetime.now(timezone.utc)
     defaults = {
         "id": alert_id,
-        "tenant_id": "1",
+        "tenant_id": 1,
         "alert_key": f"key-{alert_id}",
         "fingerprint": f"fp-{alert_id}",
         "source": "aliyun_cms",
@@ -94,8 +94,8 @@ async def test_fingerprint_list_returns_strategy_group_and_fingerprint_rows():
 
     result = await list_alerts_fingerprint_aggregate(
         db=db,
-        tenant_id="1",
-        base_filter=[Alert.tenant_id == "1"],
+        tenant_id=1,
+        base_filter=[Alert.tenant_id == 1],
         page=1,
         page_size=20,
     )
@@ -129,8 +129,8 @@ async def test_fingerprint_list_empty():
 
     result = await list_alerts_fingerprint_aggregate(
         db=db,
-        tenant_id="1",
-        base_filter=[Alert.tenant_id == "1"],
+        tenant_id=1,
+        base_filter=[Alert.tenant_id == 1],
         page=1,
         page_size=20,
     )

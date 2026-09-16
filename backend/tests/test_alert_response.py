@@ -9,7 +9,7 @@ def _make_alert(**kwargs) -> Alert:
     now = datetime.now(timezone.utc)
     defaults = {
         "id": 1,
-        "tenant_id": "1",
+        "tenant_id": 1,
         "alert_key": "test-key",
         "fingerprint": "fp",
         "source": "aliyun_cms",

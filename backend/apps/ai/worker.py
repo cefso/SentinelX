@@ -45,7 +45,7 @@ async def _execute_ai_task(redis, task: Dict[str, Any]) -> None:
             result = await db.execute(
                 select(Alert).where(
                     Alert.id == alert_id,
-                    Alert.tenant_id == str(tenant_id),
+                    Alert.tenant_id == tenant_id,
                 )
             )
             alert = result.scalar_one_or_none()
@@ -99,7 +99,7 @@ async def _run_action(
     if action == "suggest-actions":
         history_result = await db.execute(
             select(Alert).where(
-                Alert.tenant_id == str(tenant_id),
+                Alert.tenant_id == tenant_id,
                 Alert.alert_key == alert.alert_key,
                 Alert.id != alert_id,
             ).order_by(Alert.fired_at.desc()).limit(10)

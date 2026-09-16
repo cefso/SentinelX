@@ -9,7 +9,7 @@ from apps.alert.schemas import AlertCreate
 class PrometheusAdapter(AlertAdapter):
     """Prometheus/Alertmanager适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate | List[AlertCreate]]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate | List[AlertCreate]]:
         """
         解析Prometheus告警格式
         支持两种格式:
@@ -31,7 +31,7 @@ class PrometheusAdapter(AlertAdapter):
 
         return None
 
-    async def _parse_alertmanager_alert(self, alert: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def _parse_alertmanager_alert(self, alert: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """解析Alertmanager告警"""
         labels = alert.get("labels", {})
         annotations = alert.get("annotations", {})
@@ -69,7 +69,7 @@ class PrometheusAdapter(AlertAdapter):
 class PrometheusMetricsAdapter(AlertAdapter):
     """Prometheus metrics alerting适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析Prometheus metrics告警
         这种格式来自Prometheus的 alerting rule push

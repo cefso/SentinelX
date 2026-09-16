@@ -22,7 +22,7 @@ class MaintenanceService:
 
     async def create_window(
         self,
-        tenant_id: str,
+        tenant_id: int,
         name: str,
         start_time: datetime,
         end_time: datetime,
@@ -58,7 +58,7 @@ class MaintenanceService:
 
     async def list_windows(
         self,
-        tenant_id: str,
+        tenant_id: int,
         active_only: bool = False,
     ) -> List[MaintenanceWindow]:
         """列出维护窗口"""
@@ -75,7 +75,7 @@ class MaintenanceService:
         result = await self.db.execute(query.order_by(MaintenanceWindow.start_time.desc()))
         return list(result.scalars().all())
 
-    async def get_window(self, window_id: int, tenant_id: str) -> Optional[MaintenanceWindow]:
+    async def get_window(self, window_id: int, tenant_id: int) -> Optional[MaintenanceWindow]:
         """获取维护窗口"""
         result = await self.db.execute(
             select(MaintenanceWindow).where(
@@ -88,7 +88,7 @@ class MaintenanceService:
     async def update_window(
         self,
         window_id: int,
-        tenant_id: str,
+        tenant_id: int,
         **kwargs,
     ) -> Optional[MaintenanceWindow]:
         """更新维护窗口"""
@@ -109,7 +109,7 @@ class MaintenanceService:
         logger.info("maintenance_window_updated", window_id=window_id, tenant_id=tenant_id)
         return window
 
-    async def delete_window(self, window_id: int, tenant_id: str) -> bool:
+    async def delete_window(self, window_id: int, tenant_id: int) -> bool:
         """删除维护窗口"""
         window = await self.get_window(window_id, tenant_id)
         if not window:
@@ -128,7 +128,7 @@ class MaintenanceService:
 
     async def is_alert_suppressed(
         self,
-        tenant_id: str,
+        tenant_id: int,
         alert: Alert,
     ) -> tuple[bool, Optional[str]]:
         """
@@ -196,7 +196,7 @@ class MaintenanceService:
         else:
             await redis.hdel(key, field)
 
-    async def check_and_suppress(self, tenant_id: str) -> Dict[str, Any]:
+    async def check_and_suppress(self, tenant_id: int) -> Dict[str, Any]:
         """检查并返回当前活跃的维护窗口"""
         windows = await self.list_windows(tenant_id, active_only=True)
         return {

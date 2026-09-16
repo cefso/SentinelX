@@ -64,7 +64,7 @@ class LcmdbAdapter(AlertAdapter):
         "正常": "info",
     }
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         if not await self.validate(raw_data):
             return None
 

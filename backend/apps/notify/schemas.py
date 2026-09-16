@@ -74,7 +74,7 @@ class ChannelUpdate(BaseModel):
 class ChannelResponse(ChannelBase):
     """渠道响应"""
     id: int
-    tenant_id: str
+    tenant_id: int
     send_count: int = 0
     success_count: int = 0
     fail_count: int = 0
@@ -184,7 +184,7 @@ class ChannelTestResponse(BaseModel):
 
 class NotificationRecordResponse(BaseModel):
     id: int
-    tenant_id: str
+    tenant_id: int
     alert_id: int
     channel_id: int
     channel_type: str
@@ -235,7 +235,7 @@ class TemplateUpdate(BaseModel):
 
 class TemplateResponse(TemplateBase):
     id: int
-    tenant_id: str
+    tenant_id: int
     created_at: datetime
     updated_at: datetime
 

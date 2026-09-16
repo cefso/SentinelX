@@ -9,7 +9,7 @@ from apps.alert.schemas import AlertCreate
 class ZabbixAdapter(AlertAdapter):
     """Zabbix告警适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析Zabbix告警格式
         Zabbix通常通过webhook推送告警

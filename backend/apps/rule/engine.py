@@ -150,7 +150,7 @@ class RuleEngine:
             )
             await db.rollback()
 
-    async def match_rules(self, db: AsyncSession, tenant_id: str, alert_data: Dict[str, Any]) -> List[AlertRule]:
+    async def match_rules(self, db: AsyncSession, tenant_id: int, alert_data: Dict[str, Any]) -> List[AlertRule]:
         """匹配规则（带数据库会话）"""
         query = select(AlertRule).where(
             AlertRule.tenant_id == tenant_id,
@@ -633,7 +633,7 @@ class RuleEngine:
     async def _resolve_aggregate_group_for_join(
         self,
         db: AsyncSession,
-        tenant_id: str,
+        tenant_id: int,
         aggregate_key: str,
         parent_alert_id: int,
         window_seconds: int,

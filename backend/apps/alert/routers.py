@@ -41,7 +41,7 @@ from apps.alert.services.fingerprint_list import list_alerts_fingerprint_aggrega
 router = APIRouter()
 
 
-def generate_fingerprint(alert: AlertCreate, tenant_id: str, source_id: int = None) -> str:
+def generate_fingerprint(alert: AlertCreate, tenant_id: int, source_id: int = None) -> str:
     """生成告警指纹"""
     fp_data = {
         "tenant_id": tenant_id,
@@ -61,7 +61,7 @@ def generate_trace_id() -> str:
 
 async def _create_single_alert(
     alert_data: AlertCreate,
-    tenant_id: str,
+    tenant_id: int,
     db: AsyncSession,
     redis,
     source_id: int = None,
@@ -104,7 +104,7 @@ async def _create_single_alert(
     mq = await get_mq_async()
     await mq.send("alerts_raw", {
         "alert_id": alert.id,
-        "tenant_id": str(tenant_id),
+        "tenant_id": tenant_id,
         "trace_id": trace_id,
         "action": "process"
     })
@@ -114,7 +114,7 @@ async def _create_single_alert(
 
 async def _create_alert_batch(
     alerts: List[AlertCreate],
-    tenant_id: str,
+    tenant_id: int,
     db: AsyncSession,
     redis,
     source_id: int = None,
@@ -134,7 +134,7 @@ async def _create_alert_batch(
 
 def _build_alert(
     alert_data: AlertCreate,
-    tenant_id: str,
+    tenant_id: int,
     source_id: int,
     status: str,
     trace_id: str,
@@ -171,7 +171,7 @@ def _build_alert(
 
 async def _create_alerts_from_parsed(
     parsed_alert: AlertCreate | List[AlertCreate],
-    tenant_id: str,
+    tenant_id: int,
     db: AsyncSession,
     redis,
     source_id: int = None,
@@ -246,7 +246,7 @@ async def _create_alerts_from_parsed(
 
 async def _resolve_firing_alerts(
     db: AsyncSession,
-    tenant_id: str,
+    tenant_id: int,
     fingerprints: List[str],
 ) -> int:
     """
@@ -308,7 +308,7 @@ async def get_sources_stats(
         )
         .where(
             and_(
-                Alert.tenant_id == str(tenant_id),
+                Alert.tenant_id == tenant_id,
                 Alert.source_id.isnot(None),
             )
         )
@@ -493,7 +493,7 @@ async def create_alert(
     mq = await get_mq_async()
     await mq.send("alerts_raw", {
         "alert_id": alert.id,
-        "tenant_id": str(tenant_id),
+        "tenant_id": tenant_id,
         "trace_id": trace_id,
         "action": "process"
     })
@@ -562,7 +562,7 @@ async def receive_webhook_by_source(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    tenant_id = str(tenant.id)
+    tenant_id = tenant.id
 
     # 2. 按 identifier 查找 AlertSource（支持 id 或 client_id）
     if identifier.isdigit():
@@ -706,7 +706,7 @@ async def receive_aliyun_cms_webhook(
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
     # 2. 验证 API Key (可选，如果有配置的话)
-    tenant_id = str(tenant.id)
+    tenant_id = tenant.id
     if x_api_key and tenant.webhook_api_key:
         if not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
@@ -735,7 +735,7 @@ async def receive_aliyun_cms_webhook(
 @router.post("/alerts/batch")
 async def create_alerts_batch(
     alerts: List[AlertCreate],
-    tenant_id: str = Depends(get_current_tenant_id),
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
@@ -768,7 +768,7 @@ async def list_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警列表，支持聚合模式"""
-    base_filter = [Alert.tenant_id == str(tenant_id)]
+    base_filter = [Alert.tenant_id == tenant_id]
 
     if status:
         base_filter.append(Alert.status == status)
@@ -806,7 +806,7 @@ async def list_alerts(
     if aggregate:
         return await list_alerts_fingerprint_aggregate(
             db=db,
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             base_filter=base_filter,
             page=page,
             page_size=page_size,
@@ -859,7 +859,7 @@ async def get_alert_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警统计"""
-    tenant_filter = Alert.tenant_id == str(tenant_id)
+    tenant_filter = Alert.tenant_id == tenant_id
 
     # 查询1: 总数 + 按状态分布 (1次DB调用)
     status_result = await db.execute(
@@ -938,7 +938,7 @@ async def get_alert_trend(
     db: AsyncSession = Depends(get_db),
 ):
     """获取告警趋势（按时间分桶）"""
-    tenant_filter = Alert.tenant_id == str(tenant_id)
+    tenant_filter = Alert.tenant_id == tenant_id
     now = datetime.now(timezone.utc)
     start = now - __import__('datetime').timedelta(days=days)
 
@@ -970,7 +970,7 @@ async def get_alert_stats_by_source(
     db: AsyncSession = Depends(get_db),
 ):
     """按告警源统计未恢复告警"""
-    tenant_filter = Alert.tenant_id == str(tenant_id)
+    tenant_filter = Alert.tenant_id == tenant_id
 
     result = await db.execute(
         select(
@@ -1016,7 +1016,7 @@ async def get_alert_history(
 ):
     """获取跨告警的历史记录列表"""
     # 构建基础过滤条件
-    base_filter = [AlertHistory.tenant_id == str(tenant_id)]
+    base_filter = [AlertHistory.tenant_id == tenant_id]
 
     if action:
         base_filter.append(AlertHistory.action == action)
@@ -1106,7 +1106,7 @@ async def get_alert(
         .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
         .where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id),
+            Alert.tenant_id == tenant_id,
         )
     )
     row = result.one_or_none()
@@ -1128,7 +1128,7 @@ async def get_aggregated_members(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id)
+            Alert.tenant_id == tenant_id
         )
     )
     alert = result.scalar_one_or_none()
@@ -1155,7 +1155,7 @@ async def get_aggregated_members(
 
     # 获取聚合组信息
     group = await db.get(AlertAggregateGroup, group_id)
-    if not group or group.tenant_id != str(tenant_id):
+    if not group or group.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Aggregate group not found")
 
     # 统计总数
@@ -1220,7 +1220,7 @@ async def update_alert(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id)
+            Alert.tenant_id == tenant_id
         )
     )
     alert = result.scalar_one_or_none()
@@ -1229,7 +1229,7 @@ async def update_alert(
 
     # 记录历史
     history = AlertHistory(
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         alert_id=alert_id,
         action="updated",
         operator_id=current_user.id,
@@ -1259,7 +1259,7 @@ async def dispose_alert(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id)
+            Alert.tenant_id == tenant_id
         )
     )
     alert = result.scalar_one_or_none()
@@ -1287,7 +1287,7 @@ async def dispose_alert(
     history_action = action_mapping.get(request.action, 'updated')
 
     history = AlertHistory(
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         alert_id=alert_id,
         action=history_action,
         description=request.comment,
@@ -1312,7 +1312,7 @@ async def get_dispose_records(
     result = await db.execute(
         select(AlertHistory).where(
             AlertHistory.alert_id == alert_id,
-            AlertHistory.tenant_id == str(tenant_id),
+            AlertHistory.tenant_id == tenant_id,
             AlertHistory.action.like('dispose_%')
         ).order_by(AlertHistory.created_at.desc())
     )
@@ -1343,7 +1343,7 @@ async def get_alert_full_history(
     alert_result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id)
+            Alert.tenant_id == tenant_id
         )
     )
     alert = alert_result.scalar_one_or_none()
@@ -1354,7 +1354,7 @@ async def get_alert_full_history(
     result = await db.execute(
         select(AlertHistory).where(
             AlertHistory.alert_id == alert_id,
-            AlertHistory.tenant_id == str(tenant_id),
+            AlertHistory.tenant_id == tenant_id,
         ).order_by(AlertHistory.created_at.desc())
     )
     records = result.scalars().all()
@@ -1404,7 +1404,7 @@ async def diagnose_alert(
     result = await db.execute(
         select(AlertTrace).where(
             AlertTrace.trace_id == trace_id,
-            AlertTrace.tenant_id == str(tenant_id),
+            AlertTrace.tenant_id == tenant_id,
         )
     )
     alert_trace = result.scalar_one_or_none()
@@ -1459,7 +1459,7 @@ async def diagnose_alert(
     # 转换 bytes 为字符串
     trace_data = _decode_redis_dict(trace_data_raw)
 
-    if trace_data.get("tenant_id") != str(tenant_id):
+    if trace_data.get("tenant_id") != tenant_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 获取步骤
@@ -1757,7 +1757,7 @@ async def list_webhook_logs(
     db: AsyncSession = Depends(get_db),
 ):
     """获取 Webhook 接收日志列表"""
-    query = select(WebhookLog).where(WebhookLog.tenant_id == str(tenant_id))
+    query = select(WebhookLog).where(WebhookLog.tenant_id == tenant_id)
 
     if status:
         query = query.where(WebhookLog.status == status)
@@ -1818,7 +1818,7 @@ async def dismiss_webhook_logs(
         # 忽略所有未忽略的日志
         result = await db.execute(
             select(WebhookLog).where(
-                WebhookLog.tenant_id == str(tenant_id),
+                WebhookLog.tenant_id == tenant_id,
                 WebhookLog.is_dismissed == 0,
             )
         )
@@ -1830,7 +1830,7 @@ async def dismiss_webhook_logs(
     elif request.id:
         # 忽略单条日志
         log = await db.get(WebhookLog, request.id)
-        if not log or str(log.tenant_id) != str(tenant_id):
+        if not log or log.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="Webhook log not found")
         log.is_dismissed = 1
         await db.commit()

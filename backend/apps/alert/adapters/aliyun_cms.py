@@ -12,7 +12,7 @@ from apps.alert.schemas import AlertCreate
 class AliyunCmsAdapter(AlertAdapter):
     """阿里云云监控1.0适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析阿里云云监控1.0告警格式
         阿里云云监控1.0发送的是 URL-encoded form data 格式:

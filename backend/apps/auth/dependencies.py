@@ -155,8 +155,8 @@ async def get_current_user(
 async def get_current_tenant_id(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> str:
-    """获取当前租户ID"""
+) -> int:
+    """获取当前租户ID（统一为 int，与 tenants.id 一致）"""
     payload = get_token_payload()
     if not payload:
         raise HTTPException(
@@ -170,12 +170,11 @@ async def get_current_tenant_id(
             detail="No tenant context",
         )
 
-    # 确保 tenant_id 为字符串
-    tenant_id = str(tenant_id)
+    tenant_id = int(tenant_id)
 
     # 检查租户是否被禁用
     from apps.tenant.models import Tenant
-    result = await db.execute(select(Tenant).where(Tenant.id == int(tenant_id)))
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant or not tenant.is_active:
         raise HTTPException(

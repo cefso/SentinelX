@@ -9,7 +9,7 @@ from apps.alert.schemas import AlertCreate
 class AlibabaCloudAdapter(AlertAdapter):
     """阿里云告警适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析阿里云告警格式
         阿里云监控通过webhook推送告警
