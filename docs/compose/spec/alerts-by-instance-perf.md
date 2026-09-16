@@ -197,7 +197,7 @@ GROUP BY 1, 2
 
 不再全表扫描：
 
-- WHERE：`tenant_id` + 现有过滤 + **索引友好** instance_key 谓词：`__unknown__` → `instance_key IS NULL`，否则 `instance_key = :k`（避免 `COALESCE(col)=?` 导致 B-tree 失效）
+- WHERE：`tenant_id` + 现有过滤 + **索引友好** instance_key 谓词：`__unknown__` → `(instance_key IS NULL OR instance_key = '__unknown__')`（兼容未回填 NULL 与写入哨兵），否则 `instance_key = :k`（避免 `COALESCE(col)=?` 导致 B-tree 失效）
 - 可选 `alert_type = :type`（`COALESCE(alert_type,'other') = :type`）
 - `ORDER BY fired_at DESC, id DESC`
 - `LIMIT/OFFSET` 分页；`COUNT(*)` 得 total

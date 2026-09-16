@@ -282,3 +282,20 @@ def test_severity_rank_roundtrip():
     assert severity_from_rank(0) == "critical"
     assert severity_from_rank(5) is None
     assert severity_from_rank(None) is None
+
+
+def test_instance_key_match_covers_null_and_sentinel():
+    from sqlalchemy.dialects import postgresql
+    from apps.alert.services.by_instance import _instance_key_match
+
+    unknown_sql = str(_instance_key_match(UNKNOWN_INSTANCE_KEY).compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "IS NULL" in unknown_sql
+    assert "__unknown__" in unknown_sql
+
+    named_sql = str(_instance_key_match("host-a").compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "host-a" in named_sql
+    assert "IS NULL" not in named_sql

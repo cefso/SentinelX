@@ -436,9 +436,16 @@ def _instance_key_col():
 
 
 def _instance_key_match(instance_key: str):
-    """索引友好的 instance_key 谓词：__unknown__ 对应 NULL 列，其余等值。"""
+    """索引友好的 instance_key 谓词。
+
+    写入/回填把未识别固化为字符串 '__unknown__'；未回填历史行仍为 NULL。
+    未知实例需同时命中两者，其余走等值以使用 B-tree。
+    """
     if instance_key == UNKNOWN_INSTANCE_KEY:
-        return Alert.instance_key.is_(None)
+        return or_(
+            Alert.instance_key.is_(None),
+            Alert.instance_key == UNKNOWN_INSTANCE_KEY,
+        )
     return Alert.instance_key == instance_key
 
 
