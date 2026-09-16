@@ -41,6 +41,8 @@ commits: d6754168062e3593775ebee4748a05985e3d2484..24b1b33
 
 lcmdb 无 `instance_name` 时，优先用标题首段（如「文档生产服务器 的 [磁盘:Disk]」→「文档生产服务器」）作为聚合键，IP 仅作辅助展示。
 
+**入库固化（2026-09-16）**：lcmdb 适配器在解析时把标题首段写入 `alerts.instance_name`，新告警无需运行时再解析标题；历史数据可用 `python -m scripts.backfill_lcmdb_instance_name [--apply]` 回填。未回填的旧数据仍走查询时兜底逻辑。
+
 同时返回展示元数据：`instance_name`、`instance_id`、`ip`（`labels.ip`）、`source`。
 
 同一实例的多条告警若解析出相同 `instance_key` 则归为一组；`ip` 与名称冲突时以更高优先级字段为准，IP 仅作辅助展示。

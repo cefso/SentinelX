@@ -1,12 +1,34 @@
 """
 SentinelX - Alert 共享工具函数
 """
+import re
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from apps.alert.models import Alert
 
 from apps.alert.schemas import AlertResponse
+
+
+def extract_instance_from_title(title: str) -> Optional[str]:
+    """从标题提取实例名，仅匹配明确格式，避免把整条标题当实例。
+
+    - lcmdb：「主机/应用 的 [类型:对象]」→ 取「的」前名称
+    - 常见：「host xxx」「实例 xxx」「主机: xxx」
+    """
+    if not title:
+        return None
+    match = re.search(r"^(.+?)\s*的\s*\[", title)
+    if match:
+        name = match.group(1).strip()
+        if name and len(name) <= 80:
+            return name
+    match = re.search(r"(?:^|\s)(?:host|主机|实例)[:：\s]+([^\s,;，；]+)", title, re.IGNORECASE)
+    if match:
+        name = match.group(1).strip()
+        if name:
+            return name
+    return None
 
 
 def build_alert_response(

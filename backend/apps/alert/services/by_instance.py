@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.alert.models import Alert, AlertSource
 from apps.alert.schemas import AlertResponse
-from apps.alert.services.alert_utils import build_alert_response
+from apps.alert.services.alert_utils import build_alert_response, extract_instance_from_title
 
 UNKNOWN_INSTANCE_KEY = "__unknown__"
 
@@ -62,33 +62,12 @@ def _clean(value: Any) -> Optional[str]:
     return text or None
 
 
-def extract_instance_from_title(title: str) -> Optional[str]:
-    """从标题提取实例名，仅匹配明确格式，避免把整条标题当实例。
-
-    - lcmdb：「主机/应用 的 [类型:对象]」
-    - 常见：「host xxx」「实例 xxx」「主机: xxx」
-    """
-    if not title:
-        return None
-    match = re.search(r"^(.+?)\s*的\s*\[", title)
-    if match:
-        name = match.group(1).strip()
-        if name and len(name) <= 80:
-            return name
-    match = re.search(r"(?:^|\s)(?:host|主机|实例)[:：\s]+([^\s,;，；]+)", title, re.IGNORECASE)
-    if match:
-        name = match.group(1).strip()
-        if name:
-            return name
-    return None
-
-
 def extract_instance(alert: Alert) -> Dict[str, Optional[str]]:
     """多字段兜底识别实例。instance_key 用于聚合，instance_name 用于展示。
 
     优先级：instance_name → instance_id → labels.host → labels.instance
             → 标题「xx 的 [..]」首段（lcmdb）→ labels.ip → 未识别
-    lcmdb 通常无 instance_name，但标题首段比 IP 更适合作为实例名。
+    lcmdb 入库时会写入 instance_name；历史数据仍走标题/IP 兜底。
     """
     labels = alert.labels or {}
     ip = _clean(labels.get("ip"))
@@ -96,11 +75,19 @@ def extract_instance(alert: Alert) -> Dict[str, Optional[str]]:
     instance_id = _clean(alert.instance_id)
     host = _clean(labels.get("host"))
     instance_label = _clean(labels.get("instance"))
+
+    if instance_name:
+        return {
+            "instance_key": instance_name,
+            "instance_name": instance_name,
+            "instance_id": instance_id,
+            "ip": ip,
+        }
+
     title_name = extract_instance_from_title(alert.title or "")
 
     key = (
-        instance_name
-        or instance_id
+        instance_id
         or host
         or instance_label
         or title_name
@@ -112,7 +99,7 @@ def extract_instance(alert: Alert) -> Dict[str, Optional[str]]:
         shown_name: Optional[str] = None
     else:
         # 展示名优先友好名称；key 为 IP 时仍可用 title 名
-        shown_name = instance_name or title_name or instance_id or host or instance_label or ip
+        shown_name = title_name or instance_id or host or instance_label or ip
 
     return {
         "instance_key": key,

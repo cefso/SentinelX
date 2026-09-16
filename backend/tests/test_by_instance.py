@@ -2,11 +2,11 @@
 from datetime import datetime, timezone
 
 from apps.alert.models import Alert
+from apps.alert.services.alert_utils import extract_instance_from_title
 from apps.alert.services.by_instance import (
     UNKNOWN_INSTANCE_KEY,
     classify_alert_type,
     extract_instance,
-    extract_instance_from_title,
     filter_instance_alerts,
     group_alerts_by_instance,
     sort_instances,
