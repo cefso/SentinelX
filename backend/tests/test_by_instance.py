@@ -226,6 +226,41 @@ def test_apply_instance_denorm_writes_columns():
     assert unknown.alert_type == "other"
 
 
+def test_apply_instance_denorm_truncates_long_key():
+    alert = _make_alert(title="t", labels={}, alert_key="x")
+    alert.instance_name = "x" * 500
+    apply_instance_denorm(alert)
+    assert len(alert.instance_key) == 256
+
+
+def test_build_alert_sets_instance_fields():
+    from apps.alert.routers import _build_alert
+    from apps.alert.schemas import AlertCreate
+
+    data = AlertCreate(
+        alert_key="lcmdb-10.0.0.8-CPU",
+        source="lcmdb",
+        title="文档生产服务器 的 [CPU:Usage]",
+        severity="high",
+        labels={"ip": "10.0.0.8"},
+        metric_name="cpu_usage",
+    )
+    alert = _build_alert(data, 1, None, "firing", "tr1")
+    assert alert.instance_key == "文档生产服务器"
+    assert alert.alert_type == "cpu"
+
+    empty = AlertCreate(
+        alert_key="biz-error",
+        source="custom",
+        title="未知业务异常",
+        severity="medium",
+        labels={},
+    )
+    alert2 = _build_alert(empty, 1, None, "firing", "tr2")
+    assert alert2.instance_key == UNKNOWN_INSTANCE_KEY
+    assert alert2.alert_type == "other"
+
+
 def test_apply_instance_denorm_matches_extract_and_classify():
     alert = _make_alert(
         title="文档生产服务器 的 [磁盘:Disk]",

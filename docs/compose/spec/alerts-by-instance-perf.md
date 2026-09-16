@@ -175,7 +175,7 @@ WHERE ...
 GROUP BY 1
 ```
 
-- **keyword**：在 WHERE 中对 `instance_key` / `instance_name` / `labels->>'ip'` 做 ILIKE 子串（大小写不敏感），与现网语义一致。
+- **keyword**：在 **HAVING** 上对聚合后的 `instance_key` / `MAX(instance_name)` / `MAX(ip)` 做 ILIKE 子串（大小写不敏感），对齐旧「先分组再过滤卡片」语义，避免组内部分行命中导致计数被切开。
 - **排序**：`alert_count` / `max_severity`（用 severity_rank）/ `last_fired_at`，asc/desc；同一排序键平局时用 `instance_key` 稳定排序。
 - **分页**：`COUNT(*) OVER()` 得 total，`LIMIT/OFFSET` 取当页。
 - **类型徽章**：对当页 `instance_key IN (...)` 再跑一次轻量聚合：
@@ -197,8 +197,8 @@ GROUP BY 1, 2
 
 不再全表扫描：
 
-- WHERE：`tenant_id` + 现有过滤 + `COALESCE(instance_key,'__unknown__') = :instance_key`
-- 可选 `alert_type = :type`
+- WHERE：`tenant_id` + 现有过滤 + **索引友好** instance_key 谓词：`__unknown__` → `instance_key IS NULL`，否则 `instance_key = :k`（避免 `COALESCE(col)=?` 导致 B-tree 失效）
+- 可选 `alert_type = :type`（`COALESCE(alert_type,'other') = :type`）
 - `ORDER BY fired_at DESC, id DESC`
 - `LIMIT/OFFSET` 分页；`COUNT(*)` 得 total
 - 仅 `SELECT` 明细所需字段（或复用现有 Alert 列表 select 模式），`build_alert_response` 组装
@@ -208,7 +208,7 @@ GROUP BY 1, 2
 
 - 未认证 → 401（不变）
 - `instance_key` 无匹配 → `items: []`（不变）
-- 窗口外或未回填的 NULL key 行：回填后不再依赖查询时标题解析；未回填部署态可能少统计，部署说明需包含跑回填脚本
+- 窗口外或未回填的 NULL key 行：回填后不再依赖查询时标题解析；**部署必须执行** `python -m scripts.backfill_alert_instance_fields --apply`，否则历史行会聚合成单张「未识别实例」大卡
 - `window_days` 非法 → 422
 
 ### 测试边界

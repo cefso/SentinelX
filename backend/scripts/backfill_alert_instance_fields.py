@@ -1,6 +1,9 @@
 """
 为历史告警回填 instance_key / alert_type（实例告警反规范化列）。
 
+部署后务必执行本脚本，否则历史行 instance_key 为 NULL，
+实例告警页会把它们聚合成一个「未识别实例」卡片。
+
 使用方法:
     cd backend
     python -m scripts.backfill_alert_instance_fields            # dry-run 预览
@@ -16,7 +19,7 @@ from sqlalchemy import or_, select, update
 
 from apps.alert.models import Alert
 from apps.alert.services.by_instance import apply_instance_denorm
-from apps.core.database import get_async_session
+from apps.core.database import get_db_context
 
 BATCH_SIZE = 500
 
@@ -100,7 +103,7 @@ async def main() -> None:
     parser.add_argument("--apply", action="store_true", help="实际写入（默认 dry-run）")
     args = parser.parse_args()
 
-    async for session in get_async_session():
+    async with get_db_context() as session:
         missing = await count_missing(session)
         print(f"待回填告警数: {missing}")
         print("\n预览:")

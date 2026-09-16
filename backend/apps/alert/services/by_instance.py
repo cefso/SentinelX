@@ -167,9 +167,11 @@ def apply_instance_denorm(alert: Alert) -> None:
     """就地写入 alert.instance_key / alert.alert_type。
 
     与查询期 extract_instance / classify_alert_type 同源；无法识别写 __unknown__/other。
+    instance_key 截断至 256，避免超长 labels.host/instance 插入失败。
     """
     info = extract_instance(alert)
-    alert.instance_key = info["instance_key"] or UNKNOWN_INSTANCE_KEY
+    key = info["instance_key"] or UNKNOWN_INSTANCE_KEY
+    alert.instance_key = key[:256]
     alert_type, _ = classify_alert_type(alert)
     alert.alert_type = alert_type or "other"
 
@@ -429,7 +431,23 @@ def _severity_rank_case():
 
 
 def _instance_key_col():
+    """展示/聚合用表达式；等值过滤请用 _instance_key_match 以走 B-tree 索引。"""
     return func.coalesce(Alert.instance_key, UNKNOWN_INSTANCE_KEY)
+
+
+def _instance_key_match(instance_key: str):
+    """索引友好的 instance_key 谓词：__unknown__ 对应 NULL 列，其余等值。"""
+    if instance_key == UNKNOWN_INSTANCE_KEY:
+        return Alert.instance_key.is_(None)
+    return Alert.instance_key == instance_key
+
+
+def _instance_key_any(keys: List[str]):
+    """当页 key 的 OR 谓词，避免 COALESCE(...) IN (...) 放弃索引。"""
+    conditions = []
+    for key in keys:
+        conditions.append(_instance_key_match(key))
+    return or_(*conditions) if conditions else (Alert.id.is_(None))
 
 
 def _ip_col():
@@ -441,7 +459,6 @@ def _base_filters(
     status: Optional[str] = None,
     severity: Optional[str] = None,
     source: Optional[str] = None,
-    keyword: Optional[str] = None,
     window_days: Optional[int] = SCAN_WINDOW_DAYS,
 ) -> List[Any]:
     filters: List[Any] = [
@@ -457,17 +474,6 @@ def _base_filters(
         filters.append(Alert.severity == severity)
     if source:
         filters.append(Alert.source == source)
-    if keyword:
-        kw = keyword.strip()
-        if kw:
-            pattern = f"%{kw}%"
-            filters.append(
-                or_(
-                    _instance_key_col().ilike(pattern),
-                    Alert.instance_name.ilike(pattern),
-                    _ip_col().ilike(pattern),
-                )
-            )
     return filters
 
 
@@ -485,10 +491,14 @@ async def list_instances_sql(
     window_days: int = SCAN_WINDOW_DAYS,
 ) -> Tuple[List[Dict[str, Any]], int, int]:
     """SQL 聚合实例卡片。返回 (page_items, total_instances, scanned_alerts)。"""
-    filters = _base_filters(tenant_id, status, severity, source, keyword, window_days)
+    filters = _base_filters(tenant_id, status, severity, source, window_days)
     instance_key_col = _instance_key_col()
     rank_col = _severity_rank_case()
     source_label = func.coalesce(AlertSource.name, Alert.source)
+    instance_name_col = func.max(Alert.instance_name).filter(
+        Alert.instance_name.isnot(None) & (Alert.instance_name != "")
+    )
+    ip_col = func.max(_ip_col()).filter(_ip_col().isnot(None) & (_ip_col() != ""))
 
     base = (
         select(
@@ -496,16 +506,13 @@ async def list_instances_sql(
             func.count(Alert.id).label("alert_count"),
             func.count(Alert.id).filter(Alert.status == "firing").label("firing_count"),
             func.max(Alert.fired_at).label("last_fired_at"),
-            func.max(Alert.instance_name)
-            .filter(Alert.instance_name.isnot(None) & (Alert.instance_name != ""))
-            .label("instance_name"),
+            instance_name_col.label("instance_name"),
             func.max(Alert.instance_id)
             .filter(Alert.instance_id.isnot(None) & (Alert.instance_id != ""))
             .label("instance_id"),
-            func.max(_ip_col()).filter(_ip_col().isnot(None) & (_ip_col() != "")).label("ip"),
+            ip_col.label("ip"),
             func.min(rank_col).label("severity_rank"),
             func.array_agg(func.distinct(source_label)).label("sources"),
-            func.count(func.distinct(Alert.id)).label("row_count"),
         )
         .select_from(Alert)
         .outerjoin(AlertSource, Alert.source_id == AlertSource.id)
@@ -513,14 +520,31 @@ async def list_instances_sql(
         .group_by(instance_key_col)
     )
 
+    # 组级 keyword：与旧「先分组再过滤卡片」语义一致
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        base = base.having(
+            or_(
+                instance_key_col.ilike(pattern),
+                instance_name_col.ilike(pattern),
+                ip_col.ilike(pattern),
+            )
+        )
+
     if sort_by == "max_severity":
-        order = (func.min(rank_col).asc() if sort_order != "asc" else func.min(rank_col).desc())
+        order = func.min(rank_col).asc() if sort_order != "asc" else func.min(rank_col).desc()
         order_by = [order, func.count(Alert.id).desc(), instance_key_col.asc()]
     elif sort_by == "last_fired_at":
-        order = func.max(Alert.fired_at).desc() if sort_order != "asc" else func.max(Alert.fired_at).asc()
+        order = (
+            func.max(Alert.fired_at).desc()
+            if sort_order != "asc"
+            else func.max(Alert.fired_at).asc()
+        )
         order_by = [order, instance_key_col.asc()]
     else:
-        order = func.count(Alert.id).desc() if sort_order != "asc" else func.count(Alert.id).asc()
+        order = (
+            func.count(Alert.id).desc() if sort_order != "asc" else func.count(Alert.id).asc()
+        )
         order_by = [order, instance_key_col.asc()]
 
     count_q = select(func.count()).select_from(base.subquery())
@@ -547,7 +571,7 @@ async def list_instances_sql(
                 func.min(type_rank).label("severity_rank"),
             )
             .select_from(Alert)
-            .where(and_(*filters, instance_key_col.in_(page_keys)))
+            .where(and_(*filters, _instance_key_any(page_keys)))
             .group_by(instance_key_col, alert_type_col)
         )
         for trow in (await db.execute(type_q)).all():
@@ -598,8 +622,8 @@ async def list_instance_alerts_sql(
     window_days: int = SCAN_WINDOW_DAYS,
 ) -> Tuple[List[AlertResponse], int]:
     """某实例（可选某类型）告警明细：SQL 过滤 + 分页。"""
-    filters = _base_filters(tenant_id, status, severity, source, keyword=None, window_days=window_days)
-    filters.append(_instance_key_col() == instance_key)
+    filters = _base_filters(tenant_id, status, severity, source, window_days)
+    filters.append(_instance_key_match(instance_key))
     if alert_type:
         filters.append(func.coalesce(Alert.alert_type, "other") == alert_type)
 
