@@ -35,9 +35,11 @@ commits: d6754168062e3593775ebee4748a05985e3d2484..24b1b33
 2. `instance_id`（非空）
 3. `labels.host`
 4. `labels.instance`
-5. `labels.ip`
-6. `title` 提取：仅匹配明确格式——lcmdb「… 的 [类型:对象]」取「的」前名称；或 `host/主机/实例: xxx`。**不**把整条标题截断当实例，避免一告警一实例
+5. `title` 提取：仅匹配明确格式——lcmdb「… 的 [类型:对象]」取「的」前名称；或 `host/主机/实例: xxx`。**不**把整条标题截断当实例，避免一告警一实例
+6. `labels.ip`
 7. 以上皆无 → `__unknown__`（展示为「未识别实例」）
+
+lcmdb 无 `instance_name` 时，优先用标题首段（如「文档生产服务器 的 [磁盘:Disk]」→「文档生产服务器」）作为聚合键，IP 仅作辅助展示。
 
 同时返回展示元数据：`instance_name`、`instance_id`、`ip`（`labels.ip`）、`source`。
 

@@ -84,7 +84,12 @@ def extract_instance_from_title(title: str) -> Optional[str]:
 
 
 def extract_instance(alert: Alert) -> Dict[str, Optional[str]]:
-    """多字段兜底识别实例。instance_key 用于聚合，instance_name 用于展示。"""
+    """多字段兜底识别实例。instance_key 用于聚合，instance_name 用于展示。
+
+    优先级：instance_name → instance_id → labels.host → labels.instance
+            → 标题「xx 的 [..]」首段（lcmdb）→ labels.ip → 未识别
+    lcmdb 通常无 instance_name，但标题首段比 IP 更适合作为实例名。
+    """
     labels = alert.labels or {}
     ip = _clean(labels.get("ip"))
     instance_name = _clean(alert.instance_name)
@@ -98,8 +103,8 @@ def extract_instance(alert: Alert) -> Dict[str, Optional[str]]:
         or instance_id
         or host
         or instance_label
-        or ip
         or title_name
+        or ip
         or UNKNOWN_INSTANCE_KEY
     )
 

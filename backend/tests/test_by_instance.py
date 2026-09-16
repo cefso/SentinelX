@@ -48,16 +48,32 @@ def test_extract_instance_prefers_instance_name():
     assert info["ip"] == "10.0.0.8"
 
 
-def test_extract_instance_falls_back_to_ip_and_title_display():
+def test_extract_instance_lcmdb_title_beats_ip():
     alert = _make_alert(
         title="文档生产服务器 的 [磁盘:Disk]",
         labels={"ip": "10.0.0.8"},
         alert_key="lcmdb-10.0.0.8-Disk",
     )
     info = extract_instance(alert)
-    assert info["instance_key"] == "10.0.0.8"
+    assert info["instance_key"] == "文档生产服务器"
     assert info["instance_name"] == "文档生产服务器"
     assert info["ip"] == "10.0.0.8"
+
+
+def test_extract_instance_same_title_groups_together():
+    a = _make_alert(
+        id=1,
+        title="文档生产服务器 的 [CPU:Usage]",
+        labels={"ip": "10.0.0.8"},
+        alert_key="lcmdb-10.0.0.8-CPU",
+    )
+    b = _make_alert(
+        id=2,
+        title="文档生产服务器 的 [磁盘:Disk]",
+        labels={"ip": "10.0.0.8"},
+        alert_key="lcmdb-10.0.0.8-Disk",
+    )
+    assert extract_instance(a)["instance_key"] == extract_instance(b)["instance_key"] == "文档生产服务器"
 
 
 def test_extract_instance_from_title_lcmdb():
