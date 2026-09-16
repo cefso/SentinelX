@@ -8,6 +8,7 @@ import re
 from typing import Dict, Any, Optional, List
 from .base import AlertAdapter
 from apps.alert.schemas import AlertCreate
+from apps.alert.services.alert_utils import extract_instance_from_title
 
 # 与 AlertCreate.alert_key / alerts.alert_key 列长度一致
 MAX_ALERT_KEY_LENGTH = 256
@@ -109,6 +110,9 @@ class LcmdbAdapter(AlertAdapter):
         ip = fields.get("IP地址", "unknown")
         alert_key = _clamp_alert_key(f"lcmdb-{ip}-{short_name}")
 
+        # 入库时固化实例名，便于实例告警页直接按 instance_name 聚合
+        instance_name = extract_instance_from_title(title) or None
+
         # 当前指标：从独立描述行提取，如 "当前:5分平均值=[22.95];"
         metric_name = None
         metric_value = None
@@ -170,6 +174,7 @@ class LcmdbAdapter(AlertAdapter):
             metric_name=metric_name,
             metric_value=metric_value,
             raw_data=raw_data,
+            instance_name=instance_name,
         )
 
     async def validate(self, raw_data: Dict[str, Any]) -> bool:

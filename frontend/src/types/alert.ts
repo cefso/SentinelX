@@ -130,3 +130,40 @@ export interface AlertHistoryListResponse {
   page: number
   page_size: number
 }
+
+export interface InstanceAlertTypeStat {
+  type: string
+  type_label: string
+  count: number
+  firing_count: number
+  max_severity?: string | null
+}
+
+export interface InstanceAlertGroup {
+  instance_key: string
+  instance_name?: string | null
+  instance_id?: string | null
+  ip?: string | null
+  sources: string[]
+  alert_count: number
+  firing_count: number
+  max_severity?: string | null
+  last_fired_at?: string | null
+  types: InstanceAlertTypeStat[]
+}
+
+export interface InstanceAlertGroupResponse {
+  items: InstanceAlertGroup[]
+  total: number
+  page: number
+  page_size: number
+  scanned: number
+  scan_truncated: boolean
+}
+
+export interface AlertListResponse {
+  items: AlertResponse[]
+  total: number
+  page: number
+  page_size: number
+}

@@ -49,6 +49,7 @@ async def test_parse_process_alert_with_long_command_does_not_exceed_limit():
     assert alert.severity == "medium"  # "错误" 不在 SEVERITY_MAP，走默认 medium
     assert alert.metric_name == "运行数"
     assert alert.metric_value == "0"
+    assert alert.instance_name == "主数据管理平台-生产环境-App服务器1"
 
 
 @pytest.mark.asyncio
@@ -71,6 +72,7 @@ async def test_parse_disk_alert_keeps_short_name():
 
     assert alert is not None
     assert alert.alert_key == "lcmdb-10.0.0.8-Disk"
+    assert alert.instance_name == "企业知识库-测试环境"
 
 
 def test_extract_short_name_no_bracket_truncates_title():
