@@ -48,11 +48,11 @@ function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="alerts/unresolved" element={<UnresolvedAlertsPage />} />
-        <Route path="alerts/by-instance" element={<AlertsByInstancePage />} />
-        <Route path="alerts/by-instance/detail" element={<AlertsByInstanceDetailPage />} />
         <Route path="alerts/sources" element={<AlertSourcesPage />} />
         <Route path="alerts/history" element={<AlertHistoryPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />
+        <Route path="instance-alerts" element={<AlertsByInstancePage />} />
+        <Route path="instance-alerts/detail" element={<AlertsByInstanceDetailPage />} />
         <Route path="rules" element={<RulesPage />} />
         <Route path="rules/dedup" element={<DedupRulesPage />} />
         <Route path="rules/suppress" element={<SuppressRulesPage />} />

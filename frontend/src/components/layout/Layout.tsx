@@ -32,7 +32,7 @@ const navigation: NavItem[] = [
     name: '告警', href: '/alerts', icon: Bell,
     children: [
       { name: '告警列表', href: '/alerts' },
-      { name: '实例告警', href: '/alerts/by-instance' },
+      { name: '实例告警', href: '/instance-alerts' },
       { name: '操作记录', href: '/alerts/history' },
     ],
   },
