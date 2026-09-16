@@ -277,7 +277,7 @@ def test_status_chinese_labels():
 def _make_alert(**kwargs) -> Alert:
     defaults = {
         "id": 1,
-        "tenant_id": "1",
+        "tenant_id": 1,
         "alert_key": "test-key",
         "fingerprint": "fp1",
         "source": "prometheus",
@@ -479,7 +479,7 @@ def test_strategy_rule_response_maps_suppress_config():
 
     now = datetime.now(timezone.utc)
     rule = AlertRule(
-        tenant_id="1",
+        tenant_id=1,
         name="抑制规则",
         code="_suppress_test",
         priority=10,
@@ -504,7 +504,7 @@ def test_strategy_rule_response_suppress_expired():
     now = datetime.now(timezone.utc)
     until = (now - timedelta(minutes=1)).isoformat()
     rule = AlertRule(
-        tenant_id="1",
+        tenant_id=1,
         name="过期抑制",
         code="_suppress_expired",
         priority=10,
@@ -947,7 +947,7 @@ async def test_check_aggregate_joins_existing_group():
         },
     )
 
-    group = SimpleNamespace(id=10, alert_count=1, tenant_id="1")
+    group = SimpleNamespace(id=10, alert_count=1, tenant_id=1)
 
     redis = AsyncMock()
     redis.get = AsyncMock(return_value=b"1")
@@ -977,7 +977,7 @@ async def test_check_aggregate_joins_existing_group():
 async def test_resolve_aggregate_group_prefers_parent_member_over_stale_groups():
     """同 group_key 存在多个历史组时，应通过 parent 成员关系命中当前组"""
     engine = RuleEngine()
-    tenant_id = "1"
+    tenant_id = 1
     aggregate_key = "aggregate:1:agg-key"
     now = datetime.now(timezone.utc)
 

@@ -15,7 +15,7 @@ class AlertAdapter(ABC):
         self.source_type = self.__class__.__name__.replace("Adapter", "").lower()
 
     @abstractmethod
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析原始告警数据为标准AlertCreate格式
         返回None表示该数据不适用于此适配器

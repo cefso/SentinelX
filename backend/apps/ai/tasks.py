@@ -139,7 +139,7 @@ async def submit_alert_ai_task(
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
-            Alert.tenant_id == str(tenant_id),
+            Alert.tenant_id == tenant_id,
         )
     )
     if not result.scalar_one_or_none():

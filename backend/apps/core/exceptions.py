@@ -68,7 +68,7 @@ class QuotaExceededError(SentinelXException):
 class TenantNotFoundError(ResourceNotFoundError):
     """租户不存在"""
 
-    def __init__(self, tenant_id: str):
+    def __init__(self, tenant_id: int):
         super().__init__("Tenant", tenant_id)
 
 

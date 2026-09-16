@@ -24,7 +24,7 @@ class AgentConfig:
     """Agent配置"""
     api_base_url: str = "http://localhost:8001/api/v1"
     api_key: str = ""
-    tenant_id: str = ""
+    tenant_id: int = 0
     agent_id: str = str(uuid.uuid4())[:8]
     hostname: str = socket.gethostname()
     tags: Dict[str, str] = field(default_factory=dict)
@@ -312,7 +312,7 @@ async def main():
     config = AgentConfig(
         api_base_url=os.getenv("SENTINELX_API_URL", "http://localhost:8000/api/v1"),
         api_key=os.getenv("SENTINELX_API_KEY", ""),
-        tenant_id=os.getenv("SENTINELX_TENANT_ID", ""),
+        tenant_id=int(os.getenv("SENTINELX_TENANT_ID") or 0),
         tags=json.loads(os.getenv("SENTINELX_TAGS", "{}")),
     )
 

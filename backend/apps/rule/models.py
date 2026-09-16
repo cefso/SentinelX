@@ -20,7 +20,7 @@ class AlertRule(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     code = Column(String(64), nullable=False)  # 规则唯一标识
@@ -60,7 +60,7 @@ class NotificationChannel(Base):
     __tablename__ = "notification_channels"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     code = Column(String(64), nullable=False)
@@ -92,7 +92,7 @@ class NotificationTemplate(Base):
     __tablename__ = "notification_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     code = Column(String(64), nullable=False)
@@ -118,7 +118,7 @@ class NotificationRecord(Base):
     __tablename__ = "notification_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
     alert_id = Column(Integer, nullable=False, index=True)
 
     channel_id = Column(Integer, nullable=False)

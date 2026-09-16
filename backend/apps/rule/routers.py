@@ -72,7 +72,7 @@ async def _validate_template_ids(
         result = await db.execute(
             select(NotificationTemplate).where(
                 NotificationTemplate.id == template_id,
-                NotificationTemplate.tenant_id == str(tenant_id),
+                NotificationTemplate.tenant_id == tenant_id,
                 NotificationTemplate.is_active == True,
             )
         )
@@ -88,7 +88,7 @@ async def _validate_template_ids(
             channel_result = await db.execute(
                 select(NotificationChannel).where(
                     NotificationChannel.id == channel_id,
-                    NotificationChannel.tenant_id == str(tenant_id),
+                    NotificationChannel.tenant_id == tenant_id,
                 )
             )
             channel = channel_result.scalar_one_or_none()
@@ -115,7 +115,7 @@ async def list_rules(
 ):
     """获取规则列表"""
     query = select(AlertRule).where(
-        AlertRule.tenant_id == str(tenant_id),
+        AlertRule.tenant_id == tenant_id,
         AlertRule.name != STRATEGY_RULE_NAME,
         ~AlertRule.code.like('_dedup_%'),
         ~AlertRule.code.like('_suppress_%'),
@@ -140,7 +140,7 @@ async def create_rule(
     await _validate_template_ids(db, tenant_id, request.actions)
 
     rule = AlertRule(
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         name=request.name,
         code=request.code,
         description=request.description,
@@ -259,7 +259,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
     ):
         """获取策略规则列表"""
         query = select(AlertRule).where(
-            AlertRule.tenant_id == str(tenant_id),
+            AlertRule.tenant_id == tenant_id,
             AlertRule.code.like(f'{prefix}%'),
         )
         if is_active is not None:
@@ -281,7 +281,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         slug = _slugify(request.name)
         code = f"{prefix}{slug}"
         rule = AlertRule(
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             name=request.name,
             code=code,
             description=request.description,
@@ -306,7 +306,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         result = await db.execute(
             select(AlertRule).where(
                 AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.tenant_id == tenant_id,
                 AlertRule.code.like(f'{prefix}%'),
             )
         )
@@ -326,7 +326,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         result = await db.execute(
             select(AlertRule).where(
                 AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.tenant_id == tenant_id,
                 AlertRule.code.like(f'{prefix}%'),
             )
         )
@@ -360,7 +360,7 @@ def _build_strategy_crud(prefix: str, config_field: str):
         result = await db.execute(
             select(AlertRule).where(
                 AlertRule.id == rule_id,
-                AlertRule.tenant_id == str(tenant_id),
+                AlertRule.tenant_id == tenant_id,
                 AlertRule.code.like(f'{prefix}%'),
             )
         )
@@ -412,7 +412,7 @@ async def get_rule(
     result = await db.execute(
         select(AlertRule).where(
             AlertRule.id == rule_id,
-            AlertRule.tenant_id == str(tenant_id)
+            AlertRule.tenant_id == tenant_id
         )
     )
     rule = result.scalar_one_or_none()
@@ -437,7 +437,7 @@ async def update_rule(
     result = await db.execute(
         select(AlertRule).where(
             AlertRule.id == rule_id,
-            AlertRule.tenant_id == str(tenant_id)
+            AlertRule.tenant_id == tenant_id
         )
     )
     rule = result.scalar_one_or_none()
@@ -467,7 +467,7 @@ async def delete_rule(
     result = await db.execute(
         select(AlertRule).where(
             AlertRule.id == rule_id,
-            AlertRule.tenant_id == str(tenant_id)
+            AlertRule.tenant_id == tenant_id
         )
     )
     rule = result.scalar_one_or_none()
@@ -512,7 +512,7 @@ def _build_preview_filters(
     """构建预览查询的通用过滤器列表"""
     from datetime import timedelta, datetime as dt, timezone
 
-    filters = [Alert.tenant_id == str(tenant_id)]
+    filters = [Alert.tenant_id == tenant_id]
     if status:
         filters.append(Alert.status == status)
     if severity:
@@ -824,7 +824,6 @@ async def _get_assignee_field_values(
     offset: int,
 ) -> FieldValuesResponse:
     """从 users + user_tenants 表查询用户列表"""
-    tenant_str = str(tenant_id)
 
     query = (
         select(
@@ -832,7 +831,7 @@ async def _get_assignee_field_values(
             User.username.label("user_name"),
         )
         .join(UserTenant, UserTenant.user_id == User.id)
-        .where(UserTenant.tenant_id == tenant_str)
+        .where(UserTenant.tenant_id == tenant_id)
         .where(User.is_active == True)
     )
 
@@ -866,10 +865,9 @@ async def _get_alert_key_field_values(
     offset: int,
 ) -> FieldValuesResponse:
     """从 alerts 表获取 alert_key 去重列表（带 Redis 缓存）"""
-    tenant_str = str(tenant_id)
     redis = await RedisClient.get_instance()
 
-    cache_key = f"field_values:{tenant_str}:alert_key"
+    cache_key = f"field_values:{tenant_id}:alert_key"
     cached = await redis.get(cache_key)
 
     if cached:
@@ -882,7 +880,7 @@ async def _get_alert_key_field_values(
                 Alert.alert_key,
                 func.count(Alert.id).label("count"),
             )
-            .where(Alert.tenant_id == tenant_str)
+            .where(Alert.tenant_id == tenant_id)
             .group_by(Alert.alert_key)
             .order_by(func.count(Alert.id).desc())
         )
@@ -913,7 +911,6 @@ async def _get_source_field_values(
     offset: int,
 ) -> FieldValuesResponse:
     """从 alert_sources 表获取 source 字段值（按 AlertSource.id 分组）"""
-    tenant_str = str(tenant_id)
 
     # 构建查询 - 使用 id 作为 value（对应 Alert.source_id）
     query = (
@@ -922,7 +919,7 @@ async def _get_source_field_values(
             AlertSource.name.label("name"),
             func.count(AlertSource.id).label("count"),
         )
-        .where(AlertSource.tenant_id == tenant_str)
+        .where(AlertSource.tenant_id == tenant_id)
     )
 
     if search:
@@ -957,7 +954,6 @@ async def _get_simple_field_values(
     offset: int,
 ) -> FieldValuesResponse:
     """从 alerts 表获取简单字段值（namespace, metric_name, instance_id, instance_name）"""
-    tenant_str = str(tenant_id)
     field_column = getattr(Alert, field)
 
     # 构建查询
@@ -966,7 +962,7 @@ async def _get_simple_field_values(
             field_column.label("value"),
             func.count(Alert.id).label("count"),
         )
-        .where(Alert.tenant_id == tenant_str)
+        .where(Alert.tenant_id == tenant_id)
         .where(field_column.isnot(None))
     )
 
@@ -1013,11 +1009,10 @@ async def _get_label_field_values(
     - labels: 返回所有出现过的标签 key
     - labels.cluster / labels.env / labels.service: 返回指定 key 的所有值
     """
-    tenant_str = str(tenant_id)
 
     if field == "labels":
         # 返回所有 labels 中出现过的 key
-        return await _get_label_keys(db, tenant_str, search, limit, offset)
+        return await _get_label_keys(db, tenant_id, search, limit, offset)
 
     # labels.cluster / labels.env / labels.service
     # 提取 path 部分的 key: labels.cluster -> "cluster"
@@ -1036,7 +1031,7 @@ async def _get_label_field_values(
             label_value,
             func.count(Alert.id).label("count"),
         )
-        .where(Alert.tenant_id == tenant_str)
+        .where(Alert.tenant_id == tenant_id)
         .where(func.jsonb_typeof(Alert.labels[label_key]).isnot(None))
     )
 
@@ -1070,7 +1065,7 @@ async def _get_label_field_values(
 
 async def _get_label_keys(
     db: AsyncSession,
-    tenant_id: str,
+    tenant_id: int,
     search: str,
     limit: int,
     offset: int,

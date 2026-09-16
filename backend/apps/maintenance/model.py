@@ -15,7 +15,7 @@ class MaintenanceWindow(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
 
     name = Column(String(128), nullable=False)
     description = Column(String(512), nullable=True)

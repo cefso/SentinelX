@@ -10,7 +10,7 @@ from apps.alert.schemas import AlertCreate
 class AliyunCms2Adapter(AlertAdapter):
     """阿里云云监控2.0适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """
         解析阿里云云监控2.0告警格式
         阿里云云监控2.0发送的是 JSON 格式:

@@ -409,7 +409,7 @@ export interface AITaskStatusResponse {
 
 export interface WebhookLog {
   id: number
-  tenant_id: string
+  tenant_id: number
   source_type: string
   source_id?: number
   client_id?: string

@@ -85,7 +85,7 @@ class NotificationService:
                     NotificationTemplate.channel_type == channel.channel_type,
                     NotificationTemplate.is_active == True,
                     or_(
-                        NotificationTemplate.tenant_id == str(alert.tenant_id),
+                        NotificationTemplate.tenant_id == alert.tenant_id,
                         NotificationTemplate.is_default == True
                     )
                 ).order_by(NotificationTemplate.is_default.desc())

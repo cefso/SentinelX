@@ -24,7 +24,7 @@ async def list_maintenance_windows(
 ):
     """获取维护窗口列表"""
     service = MaintenanceService(db)
-    windows = await service.list_windows(str(tenant_id), active_only=active_only)
+    windows = await service.list_windows(tenant_id, active_only=active_only)
     return {
         "total": len(windows),
         "items": [
@@ -61,7 +61,7 @@ async def create_maintenance_window(
 
     service = MaintenanceService(db)
     window = await service.create_window(
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         name=name,
         start_time=start_time,
         end_time=end_time,
@@ -89,7 +89,7 @@ async def get_maintenance_window(
 ):
     """获取维护窗口详情"""
     service = MaintenanceService(db)
-    window = await service.get_window(window_id, str(tenant_id))
+    window = await service.get_window(window_id, tenant_id)
     if not window:
         raise HTTPException(status_code=404, detail="Maintenance window not found")
 
@@ -127,7 +127,7 @@ async def update_maintenance_window(
     service = MaintenanceService(db)
     window = await service.update_window(
         window_id,
-        str(tenant_id),
+        tenant_id,
         name=name,
         description=description,
         start_time=start_time,
@@ -154,7 +154,7 @@ async def delete_maintenance_window(
 ):
     """删除维护窗口"""
     service = MaintenanceService(db)
-    success = await service.delete_window(window_id, str(tenant_id))
+    success = await service.delete_window(window_id, tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="Maintenance window not found")
 
@@ -170,7 +170,7 @@ async def check_maintenance_status(
 ):
     """检查维护窗口当前状态"""
     service = MaintenanceService(db)
-    window = await service.get_window(window_id, str(tenant_id))
+    window = await service.get_window(window_id, tenant_id)
     if not window:
         raise HTTPException(status_code=404, detail="Maintenance window not found")
 

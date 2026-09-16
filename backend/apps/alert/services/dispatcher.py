@@ -142,7 +142,7 @@ class AlertDispatcher:
         trace_data = {
             "trace_id": str(trace_id),
             "alert_id": str(alert.id),
-            "tenant_id": str(alert.tenant_id),
+            "tenant_id": alert.tenant_id,
             "start_time": str(datetime.now(timezone.utc).isoformat()),
             "final_status": "processing",
         }
@@ -295,7 +295,7 @@ class AlertDispatcher:
             rollup_msg = {
                 "alert_id": int(parent.id),
                 "trace_id": str(trace_id),
-                "tenant_id": str(alert.tenant_id),
+                "tenant_id": alert.tenant_id,
                 "title": f"[聚合更新] {parent.title}",
                 "content": f"聚合组新增 1 条告警（组内共 {group_count or '?'} 条），最新: {alert.title}",
                 "severity": str(parent.severity),
@@ -434,7 +434,7 @@ class AlertDispatcher:
         notification_msg = {
             "alert_id": int(alert.id),
             "trace_id": str(trace_id),
-            "tenant_id": str(alert.tenant_id),
+            "tenant_id": alert.tenant_id,
             "title": str(alert.title) if alert.title else "",
             "content": str(alert.content) if alert.content else "",
             "severity": str(alert.severity),

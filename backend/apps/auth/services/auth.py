@@ -449,7 +449,7 @@ class AuditService:
         from apps.tenant.models import AuditLog
 
         audit_log = AuditLog(
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             user_id=user_id,
             username=username,
             action=action,

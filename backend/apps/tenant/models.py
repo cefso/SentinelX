@@ -191,7 +191,7 @@ class AuditLog(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String(64), nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=False, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     username = Column(String(64), nullable=False)
 

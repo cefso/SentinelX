@@ -173,7 +173,7 @@ class RuleUpdate(BaseModel):
 
 class RuleResponse(RuleBase):
     id: int
-    tenant_id: str
+    tenant_id: int
     is_active: bool
     match_count: int
     last_match_at: Optional[datetime] = None
@@ -240,7 +240,7 @@ class ChannelUpdate(BaseModel):
 
 class ChannelResponse(ChannelBase):
     id: int
-    tenant_id: str
+    tenant_id: int
     send_count: int
     success_count: int
     fail_count: int
@@ -277,7 +277,7 @@ class TemplateUpdate(BaseModel):
 
 class TemplateResponse(TemplateBase):
     id: int
-    tenant_id: str
+    tenant_id: int
     created_at: datetime
     updated_at: datetime
 

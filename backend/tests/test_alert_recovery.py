@@ -13,7 +13,7 @@ from apps.alert.routers import _resolve_firing_alerts
 def _alert(status: str, fingerprint: str = "fp-test") -> Alert:
     now = datetime.now(timezone.utc)
     return Alert(
-        tenant_id="1",
+        tenant_id=1,
         fingerprint=fingerprint,
         status=status,
         severity="high",

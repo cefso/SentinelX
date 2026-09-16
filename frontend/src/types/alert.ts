@@ -1,6 +1,6 @@
 export interface AlertResponse {
   id: number
-  tenant_id: string
+  tenant_id: number
   alert_key: string
   fingerprint: string
   source: string
@@ -110,7 +110,7 @@ export interface AlertDisposeRecord {
 
 export interface AlertHistoryItem {
   id: number
-  tenant_id: string
+  tenant_id: number
   alert_id: number
   alert_title?: string
   alert_status?: string

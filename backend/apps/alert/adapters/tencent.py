@@ -9,7 +9,7 @@ from apps.alert.schemas import AlertCreate
 class TencentCloudAdapter(AlertAdapter):
     """腾讯云告警适配器"""
 
-    async def parse(self, raw_data: Dict[str, Any], tenant_id: str) -> Optional[AlertCreate]:
+    async def parse(self, raw_data: Dict[str, Any], tenant_id: int) -> Optional[AlertCreate]:
         """解析腾讯云告警格式"""
         # 腾讯云告警通知格式
         if "appid" not in raw_data and "dimension" not in raw_data:
