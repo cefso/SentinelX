@@ -1,14 +1,25 @@
 ---
 feature: alerts-by-instance-perf
-status: in-progress
+status: delivered
 updated: 2026-09-17
 branch: perf/alerts-by-instance
-commits: b09bada.. # 填充于交付
+commits: b09bada..a271a19
 ---
 
 # 实例告警性能优化
 
 ## Report
+
+**What was built** — 实例告警两接口不再每次拉取窗口内最多 2 万条完整 Alert 在 Python 正则分类。`alerts` 新增 `instance_key`/`alert_type`（写入时 `apply_instance_denorm` 固化，`POST /alerts` 收敛到 `_build_alert`）；列表改为 SQL GROUP BY + 类型子查询 + 组级 keyword HAVING；明细用索引友好谓词 + LIMIT/OFFSET；Alembic 迁移与回填脚本 `backfill_alert_instance_fields.py`；部署文档补充强制回填步骤。API 响应结构兼容（`scan_truncated` 恒 false）。
+
+**Verification** — `PYTHONPATH=. pytest tests/` → 123 passed；`frontend npm run type-check` → PASS。审查两轮：修复回填 `get_async_session` 不存在、COALESCE 等值弃索引、keyword 组级语义、`__unknown__` 同时匹配 NULL 与哨兵、`_build_alert`/回填测试与部署说明。
+
+**Journey log**
+1. 选型 A（独立列）而非写 labels：写 labels 仍需表达式索引迁移，且污染来源标签。
+2. `COALESCE(col)=?` 会静默禁用新建 B-tree；等值过滤必须用原列/`IS NULL` 分支。
+3. 写入把未识别固化为 `'__unknown__'`，查询未知时必须 `IS NULL OR = '__unknown__'`，否则回填后明细漏行。
+4. 回填脚本误抄 sibling 的 `get_async_session`（仓库不存在该函数），应改 `get_db_context`。
+5. keyword 若下推到行级 WHERE 会切开实例卡片计数，组级 HAVING 才对齐旧语义。
 
 ## [S1] Problem
 
