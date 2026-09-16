@@ -1026,7 +1026,7 @@ async def list_alerts_by_instance(
     """按实例聚合告警类型统计"""
     alerts, source_names, truncated = await fetch_alerts_for_scan(
         db=db,
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         status=status,
         severity=severity,
         source=source,
@@ -1059,7 +1059,7 @@ async def list_alerts_by_instance_detail(
     """某实例（可选某类型）下的告警明细"""
     alerts, source_names, _ = await fetch_alerts_for_scan(
         db=db,
-        tenant_id=str(tenant_id),
+        tenant_id=tenant_id,
         status=status,
         severity=severity,
         source=source,

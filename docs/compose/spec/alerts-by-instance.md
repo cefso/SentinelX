@@ -3,7 +3,7 @@ feature: alerts-by-instance
 status: delivered
 updated: 2026-09-16
 branch: feat/alerts-by-instance
-commits: d6754168062e3593775ebee4748a05985e3d2484..24b1b33
+commits: 9d5c44b..0de0988 # 含 rebase 后 tenant_id int 对齐提交
 ---
 
 # 实例告警类型页

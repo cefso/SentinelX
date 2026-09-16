@@ -269,7 +269,7 @@ def sort_instances(
 
 
 def build_scan_filters(
-    tenant_id: str,
+    tenant_id: int,
     status: Optional[str] = None,
     severity: Optional[str] = None,
     source: Optional[str] = None,
@@ -277,7 +277,7 @@ def build_scan_filters(
 ) -> List[Any]:
     since = datetime.now(timezone.utc) - timedelta(days=window_days)
     filters = [
-        Alert.tenant_id == str(tenant_id),
+        Alert.tenant_id == tenant_id,
         Alert.status != "aggregated",
         Alert.fired_at >= since,
     ]
@@ -292,7 +292,7 @@ def build_scan_filters(
 
 async def fetch_alerts_for_scan(
     db: AsyncSession,
-    tenant_id: str,
+    tenant_id: int,
     status: Optional[str] = None,
     severity: Optional[str] = None,
     source: Optional[str] = None,
