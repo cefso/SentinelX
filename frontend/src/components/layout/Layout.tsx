@@ -47,6 +47,23 @@ const bottomNavigation = [
   { name: '告警提供商', href: '/alerts/sources', icon: Plug },
 ]
 
+/** 精确匹配或子路径匹配：/alerts 命中 /alerts 与 /alerts/history，不命中 /instance/alerts */
+function isHrefMatch(pathname: string, href: string): boolean {
+  if (pathname === href) return true
+  const prefix = href.endsWith('/') ? href : `${href}/`
+  return pathname.startsWith(prefix)
+}
+
+/** 全局取最长匹配 href，避免 /alerts 与 /alerts/history 同时高亮 */
+function findActiveHref(pathname: string, hrefs: string[]): string | null {
+  let best: string | null = null
+  for (const href of hrefs) {
+    if (!isHrefMatch(pathname, href)) continue
+    if (!best || href.length > best.length) best = href
+  }
+  return best
+}
+
 export function Layout() {
   const location = useLocation()
   const queryClient = useQueryClient()
@@ -60,8 +77,8 @@ export function Layout() {
     const initial = new Set<string>()
     for (const item of navigation) {
       if (item.children && (
-        location.pathname.startsWith(item.href) ||
-        item.children.some((c) => location.pathname.startsWith(c.href))
+        isHrefMatch(location.pathname, item.href) ||
+        item.children.some((c) => isHrefMatch(location.pathname, c.href))
       )) {
         initial.add(item.name)
       }
@@ -76,8 +93,8 @@ export function Layout() {
       for (const item of navigation) {
         if (!item.children) continue
         const onParentOrChild =
-          location.pathname.startsWith(item.href) ||
-          item.children.some((c) => location.pathname.startsWith(c.href))
+          isHrefMatch(location.pathname, item.href) ||
+          item.children.some((c) => isHrefMatch(location.pathname, c.href))
         if (!onParentOrChild && next.has(item.name)) {
           next.delete(item.name)
         }
@@ -143,95 +160,103 @@ export function Layout() {
           </button>
         </div>
         <nav className={`p-4 space-y-1 flex-1 ${sidebarCollapsed ? 'px-2' : ''}`}>
-          {navigation.map((item) => {
-            const Icon = item.icon
-            const hasChildren = item.children && item.children.length > 0
-            const isChildActive = hasChildren && item.children!.some((c) => location.pathname.startsWith(c.href))
-            const isActive = location.pathname.startsWith(item.href) || isChildActive
-            const isExpanded = expandedItems.has(item.name)
+          {(() => {
+            const allHrefs = navigation.flatMap((item) => [
+              item.href,
+              ...(item.children?.map((c) => c.href) ?? []),
+            ])
+            const activeHref = findActiveHref(location.pathname, allHrefs)
 
-            const toggleExpand = () => {
-              setExpandedItems((prev) => {
-                const next = new Set(prev)
-                if (next.has(item.name)) next.delete(item.name)
-                else next.add(item.name)
-                return next
-              })
-            }
+            return navigation.map((item) => {
+              const Icon = item.icon
+              const hasChildren = item.children && item.children.length > 0
+              const isChildActive = hasChildren && item.children!.some((c) => c.href === activeHref)
+              const isActive = item.href === activeHref || isChildActive
+              const isExpanded = expandedItems.has(item.name)
 
-            if (hasChildren) {
-              const handleParentClick = () => {
-                if (!isExpanded) {
-                  setExpandedItems((prev) => new Set(prev).add(item.name))
+              const toggleExpand = () => {
+                setExpandedItems((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(item.name)) next.delete(item.name)
+                  else next.add(item.name)
+                  return next
+                })
+              }
+
+              if (hasChildren) {
+                const handleParentClick = () => {
+                  if (!isExpanded) {
+                    setExpandedItems((prev) => new Set(prev).add(item.name))
+                  }
                 }
+
+                return (
+                  <div key={item.name}>
+                    <div className="flex items-center">
+                      <Link
+                        to={item.href}
+                        onClick={handleParentClick}
+                        className={`flex-1 flex items-center gap-3 px-4 py-2 rounded-md ${
+                          isActive && !isChildActive ? 'bg-gray-800 text-white' : isChildActive ? 'text-white' : 'text-gray-300 hover:bg-gray-800'
+                        } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                        title={sidebarCollapsed ? item.name : undefined}
+                      >
+                        <Icon className="w-5 h-5 shrink-0" />
+                        {!sidebarCollapsed && item.name}
+                      </Link>
+                      {!sidebarCollapsed && (
+                        <button
+                          onClick={toggleExpand}
+                          className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-300 transition-colors"
+                        >
+                          <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+                    {!sidebarCollapsed && isExpanded && (
+                      <div className="ml-4 mt-1 space-y-1">
+                        {item.children!.map((child) => {
+                          const childActive = child.href === activeHref
+                          return (
+                            <Link
+                              key={child.name}
+                              to={child.href}
+                              className={`flex items-center gap-3 pl-11 pr-4 py-1.5 rounded-md text-sm ${
+                                childActive ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
               }
 
               return (
-                <div key={item.name}>
-                  <div className="flex items-center">
-                    <Link
-                      to={item.href}
-                      onClick={handleParentClick}
-                      className={`flex-1 flex items-center gap-3 px-4 py-2 rounded-md ${
-                        isActive && !isChildActive ? 'bg-gray-800 text-white' : isChildActive ? 'text-white' : 'text-gray-300 hover:bg-gray-800'
-                      } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
-                      title={sidebarCollapsed ? item.name : undefined}
-                    >
-                      <Icon className="w-5 h-5 shrink-0" />
-                      {!sidebarCollapsed && item.name}
-                    </Link>
-                    {!sidebarCollapsed && (
-                      <button
-                        onClick={toggleExpand}
-                        className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-300 transition-colors"
-                      >
-                        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      </button>
-                    )}
-                  </div>
-                  {!sidebarCollapsed && isExpanded && (
-                    <div className="ml-4 mt-1 space-y-1">
-                      {item.children!.map((child) => {
-                        const childActive = location.pathname === child.href || (child.href !== '/dashboard' && location.pathname.startsWith(child.href))
-                        return (
-                          <Link
-                            key={child.name}
-                            to={child.href}
-                            className={`flex items-center gap-3 pl-11 pr-4 py-1.5 rounded-md text-sm ${
-                              childActive ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-md ${
+                    isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
+                  } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                  title={sidebarCollapsed ? item.name : undefined}
+                >
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {!sidebarCollapsed && item.name}
+                </Link>
               )
-            }
-
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center gap-3 px-4 py-2 rounded-md ${
-                  isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800'
-                } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
-                title={sidebarCollapsed ? item.name : undefined}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!sidebarCollapsed && item.name}
-              </Link>
-            )
-          })}
+            })
+          })()}
         </nav>
         <div className="mt-auto border-t border-gray-800">
           {/* 告警提供商 */}
           <nav className={`p-2 space-y-1 ${sidebarCollapsed ? 'px-2' : ''}`}>
             {bottomNavigation.map((item) => {
               const Icon = item.icon
-              const isActive = location.pathname.startsWith(item.href)
+              const isActive = isHrefMatch(location.pathname, item.href)
               return (
                 <Link
                   key={item.name}
