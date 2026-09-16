@@ -1,14 +1,17 @@
-"""实例告警聚合：实例识别 / 类型分类 / 分组测试"""
+"""实例告警聚合：实例识别 / 类型分类 / 分组 / 反规范化固化测试"""
 from datetime import datetime, timezone
 
 from apps.alert.models import Alert
 from apps.alert.services.alert_utils import extract_instance_from_title
 from apps.alert.services.by_instance import (
     UNKNOWN_INSTANCE_KEY,
+    apply_instance_denorm,
     classify_alert_type,
     extract_instance,
     filter_instance_alerts,
     group_alerts_by_instance,
+    severity_from_rank,
+    severity_rank,
     sort_instances,
 )
 
@@ -205,3 +208,94 @@ def test_filter_instance_alerts_by_type():
     matched = filter_instance_alerts(alerts, "host-a", "cpu")
     assert len(matched) == 1
     assert matched[0].id == 1
+
+
+def test_apply_instance_denorm_writes_columns():
+    alert = _make_alert(
+        title="CPU 使用率过高",
+        instance_name="文档生产服务器",
+        metric_name="cpu_usage",
+    )
+    apply_instance_denorm(alert)
+    assert alert.instance_key == "文档生产服务器"
+    assert alert.alert_type == "cpu"
+
+    unknown = _make_alert(title="some alert", labels={}, alert_key="biz")
+    apply_instance_denorm(unknown)
+    assert unknown.instance_key == UNKNOWN_INSTANCE_KEY
+    assert unknown.alert_type == "other"
+
+
+def test_apply_instance_denorm_truncates_long_key():
+    alert = _make_alert(title="t", labels={}, alert_key="x")
+    alert.instance_name = "x" * 500
+    apply_instance_denorm(alert)
+    assert len(alert.instance_key) == 256
+
+
+def test_build_alert_sets_instance_fields():
+    from apps.alert.routers import _build_alert
+    from apps.alert.schemas import AlertCreate
+
+    data = AlertCreate(
+        alert_key="lcmdb-10.0.0.8-CPU",
+        source="lcmdb",
+        title="文档生产服务器 的 [CPU:Usage]",
+        severity="high",
+        labels={"ip": "10.0.0.8"},
+        metric_name="cpu_usage",
+    )
+    alert = _build_alert(data, 1, None, "firing", "tr1")
+    assert alert.instance_key == "文档生产服务器"
+    assert alert.alert_type == "cpu"
+
+    empty = AlertCreate(
+        alert_key="biz-error",
+        source="custom",
+        title="未知业务异常",
+        severity="medium",
+        labels={},
+    )
+    alert2 = _build_alert(empty, 1, None, "firing", "tr2")
+    assert alert2.instance_key == UNKNOWN_INSTANCE_KEY
+    assert alert2.alert_type == "other"
+
+
+def test_apply_instance_denorm_matches_extract_and_classify():
+    alert = _make_alert(
+        title="文档生产服务器 的 [磁盘:Disk]",
+        labels={"ip": "10.0.0.8"},
+        alert_key="lcmdb-10.0.0.8-Disk",
+    )
+    expected_key = extract_instance(alert)["instance_key"]
+    expected_type = classify_alert_type(alert)[0]
+    apply_instance_denorm(alert)
+    assert alert.instance_key == expected_key
+    assert alert.alert_type == expected_type
+
+
+def test_severity_rank_roundtrip():
+    assert severity_rank("critical") == 0
+    assert severity_rank("info") == 4
+    assert severity_rank(None) == 5
+    assert severity_rank("unknown") == 5
+    assert severity_from_rank(0) == "critical"
+    assert severity_from_rank(5) is None
+    assert severity_from_rank(None) is None
+
+
+def test_instance_key_match_covers_null_and_sentinel():
+    from sqlalchemy.dialects import postgresql
+    from apps.alert.services.by_instance import _instance_key_match
+
+    unknown_sql = str(_instance_key_match(UNKNOWN_INSTANCE_KEY).compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "IS NULL" in unknown_sql
+    assert "__unknown__" in unknown_sql
+
+    named_sql = str(_instance_key_match("host-a").compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "host-a" in named_sql
+    assert "IS NULL" not in named_sql

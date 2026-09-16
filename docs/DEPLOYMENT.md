@@ -125,6 +125,16 @@ ANTHROPIC_API_KEY=sk-ant-xxx
    LOG_FORMAT=json
    ```
 
+### 实例告警列回填（升级后必做）
+
+从含实例告警性能优化的版本起，`alerts` 表新增 `instance_key` / `alert_type`。升级并执行 Alembic 迁移后，**必须**回填历史数据，否则旧告警会聚合成一张「未识别实例」卡片：
+
+```bash
+cd backend
+python -m scripts.backfill_alert_instance_fields            # dry-run 预览
+python -m scripts.backfill_alert_instance_fields --apply    # 实际写入
+```
+
 ## 负载均衡配置
 
 ### Nginx 配置示例

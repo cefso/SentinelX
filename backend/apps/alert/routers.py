@@ -39,13 +39,9 @@ from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
 from apps.alert.services.fingerprint_list import list_alerts_fingerprint_aggregate
 from apps.alert.services.by_instance import (
-    build_alert_items,
-    fetch_alerts_for_scan,
-    filter_instance_alerts,
-    group_alerts_by_instance,
-    paginate_alerts,
-    paginate_instances,
-    sort_instances,
+    apply_instance_denorm,
+    list_instances_sql,
+    list_instance_alerts_sql,
 )
 
 router = APIRouter()
@@ -174,6 +170,7 @@ def _build_alert(
         trace_id=trace_id,
         fired_at=now,
     )
+    apply_instance_denorm(alert)
     if status == "resolved":
         alert.resolved_at = now
     return alert
@@ -462,30 +459,7 @@ async def create_alert(
 ):
     """接收告警"""
     trace_id = request.trace_id or generate_trace_id()
-    fingerprint = request.fingerprint or generate_fingerprint(request, tenant_id, request.source_id)
-
-    # 创建告警记录
-    alert = Alert(
-        tenant_id=tenant_id,
-        alert_key=request.alert_key,
-        fingerprint=fingerprint,
-        source=request.source,
-        source_id=request.source_id,
-        title=request.title,
-        content=request.content,
-        severity=request.severity,
-        status="firing",
-        labels=request.labels,
-        annotations=request.annotations,
-        metric_name=request.metric_name,
-        metric_value=request.metric_value,
-        raw_data=request.raw_data,
-        namespace=request.namespace,
-        instance_id=request.instance_id,
-        instance_name=request.instance_name,
-        trace_id=trace_id,
-        fired_at=datetime.now(timezone.utc),
-    )
+    alert = _build_alert(request, tenant_id, request.source_id, "firing", trace_id)
     db.add(alert)
     await db.flush()
 
@@ -1020,27 +994,31 @@ async def list_alerts_by_instance(
     page_size: int = Query(20, ge=1, le=100),
     sort_by: str = Query("alert_count", description="排序: alert_count/max_severity/last_fired_at"),
     sort_order: str = Query("desc", description="asc/desc"),
+    window_days: int = Query(90, ge=1, le=365, description="统计窗口（天）"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """按实例聚合告警类型统计"""
-    alerts, source_names, truncated = await fetch_alerts_for_scan(
+    """按实例聚合告警类型统计（SQL 聚合）"""
+    page_items, total, scanned = await list_instances_sql(
         db=db,
         tenant_id=tenant_id,
         status=status,
         severity=severity,
         source=source,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        window_days=window_days,
     )
-    groups = group_alerts_by_instance(alerts, source_names)
-    groups = sort_instances(groups, sort_by=sort_by, sort_order=sort_order)
-    page_items, total = paginate_instances(groups, keyword, page, page_size)
     return InstanceAlertGroupResponse(
         items=page_items,
         total=total,
         page=page,
         page_size=page_size,
-        scanned=len(alerts),
-        scan_truncated=truncated,
+        scanned=scanned,
+        scan_truncated=False,
     )
 
 
@@ -1053,21 +1031,25 @@ async def list_alerts_by_instance_detail(
     source: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    window_days: int = Query(90, ge=1, le=365, description="统计窗口（天）"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """某实例（可选某类型）下的告警明细"""
-    alerts, source_names, _ = await fetch_alerts_for_scan(
+    """某实例（可选某类型）下的告警明细（SQL 过滤 + 分页）"""
+    items, total = await list_instance_alerts_sql(
         db=db,
         tenant_id=tenant_id,
+        instance_key=instance_key,
+        alert_type=alert_type,
         status=status,
         severity=severity,
         source=source,
+        page=page,
+        page_size=page_size,
+        window_days=window_days,
     )
-    matched = filter_instance_alerts(alerts, instance_key, alert_type)
-    page_alerts, total = paginate_alerts(matched, page, page_size)
     return AlertListResponse(
-        items=build_alert_items(page_alerts, source_names),
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
