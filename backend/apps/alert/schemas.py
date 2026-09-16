@@ -115,6 +115,39 @@ class AlertListResponse(BaseModel):
     page_size: int
 
 
+class InstanceAlertTypeStat(BaseModel):
+    """实例下某告警类型的统计"""
+    type: str = Field(..., description="类型码: cpu/memory/disk/process/network/other")
+    type_label: str = Field(..., description="类型中文名")
+    count: int = Field(..., description="告警数")
+    firing_count: int = Field(0, description="触发中数量")
+    max_severity: Optional[str] = Field(None, description="最高严重级别")
+
+
+class InstanceAlertGroup(BaseModel):
+    """按实例聚合的告警卡片"""
+    instance_key: str = Field(..., description="实例聚合键")
+    instance_name: Optional[str] = Field(None, description="实例展示名")
+    instance_id: Optional[str] = Field(None, description="实例ID")
+    ip: Optional[str] = Field(None, description="IP")
+    sources: List[str] = Field(default_factory=list, description="涉及告警源")
+    alert_count: int = Field(..., description="告警总数")
+    firing_count: int = Field(0, description="触发中数量")
+    max_severity: Optional[str] = Field(None, description="最高严重级别")
+    last_fired_at: Optional[datetime] = Field(None, description="最近触发时间")
+    types: List[InstanceAlertTypeStat] = Field(default_factory=list, description="类型统计")
+
+
+class InstanceAlertGroupResponse(BaseModel):
+    """实例聚合列表响应"""
+    items: List[InstanceAlertGroup]
+    total: int
+    page: int
+    page_size: int
+    scanned: int = Field(0, description="实际扫描告警数")
+    scan_truncated: bool = Field(False, description="是否因扫描上限截断")
+
+
 class AlertAggregatedItem(BaseModel):
     """聚合告警项（指纹视图行）"""
     fingerprint: str

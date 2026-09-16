@@ -33,10 +33,20 @@ from apps.alert.schemas import (
     CloudMetricsListResponse,
     AlertTrendItem, AlertTrendResponse, SourceAlertStats, SourceAlertStatsResponse,
     DisposeRequest, DisposeRecordResponse,
+    InstanceAlertGroupResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
 from apps.alert.services.fingerprint_list import list_alerts_fingerprint_aggregate
+from apps.alert.services.by_instance import (
+    build_alert_items,
+    fetch_alerts_for_scan,
+    filter_instance_alerts,
+    group_alerts_by_instance,
+    paginate_alerts,
+    paginate_instances,
+    sort_instances,
+)
 
 router = APIRouter()
 
@@ -998,6 +1008,70 @@ async def get_alert_stats_by_source(
         for row in result.all()
     ]
     return SourceAlertStatsResponse(items=items)
+
+
+@router.get("/alerts/by-instance", response_model=InstanceAlertGroupResponse)
+async def list_alerts_by_instance(
+    status: Optional[str] = Query(None, description="状态筛选；省略为全部"),
+    severity: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None, description="实例名/IP 关键词"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("alert_count", description="排序: alert_count/max_severity/last_fired_at"),
+    sort_order: str = Query("desc", description="asc/desc"),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """按实例聚合告警类型统计"""
+    alerts, source_names, truncated = await fetch_alerts_for_scan(
+        db=db,
+        tenant_id=str(tenant_id),
+        status=status,
+        severity=severity,
+        source=source,
+    )
+    groups = group_alerts_by_instance(alerts, source_names)
+    groups = sort_instances(groups, sort_by=sort_by, sort_order=sort_order)
+    page_items, total = paginate_instances(groups, keyword, page, page_size)
+    return InstanceAlertGroupResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        scanned=len(alerts),
+        scan_truncated=truncated,
+    )
+
+
+@router.get("/alerts/by-instance/alerts", response_model=AlertListResponse)
+async def list_alerts_by_instance_detail(
+    instance_key: str = Query(..., description="实例聚合键（URL 编码）"),
+    alert_type: Optional[str] = Query(None, alias="type", description="告警类型码；省略为全部"),
+    status: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """某实例（可选某类型）下的告警明细"""
+    alerts, source_names, _ = await fetch_alerts_for_scan(
+        db=db,
+        tenant_id=str(tenant_id),
+        status=status,
+        severity=severity,
+        source=source,
+    )
+    matched = filter_instance_alerts(alerts, instance_key, alert_type)
+    page_alerts, total = paginate_alerts(matched, page, page_size)
+    return AlertListResponse(
+        items=build_alert_items(page_alerts, source_names),
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/alerts/history", response_model=AlertHistoryListResponse)

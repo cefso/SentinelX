@@ -8,6 +8,8 @@ import { AlertDetailPage } from './pages/alerts/detail'
 import { AlertSourcesPage } from './pages/alerts/sources'
 import { UnresolvedAlertsPage } from './pages/alerts/unresolved'
 import { AlertHistoryPage } from './pages/alerts/history'
+import { AlertsByInstancePage } from './pages/alerts/by-instance'
+import { AlertsByInstanceDetailPage } from './pages/alerts/by-instance/detail'
 import { RulesPage } from './pages/rules'
 import { DedupRulesPage } from './pages/rules/dedup'
 import { SuppressRulesPage } from './pages/rules/suppress'
@@ -46,6 +48,8 @@ function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="alerts/unresolved" element={<UnresolvedAlertsPage />} />
+        <Route path="alerts/by-instance" element={<AlertsByInstancePage />} />
+        <Route path="alerts/by-instance/detail" element={<AlertsByInstanceDetailPage />} />
         <Route path="alerts/sources" element={<AlertSourcesPage />} />
         <Route path="alerts/history" element={<AlertHistoryPage />} />
         <Route path="alerts/:id" element={<AlertDetailPage />} />
