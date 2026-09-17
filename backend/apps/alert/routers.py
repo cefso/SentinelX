@@ -557,7 +557,8 @@ async def receive_webhook_by_source(
         )
         alert_source = result.scalar_one_or_none()
 
-    if not alert_source or str(alert_source.tenant_id) != tenant_id:
+    # tenant_id 为 int（#113 统一后）；str(int) != int 恒真会导致合法源 404
+    if not alert_source or alert_source.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail=f"AlertSource not found: {identifier}")
 
     # 3. 验证 API Key (可选)
