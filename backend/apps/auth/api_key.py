@@ -39,6 +39,7 @@ class APIKeyAuth:
         tenant_id: int,
         name: str,
         expires_days: Optional[int] = None,
+        created_by: Optional[int] = None,
     ) -> Tuple[str, str]:
         """
         创建API Key
@@ -77,6 +78,7 @@ class APIKeyAuth:
             secret_signature=signature,
             encrypted_secret=encrypted_secret,
             is_active=True,
+            created_by=created_by,
             expires_at=expires_at,
         )
         self.db.add(api_key_record)
@@ -92,6 +94,7 @@ class APIKeyAuth:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": expires_at.isoformat() if expires_at else None,
             "is_active": True,
+            "created_by": created_by,
         }
         tenant.api_token = json.dumps(tokens)
 
@@ -241,6 +244,7 @@ class APIKeyAuth:
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "expires_at": r.expires_at.isoformat() if r.expires_at else None,
                     "is_active": r.is_active,
+                    "created_by": getattr(r, "created_by", None),
                 }
                 for r in records
             ]

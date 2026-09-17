@@ -238,6 +238,9 @@ class APIKey(Base):
     # 状态
     is_active = Column(Boolean, default=True)
 
+    # 创建者（审计溯源；0 表示系统/未知）
+    created_by = Column(Integer, nullable=True)
+
     # 过期时间
     expires_at = Column(DateTime, nullable=True)
 

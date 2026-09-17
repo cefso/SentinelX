@@ -57,6 +57,13 @@ export interface AlertStats {
   aggregated?: number
 }
 
+export interface AlertOverview {
+  stats: AlertStats
+  firing_dedup: number
+  critical_dedup: number
+  high_dedup: number
+}
+
 export interface AlertAggregatedItem {
   fingerprint: string
   count: number

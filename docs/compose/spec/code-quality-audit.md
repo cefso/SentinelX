@@ -20,9 +20,11 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..2da0c5af15d29b695b291e06f13ab
 
 **第三轮**覆盖：`/alerts/stats` Redis 短缓存；通知渠道发送前重校验 SSRF（覆盖存量配置）；规则 `regex` ReDoS 硬化（长度/嵌套量词/编译缓存 + 创建时校验）；云产品指标全局目录写操作限 system admin。
 
+**第四轮**覆盖：`/alerts/overview` 合并 stats + 去重触发/级别计数（列表页 4 请求 → 1）；dispose `silence` 写 `status=suppressed` + `silenced_until`；注册用户名/邮箱冲突统一错误文案；API Key 增加 `created_by` 溯源字段与迁移。
+
 **Verification**
 
-- `backend`: `pytest tests/ -q` → **PASS 220**（含第三轮 hardening）
+- `backend`: `pytest tests/ -q` → **PASS 228**（含第三/四轮）
 - `frontend`: `tsc --noEmit` → **PASS**
 - 静态 import 检查通过
 - 独立 Review（第一轮）：**approve**，无阻塞 Critical
@@ -102,11 +104,20 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..2da0c5af15d29b695b291e06f13ab
 | Medium | 规则 regex ReDoS | 运行时安全匹配 + 创建/更新时 Pydantic 校验 |
 | Medium | 云指标全局表任一租户可改 | 写/删/同步要求 system admin |
 
+#### 第四轮收尾
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| Medium | 列表页 4 个统计请求 | `/alerts/overview` 一次返回 stats+去重计数 |
+| Medium | dispose silence 不生效 | 写 suppressed + silenced_until（默认 60min，可传 silence_minutes） |
+| Low | 注册用户枚举 | username/email 冲突统一文案 |
+| Medium | API Key 无创建者 | `created_by` 字段 + alembic `20260918_api_key_created_by` |
+
 ### 未修复 / 后续建议（按优先级）
 
-1. **Medium** 列表页仍并发多个 `page_size=1` 聚合接口 — 可再合并 overview。
-2. **Medium** API Key 虚拟用户 id=0 全权、无创建者溯源。
-3. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、register 用户名/邮箱存在性枚举、TestClient 集成测试。
+1. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、TestClient 集成测试。
+2. **Low** `alert/routers.py` 仍偏大，可按域拆分。
+3. **Low** 魔法状态/级别字符串可抽 StrEnum。
 
 ### Review 备注（非阻塞）
 

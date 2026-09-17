@@ -34,6 +34,7 @@ from apps.alert.schemas import (
     AlertTrendItem, AlertTrendResponse, SourceAlertStats, SourceAlertStatsResponse,
     DisposeRequest, DisposeRecordResponse,
     InstanceAlertGroupResponse,
+    AlertOverviewResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
@@ -996,6 +997,45 @@ async def get_alert_stats(
     return stats
 
 
+async def _count_dedup_fingerprints(
+    db: AsyncSession,
+    tenant_id: int,
+    status: str = "firing",
+    severity: Optional[str] = None,
+) -> int:
+    """按 fingerprint 去重计数（与前端 aggregate=true 的 total 对齐）。"""
+    conditions = [Alert.tenant_id == tenant_id, Alert.status == status]
+    if severity:
+        conditions.append(Alert.severity == severity)
+    subq = (
+        select(Alert.fingerprint)
+        .where(and_(*conditions))
+        .group_by(Alert.fingerprint)
+        .subquery()
+    )
+    result = await db.execute(select(func.count()).select_from(subq))
+    return int(result.scalar() or 0)
+
+
+@router.get("/alerts/overview", response_model=AlertOverviewResponse)
+async def get_alert_overview(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """合并 stats + firing/critical/high 去重计数，减少列表页并发请求。"""
+    stats = await get_alert_stats(tenant_id=tenant_id, db=db, redis=redis)
+    firing_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing")
+    critical_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing", "critical")
+    high_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing", "high")
+    return AlertOverviewResponse(
+        stats=stats,
+        firing_dedup=firing_dedup,
+        critical_dedup=critical_dedup,
+        high_dedup=high_dedup,
+    )
+
+
 @router.get("/alerts/trend", response_model=AlertTrendResponse)
 async def get_alert_trend(
     days: int = Query(7, ge=1, le=90, description="查询天数"),
@@ -1463,6 +1503,11 @@ async def dispose_alert(
     elif request.action == 'resolve' and alert.status in ('firing', 'acknowledged'):
         alert.status = 'resolved'
         alert.resolved_at = now
+    elif request.action == 'silence':
+        minutes = request.silence_minutes or 60
+        from datetime import timedelta as _td
+        alert.status = 'suppressed'
+        alert.silenced_until = now + _td(minutes=minutes)
 
     # 统一写入 dispose_* 前缀，与系统历史动作区分；读取时再映射回前端动作
     action_mapping = {

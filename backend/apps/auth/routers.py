@@ -247,6 +247,7 @@ async def create_api_key(
         tenant_id=payload.get("current_tenant_id"),
         name=request.name,
         expires_days=request.expires_days,
+        created_by=current_user.id if current_user and current_user.id else None,
     )
 
     # 返回完整API Key (只显示一次)

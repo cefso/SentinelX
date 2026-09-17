@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
-import { AlertResponse, AlertStats, AlertAggregatedItem, AlertSource } from '@/types/alert'
+import { AlertResponse, AlertOverview, AlertAggregatedItem, AlertSource } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { convertToCSV, downloadCSV, generateExportFilename } from '@/utils/export'
@@ -99,50 +99,20 @@ export function AlertsPage() {
     setPage(1)
   }
 
-  const { data: stats } = useQuery<AlertStats>({
-    queryKey: ['alertStats'],
-    queryFn: () => apiClient.get('/alerts/stats'),
+  const { data: overview } = useQuery<AlertOverview>({
+    queryKey: ['alertOverview'],
+    queryFn: () => apiClient.get('/alerts/overview'),
   })
+  const stats = overview?.stats
 
   const { data: sources = [] } = useQuery<AlertSource[]>({
     queryKey: ['alert-sources'],
     queryFn: () => apiClient.get('/sources'),
   })
 
-  // 查询去重后的触发中告警数量
-  const { data: firingAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
-    queryKey: ['alerts-dedup', 'firing'],
-    queryFn: () => apiClient.get('/alerts', {
-      page: 1,
-      page_size: 1,
-      status: 'firing',
-      aggregate: true,
-    }),
-  })
-
-  // 查询去重后的 Critical 告警数量
-  const { data: criticalAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
-    queryKey: ['alerts-dedup', 'critical'],
-    queryFn: () => apiClient.get('/alerts', {
-      page: 1,
-      page_size: 1,
-      status: 'firing',
-      severity: 'critical',
-      aggregate: true,
-    }),
-  })
-
-  // 查询去重后的 High 告警数量
-  const { data: highAlerts } = useQuery<{ items: AlertAggregatedItem[]; total: number }>({
-    queryKey: ['alerts-dedup', 'high'],
-    queryFn: () => apiClient.get('/alerts', {
-      page: 1,
-      page_size: 1,
-      status: 'firing',
-      severity: 'high',
-      aggregate: true,
-    }),
-  })
+  const firingDedup = overview?.firing_dedup ?? 0
+  const criticalDedup = overview?.critical_dedup ?? 0
+  const highDedup = overview?.high_dedup ?? 0
 
   const { data: alerts, isLoading } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
     queryKey: ['alerts', page, pageSize, filters, aggregateMode, sortBy, sortOrder, advancedFilters],
@@ -319,21 +289,21 @@ export function AlertsPage() {
         />
         <StatCard
           title="触发中"
-          value={firingAlerts?.total || 0}
+          value={firingDedup}
           subtitle="正在触发"
           icon={AlertTriangle}
           gradient="from-orange-500 to-orange-600"
         />
         <StatCard
           title="Critical"
-          value={criticalAlerts?.total || 0}
+          value={criticalDedup}
           subtitle="严重级别"
           icon={XCircle}
           gradient="from-red-500 to-red-600"
         />
         <StatCard
           title="High"
-          value={highAlerts?.total || 0}
+          value={highDedup}
           subtitle="高级别"
           icon={AlertCircle}
           gradient="from-amber-500 to-amber-600"

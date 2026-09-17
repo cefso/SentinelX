@@ -118,19 +118,18 @@ class AuthService:
         创建用户后 is_approved=False，需要管理员审批
         如果指定了 tenant_id，同时创建 UserTenant 关联
         """
-        # 检查用户名唯一性
+        # 检查用户名/邮箱唯一性 —— 统一错误文案，避免用户枚举
         result = await self.db.execute(
             select(User.id).where(User.username == username).limit(1)
         )
         if result.scalar_one_or_none():
-            raise AuthenticationError("Username already exists")
+            raise AuthenticationError("Registration failed: username or email is not available")
 
-        # 检查邮箱唯一性
         result = await self.db.execute(
             select(User.id).where(User.email == email).limit(1)
         )
         if result.scalar_one_or_none():
-            raise AuthenticationError("Email already exists")
+            raise AuthenticationError("Registration failed: username or email is not available")
 
         # 创建用户
         user = User(
