@@ -9,6 +9,88 @@ import re
 from urllib.parse import urlparse
 
 
+# ============ 渠道 config 脱敏 ============
+
+# 敏感字段名（子串匹配，大小写不敏感）
+_SENSITIVE_KEY_PARTS = ("password", "secret", "token", "access_key", "api_key")
+# 非敏感标识类字段：只展示尾部
+_MASK_TAIL_KEYS = ("access_key_id",)
+# URL 类字段：保留 scheme+host，路径/查询脱敏
+_URL_KEYS = ("webhook_url", "callback_url", "url")
+
+MASK_PLACEHOLDER = "***"
+
+
+def _mask_keep_tail(value: str, tail: int = 4) -> str:
+    """显示尾部若干字符，前面用 *** 替换。"""
+    if not value:
+        return MASK_PLACEHOLDER
+    if len(value) <= tail:
+        return MASK_PLACEHOLDER
+    return f"{MASK_PLACEHOLDER}{value[-tail:]}"
+
+
+def _mask_url(value: str) -> str:
+    """保留 scheme://host，路径与查询替换为 ***。"""
+    try:
+        parsed = urlparse(value)
+    except Exception:
+        return MASK_PLACEHOLDER
+    if not parsed.scheme or not parsed.netloc:
+        return MASK_PLACEHOLDER
+    return f"{parsed.scheme}://{parsed.netloc}/{MASK_PLACEHOLDER}"
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lk = key.lower()
+    if lk in _MASK_TAIL_KEYS:
+        return False
+    return any(part in lk for part in _SENSITIVE_KEY_PARTS)
+
+
+def mask_channel_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """对外响应时脱敏渠道 config 中的敏感字段。"""
+    if not config or not isinstance(config, dict):
+        return {}
+    masked: Dict[str, Any] = {}
+    for key, value in config.items():
+        lk = str(key).lower()
+        if not isinstance(value, str):
+            masked[key] = value
+            continue
+        if lk in _URL_KEYS:
+            masked[key] = _mask_url(value)
+        elif lk in _MASK_TAIL_KEYS or (lk.endswith("_id") and "access_key" in lk):
+            masked[key] = _mask_keep_tail(value)
+        elif _is_sensitive_key(lk):
+            masked[key] = MASK_PLACEHOLDER
+        else:
+            masked[key] = value
+    return masked
+
+
+def is_masked_value(value: Any) -> bool:
+    """判断提交值是否仍为脱敏占位（未被用户改写）。"""
+    return isinstance(value, str) and MASK_PLACEHOLDER in value
+
+
+def restore_masked_config(
+    original: Optional[Dict[str, Any]],
+    incoming: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """更新时：若字段值仍含 ***，用库中原值覆盖，避免抹掉密钥。"""
+    restored: Dict[str, Any] = dict(incoming or {})
+    original = original or {}
+    for key, value in list(restored.items()):
+        if is_masked_value(value):
+            if key in original and original[key] is not None:
+                restored[key] = original[key]
+            else:
+                # 无原值可回填时丢弃该字段，防止写入占位符
+                del restored[key]
+    return restored
+
+
 # ============ 通知渠道Schema ============
 
 class ChannelBase(BaseModel):
@@ -74,7 +156,7 @@ class ChannelUpdate(BaseModel):
 
 
 class ChannelResponse(ChannelBase):
-    """渠道响应"""
+    """渠道响应（config 敏感字段脱敏）"""
     id: int
     tenant_id: int
     send_count: int = 0
@@ -83,6 +165,13 @@ class ChannelResponse(ChannelBase):
     last_send_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def _mask_sensitive_config(cls, v: Any) -> Dict[str, Any]:
+        if isinstance(v, dict):
+            return mask_channel_config(v)
+        return v or {}
 
     class Config:
         from_attributes = True

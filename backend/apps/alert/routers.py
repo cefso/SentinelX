@@ -65,57 +65,26 @@ def generate_trace_id() -> str:
     return str(uuid.uuid4())[:12]
 
 
-async def _create_single_alert(
-    alert_data: AlertCreate,
-    tenant_id: int,
+async def _lookup_active_fingerprints(
     db: AsyncSession,
-    redis,
-    source_id: int = None,
-    status: str = "firing",
-) -> dict:
-    """创建单个告警并分发到 MQ"""
-    trace_id = alert_data.trace_id or generate_trace_id()
-    alert = _build_alert(alert_data, tenant_id, source_id, status, trace_id)
-    db.add(alert)
-    await db.flush()
+    tenant_id: int,
+    fingerprints: List[str],
+) -> set:
+    """一条 SQL 查出已有 firing/suppressed 告警的指纹集合"""
+    unique_fps = {fp for fp in fingerprints if fp}
+    if not unique_fps:
+        return set()
 
-    # 检查该指纹是否存在 firing/suppressed 状态的告警
-    fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
-    existing_result = await db.execute(
-        select(Alert.id).where(
+    result = await db.execute(
+        select(Alert.fingerprint)
+        .where(
             Alert.tenant_id == tenant_id,
-            Alert.fingerprint == fingerprint,
+            Alert.fingerprint.in_(unique_fps),
             Alert.status.in_(["firing", "suppressed"]),
-        ).limit(1)
+        )
+        .distinct()
     )
-    existing_alert = existing_result.scalar_one_or_none()
-
-    # 记录告警历史：首次收到记录 received，后续触发记录 fired
-    if existing_alert:
-        history_action = "fired"
-        history_desc = "告警触发"
-    else:
-        history_action = "received"
-        history_desc = "告警接入"
-
-    history = AlertHistory(
-        tenant_id=tenant_id,
-        alert_id=alert.id,
-        action=history_action,
-        description=history_desc,
-        new_value={"status": status, "source": alert.source},
-    )
-    db.add(history)
-
-    mq = await get_mq_async()
-    await mq.send("alerts_raw", {
-        "alert_id": alert.id,
-        "tenant_id": tenant_id,
-        "trace_id": trace_id,
-        "action": "process"
-    })
-
-    return {"id": alert.id, "trace_id": trace_id, "db_alert": alert}
+    return set(result.scalars().all())
 
 
 async def _create_alert_batch(
@@ -124,17 +93,99 @@ async def _create_alert_batch(
     db: AsyncSession,
     redis,
     source_id: int = None,
+    status: str = "firing",
+    commit: bool = True,
 ) -> dict:
-    """批量创建告警并分发"""
-    results = []
-    for alert_data in alerts:
-        result = await _create_single_alert(alert_data, tenant_id, db, redis, source_id)
-        results.append(result)
+    """
+    批量创建告警并分发。
 
-    await db.commit()
+    - 一条 SELECT 预取已有 firing/suppressed 指纹（去重/聚合语义）
+    - 全部 Alert 一次 flush，History 批量 add
+    - MQ 不支持批量 send，循环发送但不逐条 commit
+    """
+    if not alerts:
+        return {"received": 0, "alerts": []}
+
+    # 1. 预计算指纹，一条 SQL 查已有活跃指纹
+    fingerprints = [
+        a.fingerprint or generate_fingerprint(a, tenant_id, source_id)
+        for a in alerts
+    ]
+    active_fps = await _lookup_active_fingerprints(db, tenant_id, fingerprints)
+
+    # 2. 构建全部 Alert（同批内重复指纹：首条 received，后续 fired）
+    built = []
+    for alert_data, fingerprint in zip(alerts, fingerprints):
+        trace_id = alert_data.trace_id or generate_trace_id()
+        alert = _build_alert(alert_data, tenant_id, source_id, status, trace_id)
+        # _build_alert 内部可能再次生成指纹，与预计算结果对齐
+        alert.fingerprint = fingerprint
+        built.append((alert, trace_id, fingerprint))
+
+    db.add_all([alert for alert, _, _ in built])
+    await db.flush()
+
+    # 3. 批量写 history
+    for alert, _trace_id, fingerprint in built:
+        if fingerprint in active_fps:
+            history_action = "fired"
+            history_desc = "告警触发"
+        else:
+            history_action = "received"
+            history_desc = "告警接入"
+            # 同批后续相同指纹视为再次触发
+            active_fps.add(fingerprint)
+
+        db.add(AlertHistory(
+            tenant_id=tenant_id,
+            alert_id=alert.id,
+            action=history_action,
+            description=history_desc,
+            new_value={"status": status, "source": alert.source},
+        ))
+
+    # 4. 一次 commit（可选），再发 MQ —— 避免逐条 commit
+    if commit:
+        await db.commit()
+
+    mq = await get_mq_async()
+    for alert, trace_id, _fingerprint in built:
+        await mq.send("alerts_raw", {
+            "alert_id": alert.id,
+            "tenant_id": tenant_id,
+            "trace_id": trace_id,
+            "action": "process"
+        })
+
     return {
-        "received": len(results),
-        "alerts": [{"id": r["id"], "trace_id": r["trace_id"]} for r in results]
+        "received": len(built),
+        "alerts": [{"id": alert.id, "trace_id": trace_id} for alert, trace_id, _ in built],
+    }
+
+
+async def _create_single_alert(
+    alert_data: AlertCreate,
+    tenant_id: int,
+    db: AsyncSession,
+    redis,
+    source_id: int = None,
+    status: str = "firing",
+) -> dict:
+    """创建单个告警并分发到 MQ（复用批量路径，单条不 commit 由调用方收口）"""
+    # 直接复用批量构建逻辑，但保持单条响应格式
+    batch = await _create_alert_batch(
+        [alert_data],
+        tenant_id,
+        db,
+        redis,
+        source_id=source_id,
+        status=status,
+        commit=False,
+    )
+    item = batch["alerts"][0]
+    return {
+        "id": item["id"],
+        "trace_id": item["trace_id"],
     }
 
 

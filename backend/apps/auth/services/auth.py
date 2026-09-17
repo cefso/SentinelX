@@ -420,6 +420,63 @@ class PermissionService:
             return True
         return required_permission in permissions
 
+    def match_permission(self, permissions: list[str], required_permission: str) -> bool:
+        """
+        匹配权限（含通配符语义，与旧 JWT claim 检查保持一致）:
+        - "*" / "admin" 匹配所有权限
+        - required == "read" 时匹配任意 ":read" 后缀权限
+        """
+        if not permissions:
+            return False
+        if "*" in permissions or "admin" in permissions:
+            return True
+        if required_permission == "read":
+            return any(p.endswith(":read") or p == "read" for p in permissions)
+        return required_permission in permissions
+
+    async def get_user_tenant_authz(
+        self,
+        user_id: int,
+        tenant_id: Optional[int],
+        *,
+        is_system: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        从 DB 加载用户在指定租户下的权威授权上下文（一次 join，避免 N 次查询）。
+
+        is_system 由调用方从已加载的 User 传入（get_current_user 已查库），
+        不读 JWT claim。
+
+        返回:
+            {
+                "permissions": list[str],
+                "is_superuser": bool,  # 租户角色是否 admin（以 Role 为准）
+            }
+        """
+        # 系统管理员：全量权限，不受租户角色限制
+        if is_system:
+            return {"permissions": ["*"], "is_superuser": True}
+
+        if not tenant_id:
+            # 无租户上下文的非系统用户：无权限
+            return {"permissions": [], "is_superuser": False}
+
+        result = await self.db.execute(
+            select(UserTenant, Role)
+            .join(Role, Role.id == UserTenant.role_id)
+            .where(UserTenant.user_id == user_id)
+            .where(UserTenant.tenant_id == tenant_id)
+        )
+        row = result.first()
+        if not row:
+            return {"permissions": [], "is_superuser": False}
+
+        _ut, role = row
+        permissions = list(role.permissions or [])
+        # 与 AuthService.get_user_tenants 的 is_superuser 判定保持一致
+        is_superuser = role.code in ("admin", "system_admin") or permissions == ["*"]
+        return {"permissions": permissions, "is_superuser": is_superuser}
+
     def check_tenant_access(self, is_system: bool, is_superuser: bool, current_tenant_id: int, target_tenant_id: int) -> bool:
         """检查是否有访问目标租户的权限"""
         # 系统管理员可以访问所有租户

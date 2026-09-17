@@ -12,22 +12,26 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..c50e4b9a17d2997b6fd714c94b1c3
 
 **What was built**
 
-对 SentinelX 前后端做了均衡全面审计（类型契约、安全/正确性、性能/可维护性），并在本分支实施了 Critical/High 与低风险 Medium 修复。修复覆盖：多租户越权（详情密钥、webhook key、跨租户角色/密码/用户列表/权限重置、升级任务）、Webhook API Key 校验失效与 str/int 比较、API Key 权限门控与创建 Body 契约、处置记录读写 action 对齐、通知 channel 租户边界、基础 SSRF 拦截、注册页租户列表契约、告警筛选 `assignee_id`、前端类型对齐与 keyword 防抖/导出 N+1 限制。
+对 SentinelX 前后端做了均衡全面审计（类型契约、安全/正确性、性能/可维护性），并分两轮实施修复。
+
+**第一轮**覆盖：多租户越权（详情密钥、webhook key、跨租户角色/密码/用户列表/权限重置、升级任务）、Webhook API Key 校验失效与 str/int 比较、API Key 权限门控与创建 Body 契约、处置记录读写 action 对齐、通知 channel 租户边界、基础 SSRF 拦截、注册页租户列表契约、告警筛选 `assignee_id`、前端类型对齐与 keyword 防抖/导出 N+1 限制。
+
+**第二轮**覆盖：JWT 权限以 DB 为权威（不再信任陈旧 claim）、指纹 flapping 有界扫描 + flapping_only/stale_only 分页前过滤、批量接警预取指纹 + 一次 flush/commit、升级检查 LIMIT/时间窗 + 批量 last-notification、`alerts` 复合索引迁移、渠道 config 响应脱敏、前端路由级 code splitting。
 
 **Verification**
 
-- `backend`: `pytest tests/ -q` → **PASS 177**（含新增 `test_tenant_auth_security.py`、`test_alert_security.py` 共 53 项）
+- `backend`: `pytest tests/ -q` → **PASS 207**
 - `frontend`: `tsc --noEmit` → **PASS**
 - 静态 import 检查通过
-- 独立 Review：**approve**，无阻塞 Critical；非阻塞项已记入下方
+- 独立 Review（第一轮）：**approve**，无阻塞 Critical
 
 **Journey log**
 
 1. 并行三路审计（契约/安全/性能）后发现安全面问题密度最高，优先落地租户路由与 webhook 认证。
 2. `verify_api_key` 原先对 bcrypt hash 做明文 compare_digest，正确 key 必失败且不传 key 放行——修复为 `pwd_context.verify` + 配置了 key 则强制校验。
 3. 处置记录历史上 write/read action 命名不一致导致列表恒空；统一为 `dispose_*` 存储并在读取时映射回前端枚举。
-4. 子代理无法跑 bash，由主会话完成 pytest/tsc 验证并修正 2 个测试自身断言问题。
-5. 未在本轮实施的大项（见「未修复/建议」）包括 JWT 权限快照、OpenAPI codegen、复合索引迁移、路由级代码分割、指纹 flapping SQL 下推。
+4. 子代理无法跑 bash，由主会话完成 pytest/tsc 验证并修正测试自身断言问题；第二轮 flapping 子代理停滞后由主会话直接实现。
+5. 未在本轮实施的大项包括 OpenAPI codegen、`/alerts/stats` overview 合并缓存、规则 ReDoS 硬化、API Key 真实 principal、云指标租户隔离。
 
 ### 已修复（Critical / High / 部分 Medium）
 
@@ -73,24 +77,31 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..c50e4b9a17d2997b6fd714c94b1c3
 |------|------|------|
 | High | 告警列表 keyword 每键 refetch | 400ms debounce + Enter/搜索立即提交 |
 | High | 导出对每条告警请求 dispose（N+1） | 仅当前页拉取 dispose；全量/区间导出置空 |
+| High | flapping 无界全量历史 + 分页后过滤 | 窗口函数最近 10 条/7 天窗；flapping_only/stale_only 下推 SQL |
+| High | 批量接警循环 flush/查指纹/commit | 预取指纹 + add_all + 一次 flush/commit |
+| High | 升级检查 N+1 last-notification | LIMIT+时间窗 + 一条聚合查询 |
 | Medium | 渠道 Secret 明文输入框 | 改为 password 输入 |
+| Medium | 缺 `(tenant_id,status,fired_at)` 索引 | Alembic `20260918_alert_indexes` |
+| Medium | 前端无 code splitting | React.lazy + manualChunks |
+
+#### 安全（第二轮）
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| High | JWT 权限/超级用户陈旧快照 | `require_permission`/`require_superuser` 以 DB 角色权限为准 |
+| Medium | 渠道 config 响应泄露密钥 | 敏感字段 `***` 脱敏 + update 回填还原 |
 
 ### 未修复 / 后续建议（按优先级）
 
-1. **High** JWT 权限/超级用户为陈旧快照，降权最长 7 天不生效 — 建议关键写路径查 DB 或权限版本号。
-2. **High** 指纹视图 flapping 无界拉取全量历史 + 分页后过滤导致 total 失真 — 下推 SQL 窗口聚合。
-3. **High** 批量接警循环内 flush/查指纹/发 MQ — 批量化。
-4. **Medium** 缺 `(tenant_id, status, fired_at)` 复合索引；`idx_alerts_labels` B-tree 低价值 — Alembic 迁移。
-5. **Medium** 通知渠道 config 响应仍含完整密钥（后端） — 响应脱敏。
-6. **Medium** 前端无路由级 code splitting（recharts/react-markdown 进主包）。
-7. **Medium** `/alerts/stats` 全表 distinct、列表页 6–7 并发接口 — overview 合并 + 缓存。
-8. **Medium** 规则 `regex` ReDoS；API Key 虚拟用户 id=0 全权；云指标全局表无租户边界。
-9. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、register 用户名/邮箱存在性枚举。
+1. **Medium** `/alerts/stats` 全表 distinct、列表页 6–7 并发接口 — overview 合并 + Redis 缓存。
+2. **Medium** 规则 `regex` ReDoS；API Key 虚拟用户 id=0 全权；云指标全局表无租户边界。
+3. **Medium** 通知渠道存量 config 发送前不重校验 SSRF（仅创建时）。
+4. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、register 用户名/邮箱存在性枚举、TestClient 集成测试。
 
 ### Review 备注（非阻塞）
 
 - dispose silence 目前只写 history，未写 `silenced_until`
-- SSRF 为基础拦截（创建时），不做 DNS 解析；存量 channel 发送前不重校验
+- SSRF 为基础拦截（创建时），不做 DNS 解析
 - 部分安全测试使用源码字符串断言，建议后续补 TestClient 集成测试
 
 ### 覆盖与未覆盖
