@@ -298,6 +298,10 @@ class AuthService:
         if not user or not user.is_active:
             raise AuthenticationError("User not found or inactive")
 
+        if not user.is_approved:
+            logger.warning("auth_refresh_not_approved", user_id=user_id)
+            raise AuthenticationError("Registration pending approval")
+
         # 获取当前租户信息
         tenants = await self.get_user_tenants(user_id)
         current_tenant = next((t for t in tenants if t["is_current"]), tenants[0] if tenants else None)

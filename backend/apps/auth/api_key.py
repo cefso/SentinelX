@@ -177,11 +177,12 @@ class APIKeyAuth:
                 continue
 
             if not token_info.get("is_active", False):
-                return None
+                # 该 key_id 在本租户已停用，继续扫描其他租户
+                continue
 
             expires_at = token_info.get("expires_at")
             if expires_at and datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
-                return None
+                continue
 
             expected_signature = token_info.get("secret_signature")
             actual_signature = self._calculate_signature(key_id, secret_key)

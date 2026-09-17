@@ -4,7 +4,7 @@ SentinelX - 升级服务
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,9 +31,10 @@ class EscalationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def check_escalations(self) -> Dict[str, Any]:
+    async def check_escalations(self, tenant_id: Optional[int] = None) -> Dict[str, Any]:
         """
         检查并处理需要升级的告警
+        tenant_id: 可选，限定只扫描该租户（手动触发时必须传入）
         返回: {escalated_count, notifications_sent, errors}
         """
         stats = {
@@ -43,13 +44,14 @@ class EscalationService:
         }
 
         # 查找触发中且未确认的告警
-        result = await self.db.execute(
-            select(Alert).where(
-                Alert.status == "firing",
-                Alert.acknowledged_at.is_(None),
-                Alert.escalation_count < 4,  # 最多升级4次
-            )
+        query = select(Alert).where(
+            Alert.status == "firing",
+            Alert.acknowledged_at.is_(None),
+            Alert.escalation_count < 4,  # 最多升级4次
         )
+        if tenant_id is not None:
+            query = query.where(Alert.tenant_id == tenant_id)
+        result = await self.db.execute(query)
         alerts = result.scalars().all()
 
         for alert in alerts:
@@ -123,14 +125,16 @@ class EscalationService:
 
         await self.db.commit()
 
-    async def get_escalation_candidates(self) -> List[Alert]:
-        """获取可能需要升级的告警列表"""
-        result = await self.db.execute(
-            select(Alert).where(
-                Alert.status == "firing",
-                Alert.acknowledged_at.is_(None),
-            ).order_by(Alert.escalation_count, Alert.fired_at)
+    async def get_escalation_candidates(self, tenant_id: Optional[int] = None) -> List[Alert]:
+        """获取可能需要升级的告警列表（可选按租户过滤）"""
+        query = select(Alert).where(
+            Alert.status == "firing",
+            Alert.acknowledged_at.is_(None),
         )
+        if tenant_id is not None:
+            query = query.where(Alert.tenant_id == tenant_id)
+        query = query.order_by(Alert.escalation_count, Alert.fired_at)
+        result = await self.db.execute(query)
         return result.scalars().all()
 
     async def check_and_escalate(self, alert_id: int) -> bool:

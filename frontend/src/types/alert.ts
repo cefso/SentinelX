@@ -70,13 +70,31 @@ export interface AlertAggregatedItem {
 
 export interface AlertFilter {
   status?: string
-  severity?: string[]
+  /** 单值，与 GET /alerts 查询参数一致 */
+  severity?: string
   source?: string
   assignee_id?: number
   labels?: Record<string, string>
   start_time?: string
   end_time?: string
   keyword?: string
+}
+
+/** 后端 is_active 为字符串枚举 */
+export type AlertSourceStatus = 'active' | 'inactive'
+
+export interface AlertSource {
+  id: number
+  client_id: string
+  name: string
+  code: string
+  source_type: string
+  config: Record<string, any>
+  description?: string
+  is_active: AlertSourceStatus
+  alert_count: number
+  last_alert_at?: string
+  created_at: string
 }
 
 export interface AlertAggregateMemberItem {

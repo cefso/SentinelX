@@ -4,7 +4,9 @@ SentinelX - 通知Schema
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, field_validator
+import ipaddress
 import re
+from urllib.parse import urlparse
 
 
 # ============ 通知渠道Schema ============
@@ -150,17 +152,47 @@ def _validate_config_by_type(channel_type: str, config: Dict[str, Any]) -> Dict[
     return config
 
 
+def _is_blocked_host(host: str) -> bool:
+    """基础 SSRF 拦截：拒绝本机/内网/链路本地等地址"""
+    if not host:
+        return True
+    host = host.strip().lower()
+    # 去掉 IPv6 方括号
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    if host in {"localhost", "localhost.localdomain", "0.0.0.0", "::1", "0:0:0:0:0:0:0:1"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        # 非 IP 字面量（域名），不做 DNS 解析，放行
+        return False
+    return bool(
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_unspecified
+        or ip.is_multicast
+    )
+
+
 def _validate_url(value: str, field_name: str) -> None:
-    """验证URL格式"""
+    """验证URL格式并做基础 SSRF 拦截"""
     url_pattern = re.compile(
         r'^https?://'
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
         r'localhost|'
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|'
+        r'\[[0-9a-fA-F:.]+\])'
         r'(?::\d+)?'
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
     if not url_pattern.match(value):
         raise ValueError(f"{field_name} 必须是有效的HTTP/HTTPS URL")
+
+    parsed = urlparse(value)
+    if _is_blocked_host(parsed.hostname or ""):
+        raise ValueError(f"{field_name} 不允许指向本机或内网地址")
 
 
 # ============ 测试发送Schema ============

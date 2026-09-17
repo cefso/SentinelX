@@ -2,7 +2,6 @@
 SentinelX - 认证路由
 """
 from datetime import datetime
-from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,7 +13,7 @@ from apps.core.utils import get_client_ip
 from apps.tenant.models import User
 from apps.auth.schemas import (
     LoginRequest, TokenResponse, RefreshTokenRequest, RegisterRequest,
-    SwitchTenantRequest, TenantInfo
+    SwitchTenantRequest, TenantInfo, APIKeyCreateRequest
 )
 from apps.auth.services.auth import AuthService, PermissionService
 from apps.auth.dependencies import (
@@ -235,20 +234,19 @@ async def get_my_permissions(
 
 @router.post("/auth/api-keys")
 async def create_api_key(
-    name: str,
-    expires_days: Optional[int] = None,
-    current_user: User = Depends(get_current_user),
+    request: APIKeyCreateRequest,
+    current_user: User = Depends(require_permission("api_keys:write")),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建API Key"""
+    """创建API Key（JSON body: name / expires_days）"""
     from apps.auth.dependencies import get_token_payload
     payload = get_token_payload()
 
     api_key_auth = APIKeyAuth(db)
     api_key, full_api_key = await api_key_auth.create_api_key(
         tenant_id=payload.get("current_tenant_id"),
-        name=name,
-        expires_days=expires_days,
+        name=request.name,
+        expires_days=request.expires_days,
     )
 
     # 返回完整API Key (只显示一次)
@@ -261,7 +259,7 @@ async def create_api_key(
 
 @router.get("/auth/api-keys")
 async def list_api_keys(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("api_keys:read")),
     db: AsyncSession = Depends(get_db),
 ):
     """列出API Key (不包含secret)"""
@@ -275,7 +273,7 @@ async def list_api_keys(
 @router.delete("/auth/api-keys/{key_id}")
 async def revoke_api_key(
     key_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("api_keys:delete")),
     db: AsyncSession = Depends(get_db),
 ):
     """撤销API Key"""

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '@/services/api'
-import { AlertResponse, AlertStats, AlertAggregatedItem } from '@/types/alert'
+import { AlertResponse, AlertStats, AlertAggregatedItem, AlertSource } from '@/types/alert'
 import { useCloudMetricsMap } from '@/hooks/useCloudMetrics'
 import { formatLocalDateTime } from '@/utils/datetime'
 import { convertToCSV, downloadCSV, generateExportFilename } from '@/utils/export'
@@ -20,18 +20,6 @@ function extractAlertFromAggregated(item: AlertAggregatedItem | AlertResponse): 
   return item as AlertResponse
 }
 
-interface AlertSource {
-  id: number
-  name: string
-  code: string
-  source_type: string
-  config: Record<string, any>
-  description?: string
-  is_active: boolean
-  alert_count: number
-  last_alert_at?: string
-  created_at: string
-}
 import { Bell, AlertTriangle, AlertCircle, XCircle, Search, RotateCcw, Fingerprint, Layers, ScrollText, Zap, Clock, Download, ArrowUp, ArrowDown } from 'lucide-react'
 import { SeverityBadge, StatusBadge } from '@/components/common/Badges'
 import { Pagination } from '@/components/common/Pagination'
@@ -48,6 +36,9 @@ export function AlertsPage() {
     keyword: '',
     fingerprint: '',
   })
+  // 本地搜索输入，避免每次按键触发 refetch
+  const [searchInput, setSearchInput] = useState('')
+  const keywordDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [aggregateMode, setAggregateMode] = useState(true)
   const [showWebhookLogModal, setShowWebhookLogModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -83,6 +74,30 @@ export function AlertsPage() {
       setAggregateMode(false)
     }
   }, [searchParams])
+
+  // keyword 防抖：输入停止 400ms 后写入 filters.keyword
+  useEffect(() => {
+    if (keywordDebounceRef.current) {
+      clearTimeout(keywordDebounceRef.current)
+    }
+    keywordDebounceRef.current = setTimeout(() => {
+      setFilters(prev => (prev.keyword === searchInput ? prev : { ...prev, keyword: searchInput }))
+      setPage(1)
+    }, 400)
+    return () => {
+      if (keywordDebounceRef.current) {
+        clearTimeout(keywordDebounceRef.current)
+      }
+    }
+  }, [searchInput])
+
+  const applyKeywordSearch = () => {
+    if (keywordDebounceRef.current) {
+      clearTimeout(keywordDebounceRef.current)
+    }
+    setFilters(prev => ({ ...prev, keyword: searchInput }))
+    setPage(1)
+  }
 
   const { data: stats } = useQuery<AlertStats>({
     queryKey: ['alertStats'],
@@ -129,7 +144,7 @@ export function AlertsPage() {
     }),
   })
 
-  const { data: alerts, isLoading, refetch } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
+  const { data: alerts, isLoading } = useQuery<{ items: AlertResponse[]; total: number; page: number; page_size: number }>({
     queryKey: ['alerts', page, pageSize, filters, aggregateMode, sortBy, sortOrder, advancedFilters],
     queryFn: () => apiClient.get('/alerts', {
       page,
@@ -233,17 +248,22 @@ export function AlertsPage() {
         return
       }
 
-      // 为每条告警获取处置记录
-      const alertsWithRecords = await Promise.all(
-        allAlerts.map(async (alert) => {
-          try {
-            const records = await apiClient.getDisposeRecords(alert.id)
-            return { ...alert, dispose_records: records }
-          } catch {
-            return { ...alert, dispose_records: [] }
-          }
-        })
-      )
+      // 大批量导出跳过逐条 dispose 拉取，避免 N+1 请求；仅当前页（≤20）附带处置记录
+      let alertsWithRecords: AlertResponse[]
+      if (range === 'current_page') {
+        alertsWithRecords = await Promise.all(
+          allAlerts.map(async (alert) => {
+            try {
+              const records = await apiClient.getDisposeRecords(alert.id)
+              return { ...alert, dispose_records: records }
+            } catch {
+              return { ...alert, dispose_records: [] }
+            }
+          })
+        )
+      } else {
+        alertsWithRecords = allAlerts.map(alert => ({ ...alert, dispose_records: [] }))
+      }
 
       // 转换为 CSV 并下载
       const csv = convertToCSV(alertsWithRecords)
@@ -329,11 +349,17 @@ export function AlertsPage() {
               type="text"
               placeholder="搜索告警标题或内容..."
               className="flex-1 px-3 py-2 border rounded-md"
-              value={filters.keyword}
-              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  applyKeywordSearch()
+                }
+              }}
             />
             <button
-              onClick={() => { setPage(1); refetch(); }}
+              onClick={applyKeywordSearch}
               className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
             >
               搜索
@@ -341,6 +367,7 @@ export function AlertsPage() {
             <button
               onClick={() => {
                 setFilters({ status: '', severity: '', keyword: '', fingerprint: '' })
+                setSearchInput('')
                 setAdvancedFilters({
                   startTime: '',
                   endTime: '',

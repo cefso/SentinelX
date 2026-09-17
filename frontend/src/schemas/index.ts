@@ -1,8 +1,8 @@
 import { z } from "zod"
 
 export const loginSchema = z.object({
-  username: z.string().min(1, "用户名不能为空"),
-  password: z.string().min(1, "密码不能为空"),
+  username: z.string().min(3, "用户名至少3个字符").max(64, "用户名最多64个字符"),
+  password: z.string().min(6, "密码至少6个字符").max(128, "密码最多128个字符"),
 })
 
 export const registerSchema = z.object({

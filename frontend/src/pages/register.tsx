@@ -37,8 +37,9 @@ export function RegisterPage() {
   })
 
   useEffect(() => {
-    apiClient.get<{ tenants: PublicTenant[] }>('/tenants/public')
-      .then(res => setTenants(res.tenants || []))
+    // GET /tenants/public 返回裸数组
+    apiClient.get<PublicTenant[]>('/tenants/public')
+      .then(res => setTenants(Array.isArray(res) ? res : []))
       .catch(() => setTenants([]))
   }, [])
 

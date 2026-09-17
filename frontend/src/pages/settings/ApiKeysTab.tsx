@@ -108,9 +108,10 @@ function CreateApiKeyModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Body 与后端 Pydantic 模型对齐：name 必填，expires_days 可选
     createMutation.mutate({
       name: formData.name,
-      expires_days: formData.expires_days,
+      ...(formData.expires_days != null ? { expires_days: formData.expires_days } : {}),
     })
   }
 

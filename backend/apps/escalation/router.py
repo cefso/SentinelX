@@ -23,7 +23,7 @@ async def list_escalation_candidates(
     列出所有触发中且未确认的告警（可能需要升级）
     """
     service = EscalationService(db)
-    alerts = await service.get_escalation_candidates()
+    alerts = await service.get_escalation_candidates(tenant_id=tenant_id)
     return {
         "total": len(alerts),
         "items": [
@@ -38,7 +38,6 @@ async def list_escalation_candidates(
                 "assignee_name": a.assignee_name,
             }
             for a in alerts
-            if a.tenant_id == tenant_id
         ],
     }
 
@@ -78,7 +77,7 @@ async def manual_escalate(
     sender = NotificationService(db)
     channel_ids = alert.notification_channels or []
     if channel_ids:
-        await sender.send_alert_notifications(alert, channel_ids, alert.trace_id)
+        await sender.send_alert_notifications(alert, channel_ids, trace_id=alert.trace_id)
 
     return {
         "success": True,
@@ -98,7 +97,7 @@ async def run_escalation_check(
     扫描所有告警，执行升级逻辑（供定时任务或手动调用）
     """
     service = EscalationService(db)
-    stats = await service.check_escalations()
+    stats = await service.check_escalations(tenant_id=tenant_id)
     return {
         "success": True,
         "stats": stats,

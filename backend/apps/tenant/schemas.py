@@ -35,8 +35,7 @@ class TenantUpdate(BaseModel):
 
 class TenantResponse(TenantBase):
     id: int
-    api_token: Optional[str] = None
-    webhook_api_key: Optional[str] = None  # 不返回给前端，只用于内部
+    # 故意不返回 api_token / webhook_api_key：密钥永不出现在列表/详情响应中
     max_alerts: int
     max_users: int
     max_rules: int

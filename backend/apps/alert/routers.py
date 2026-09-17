@@ -357,6 +357,15 @@ async def create_source(
     current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """创建告警源"""
+    existing = await db.execute(
+        select(AlertSource).where(
+            AlertSource.tenant_id == tenant_id,
+            AlertSource.code == request.code,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Alert source code already exists")
+
     source = AlertSource(
         tenant_id=tenant_id,
         name=request.name,
@@ -392,6 +401,7 @@ async def update_source(
     if "code" in updates and updates["code"] != source.code:
         existing = await db.execute(
             select(AlertSource).where(
+                AlertSource.tenant_id == tenant_id,
                 AlertSource.code == updates["code"],
                 AlertSource.id != source_id,
             )
@@ -436,6 +446,7 @@ async def toggle_source(
     source_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """切换告警源启用/禁用状态"""
     source = await db.get(AlertSource, source_id)
@@ -530,7 +541,7 @@ async def receive_webhook_by_source(
     - tenant_slug: 租户 slug (如 sentinelx)
     - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/aliyun_cms/aliyun_cms2/tencent/huawei/custom)
     - identifier: 告警源 client_id (或 id)
-    - X-API-Key: 租户的 webhook API Key (可选)
+    - X-API-Key: 租户的 webhook API Key（若租户已配置则必填）
     支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
     from apps.alert.adapters import AdapterFactory
@@ -557,12 +568,12 @@ async def receive_webhook_by_source(
         )
         alert_source = result.scalar_one_or_none()
 
-    if not alert_source or str(alert_source.tenant_id) != tenant_id:
+    if not alert_source or alert_source.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail=f"AlertSource not found: {identifier}")
 
-    # 3. 验证 API Key (可选)
-    if x_api_key and tenant.webhook_api_key:
-        if not verify_api_key(x_api_key, tenant.webhook_api_key):
+    # 3. 验证 API Key：租户配置了 key 则必须提供正确 X-API-Key
+    if tenant.webhook_api_key:
+        if not x_api_key or not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 4. 根据 Content-Type 解析请求数据
@@ -689,10 +700,10 @@ async def receive_aliyun_cms_webhook(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    # 2. 验证 API Key (可选，如果有配置的话)
+    # 2. 验证 API Key：租户配置了 key 则必须提供正确 X-API-Key
     tenant_id = tenant.id
-    if x_api_key and tenant.webhook_api_key:
-        if not verify_api_key(x_api_key, tenant.webhook_api_key):
+    if tenant.webhook_api_key:
+        if not x_api_key or not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 3. 解析 form data
@@ -748,6 +759,7 @@ async def list_alerts(
     stale_only: bool = Query(False, description="仅显示长时间未更新告警"),
     sort_by: Optional[str] = Query(None, description="排序字段: duration/severity/count"),
     sort_order: str = Query("desc", description="排序方向: asc/desc"),
+    assignee_id: Optional[int] = Query(None, description="处理人ID过滤"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -760,6 +772,8 @@ async def list_alerts(
         base_filter.append(Alert.severity == severity)
     if source:
         base_filter.append(Alert.source == source)
+    if assignee_id is not None:
+        base_filter.append(Alert.assignee_id == assignee_id)
     if keyword:
         base_filter.append(or_(
             Alert.title.ilike(f"%{keyword}%"),
@@ -1272,7 +1286,7 @@ async def update_alert(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("alerts:write")),
 ):
-    """更新告警"""
+    """更新告警（白名单字段 + 合法状态迁移）"""
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
@@ -1283,6 +1297,55 @@ async def update_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
+    # 仅允许业务字段，禁止通过 setattr 改时间戳等系统字段
+    allowed_fields = {
+        "severity",
+        "assignee_id",
+        "assignee_name",
+        "annotations",
+        "silenced_until",
+        "status",
+    }
+    # 合法状态迁移
+    legal_status_transitions = {
+        "firing": {"acknowledged", "resolved", "suppressed"},
+        "acknowledged": {"resolved", "firing", "suppressed"},
+        "suppressed": {"firing", "resolved"},
+        "resolved": {"firing"},
+        "deduplicated": {"firing", "resolved"},
+        "aggregated": {"firing", "resolved"},
+    }
+
+    updates = request.model_dump(exclude_unset=True)
+    updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    previous_status = alert.status
+    previous_severity = alert.severity
+    now = datetime.now(timezone.utc)
+
+    if "status" in updates:
+        new_status = updates["status"]
+        if new_status != previous_status:
+            allowed_next = legal_status_transitions.get(previous_status, set())
+            if new_status not in allowed_next:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status transition: {previous_status} -> {new_status}",
+                )
+            # 同步维护时间戳，不允许客户端直接传入
+            if new_status == "acknowledged" and alert.acknowledged_at is None:
+                alert.acknowledged_at = now
+            elif new_status == "resolved" and alert.resolved_at is None:
+                alert.resolved_at = now
+            elif new_status == "suppressed" and alert.silenced_until is None and "silenced_until" not in updates:
+                # suppressed 且未提供 silenced_until 时不强制写时间戳
+                pass
+        else:
+            updates.pop("status", None)
+
+    if not updates:
+        return alert
+
     # 记录历史
     history = AlertHistory(
         tenant_id=tenant_id,
@@ -1290,12 +1353,13 @@ async def update_alert(
         action="updated",
         operator_id=current_user.id,
         operator_name=current_user.username,
-        old_value={"status": alert.status, "severity": alert.severity},
+        old_value={"status": previous_status, "severity": previous_severity},
+        new_value={k: (v if not isinstance(v, datetime) else v.isoformat()) for k, v in updates.items()},
     )
     db.add(history)
 
-    # 更新字段
-    for field, value in request.model_dump(exclude_unset=True).items():
+    # 更新白名单字段
+    for field, value in updates.items():
         setattr(alert, field, value)
 
     await db.commit()
@@ -1323,6 +1387,7 @@ async def dispose_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     now = datetime.now(timezone.utc)
+    previous_status = alert.status
 
     # 根据处置类型更新告警状态
     if request.action == 'acknowledge' and alert.status == 'firing':
@@ -1332,15 +1397,14 @@ async def dispose_alert(
         alert.status = 'resolved'
         alert.resolved_at = now
 
-    # 创建处置记录（使用 AlertHistory 存储）
-    # 将 dispose_* 映射到新的操作类型
+    # 统一写入 dispose_* 前缀，与系统历史动作区分；读取时再映射回前端动作
     action_mapping = {
-        'acknowledge': 'acknowledged',
-        'resolve': 'resolved',
-        'silence': 'silenced',
-        'note': 'updated',
+        'acknowledge': 'dispose_acknowledge',
+        'resolve': 'dispose_resolve',
+        'silence': 'dispose_silence',
+        'note': 'dispose_note',
     }
-    history_action = action_mapping.get(request.action, 'updated')
+    history_action = action_mapping.get(request.action, 'dispose_note')
 
     history = AlertHistory(
         tenant_id=tenant_id,
@@ -1349,8 +1413,13 @@ async def dispose_alert(
         description=request.comment,
         operator_id=current_user.id,
         operator_name=current_user.username,
-        old_value={"status": alert.status},
-        new_value={"dispose_action": request.action, "comment": request.comment},
+        old_value={"status": previous_status},
+        new_value={
+            "dispose_action": request.action,
+            "comment": request.comment,
+            "previous_status": previous_status,
+            "new_status": alert.status,
+        },
     )
     db.add(history)
 
@@ -1515,7 +1584,12 @@ async def diagnose_alert(
     # 转换 bytes 为字符串
     trace_data = _decode_redis_dict(trace_data_raw)
 
-    if trace_data.get("tenant_id") != tenant_id:
+    # Redis 中 tenant_id 可能是 str，统一转 int 再比较
+    try:
+        trace_tenant_id = int(trace_data.get("tenant_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if trace_tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 获取步骤
@@ -1807,6 +1881,8 @@ async def list_webhook_logs(
     status: Optional[str] = Query(None, description="筛选状态: success/parse_error/format_error/server_error"),
     source_type: Optional[str] = Query(None, description="筛选来源类型"),
     dismissed: Optional[bool] = Query(None, description="是否已忽略"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1821,6 +1897,14 @@ async def list_webhook_logs(
         query = query.where(WebhookLog.source_type == source_type)
     if dismissed is not None:
         query = query.where(WebhookLog.is_dismissed == (1 if dismissed else 0))
+    if start_time:
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        query = query.where(WebhookLog.created_at >= start_time)
+    if end_time:
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        query = query.where(WebhookLog.created_at <= end_time)
 
     # 总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -1859,6 +1943,7 @@ async def list_webhook_logs(
 
 class WebhookLogDismissRequest(BaseModel):
     id: Optional[int] = None
+    ids: Optional[List[int]] = None
     dismiss_all: Optional[bool] = False
 
 
@@ -1870,26 +1955,41 @@ async def dismiss_webhook_logs(
     current_user: User = Depends(require_permission("alerts:write")),
 ):
     """忽略 Webhook 日志"""
+    from sqlalchemy import update as sa_update
+
     if request.dismiss_all:
-        # 忽略所有未忽略的日志
+        # 单条批量 UPDATE，避免全量加载
         result = await db.execute(
-            select(WebhookLog).where(
+            sa_update(WebhookLog)
+            .where(
                 WebhookLog.tenant_id == tenant_id,
                 WebhookLog.is_dismissed == 0,
             )
+            .values(is_dismissed=1)
         )
-        logs = result.scalars().all()
-        for log in logs:
-            log.is_dismissed = 1
         await db.commit()
-        return {"message": f"Dismissed {len(logs)} webhook logs", "count": len(logs)}
-    elif request.id:
-        # 忽略单条日志
-        log = await db.get(WebhookLog, request.id)
-        if not log or log.tenant_id != tenant_id:
-            raise HTTPException(status_code=404, detail="Webhook log not found")
-        log.is_dismissed = 1
-        await db.commit()
-        return {"message": "Webhook log dismissed"}
-    else:
-        raise HTTPException(status_code=400, detail="Either id or dismiss_all must be provided")
+        return {"message": f"Dismissed {result.rowcount} webhook logs", "count": result.rowcount}
+
+    target_ids: List[int] = []
+    if request.id:
+        target_ids.append(request.id)
+    if request.ids:
+        target_ids.extend(request.ids)
+
+    if not target_ids:
+        raise HTTPException(status_code=400, detail="Either id, ids or dismiss_all must be provided")
+
+    # 去重并批量更新（租户过滤）
+    unique_ids = list(dict.fromkeys(target_ids))
+    result = await db.execute(
+        sa_update(WebhookLog)
+        .where(
+            WebhookLog.tenant_id == tenant_id,
+            WebhookLog.id.in_(unique_ids),
+        )
+        .values(is_dismissed=1)
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Webhook log not found")
+    return {"message": f"Dismissed {result.rowcount} webhook logs", "count": result.rowcount}

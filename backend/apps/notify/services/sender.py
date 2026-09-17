@@ -65,6 +65,18 @@ class NotificationService:
         if not channel.is_active:
             return False, f"Channel {channel_id} is inactive"
 
+        # 跨租户校验：渠道必须属于告警所在租户
+        if channel.tenant_id != alert.tenant_id:
+            logger.warning(
+                "notification_channel_tenant_mismatch",
+                alert_id=alert.id,
+                channel_id=channel_id,
+                channel_tenant_id=channel.tenant_id,
+                alert_tenant_id=alert.tenant_id,
+                trace_id=trace_id,
+            )
+            return False, f"Channel {channel_id} does not belong to tenant {alert.tenant_id}"
+
         # 获取模板
         template_content = None
         if template_id is not None:

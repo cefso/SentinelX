@@ -64,3 +64,9 @@ class TokenPayload(BaseModel):
     permissions: List[str] = []
     exp: int
     type: str  # access / refresh
+
+
+class APIKeyCreateRequest(BaseModel):
+    """创建 API Key 请求体（与前端 JSON body 对齐）"""
+    name: str = Field(..., min_length=1, max_length=128)
+    expires_days: Optional[int] = Field(None, ge=1, le=3650)
