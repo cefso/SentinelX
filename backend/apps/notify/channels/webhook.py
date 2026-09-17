@@ -7,6 +7,7 @@ import json
 
 from apps.notify.channels.base import NotificationChannel
 from apps.alert.models import Alert
+from apps.notify.schemas import validate_outbound_url
 import structlog
 
 logger = structlog.get_logger()
@@ -26,6 +27,8 @@ class WebhookChannel(NotificationChannel):
             return False, "Missing webhook_url"
 
         try:
+            # 发送前重校验（覆盖存量配置被改写/绕过创建校验的场景）
+            validate_outbound_url(webhook_url, "webhook_url")
             # 格式化消息
             content = self.format_message(alert, template)
 

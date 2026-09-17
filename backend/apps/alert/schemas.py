@@ -207,6 +207,14 @@ class AlertStats(BaseModel):
     aggregated: int = Field(0, description="已聚合子告警数")
 
 
+class AlertOverviewResponse(BaseModel):
+    """告警总览：stats + 去重触发/级别计数（合并前端多个 page_size=1 请求）"""
+    stats: AlertStats
+    firing_dedup: int = Field(0, description="触发中告警按指纹去重数量")
+    critical_dedup: int = Field(0, description="触发中 critical 去重数量")
+    high_dedup: int = Field(0, description="触发中 high 去重数量")
+
+
 # ============ 告警趋势Schema ============
 
 class AlertTrendItem(BaseModel):
@@ -287,6 +295,9 @@ class DisposeRequest(BaseModel):
     """处置请求"""
     action: Literal['note', 'acknowledge', 'resolve', 'silence'] = Field(..., description="处置类型: note/acknowledge/resolve/silence")
     comment: str = Field(..., min_length=1, max_length=1000, description="处理备注")
+    silence_minutes: Optional[int] = Field(
+        None, ge=1, le=10080, description="silence 动作的静默分钟数，默认 60"
+    )
 
 
 class DisposeRecordResponse(BaseModel):

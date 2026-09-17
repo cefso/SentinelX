@@ -7,6 +7,7 @@ import httpx
 
 from apps.notify.channels.base import NotificationChannel
 from apps.alert.models import Alert
+from apps.notify.schemas import validate_outbound_url
 import structlog
 
 logger = structlog.get_logger()
@@ -25,6 +26,7 @@ class FeishuChannel(NotificationChannel):
             return False, "Missing webhook_url"
 
         try:
+            validate_outbound_url(webhook_url, "webhook_url")
             # 格式化消息
             content = self.format_message(alert, template)
 

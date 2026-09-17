@@ -92,8 +92,31 @@ class NotificationWorker:
                 logger.warning("alert_not_found", alert_id=alert_id)
                 return
 
+            # 二次校验：过滤不属于告警租户的渠道
+            from apps.rule.models import NotificationChannel as ChannelModel
+
+            channel_result = await db.execute(
+                select(ChannelModel.id).where(
+                    ChannelModel.id.in_(channel_ids),
+                    ChannelModel.tenant_id == alert.tenant_id,
+                )
+            )
+            valid_channel_ids = [row[0] for row in channel_result.all()]
+            dropped = set(channel_ids) - set(valid_channel_ids)
+            if dropped:
+                logger.warning(
+                    "notification_channels_tenant_filtered",
+                    alert_id=alert_id,
+                    alert_tenant_id=alert.tenant_id,
+                    dropped_channel_ids=sorted(dropped),
+                    trace_id=trace_id,
+                )
+            if not valid_channel_ids:
+                logger.warning("notification_no_valid_channels", alert_id=alert_id)
+                return
+
             # 发送通知
-            results = await service.send_alert_notifications(alert, channel_ids, template_map, trace_id)
+            results = await service.send_alert_notifications(alert, valid_channel_ids, template_map, trace_id)
 
             # 记录结果
             for channel_id, (success, error) in results.items():

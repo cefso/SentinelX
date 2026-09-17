@@ -3,7 +3,7 @@ SentinelX - 规则Schema
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from apps.alert.schemas import AlertResponse
 from apps.rule.models import AlertRule
@@ -61,6 +61,25 @@ class Condition(BaseModel):
     operator: str = Field(..., description="操作符: eq/ne/gt/gte/lt/lte/contains/not_contains/regex/in/not_in/exists/is_empty")
     value: Any = Field(..., description="比较值")
     key: Optional[str] = Field(None, description="标签字段的 key（用于 labels 字段的初始化）")
+
+    @field_validator("value")
+    @classmethod
+    def _reject_unsafe_regex(cls, v: Any, info) -> Any:
+        operator = info.data.get("operator")
+        if operator != "regex":
+            return v
+        if not isinstance(v, str):
+            raise ValueError("regex 条件的 value 必须是字符串")
+        if len(v) > 256:
+            raise ValueError("regex 模式过长（最多 256 字符）")
+        import re as _re
+        if _re.search(r"\([^)]*[+*][^)]*\)[+*]", v):
+            raise ValueError("regex 不允许嵌套量词（灾难性回溯风险）")
+        try:
+            _re.compile(v)
+        except _re.error as e:
+            raise ValueError(f"无效 regex: {e}") from e
+        return v
 
 
 class RuleBase(BaseModel):

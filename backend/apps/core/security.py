@@ -122,9 +122,21 @@ def verify_signature(secret: str, timestamp: str, body: str, signature: str) -> 
 
 
 def verify_api_key(provided_key: str, stored_key: str) -> bool:
-    """常量时间比较 API key（用于 webhook 认证）"""
+    """
+    校验 webhook API key。
+
+    存储侧（tenant.webhook_api_key）使用 bcrypt 哈希（hash_password），
+    因此必须用 passlib verify，而不是对哈希做明文 compare_digest。
+    """
     if not provided_key or not stored_key:
         return False
+    # bcrypt / passlib 格式
+    if stored_key.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            return bool(pwd_context.verify(provided_key, stored_key))
+        except (ValueError, TypeError):
+            return False
+    # 兼容历史明文存储
     return hmac.compare_digest(provided_key, stored_key)
 
 

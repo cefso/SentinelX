@@ -25,6 +25,27 @@ from apps.tenant.schemas import (
 router = APIRouter()
 
 
+async def _require_tenant_member(
+    db: AsyncSession,
+    current_user: User,
+    tenant_id: int,
+) -> None:
+    """校验当前用户是该租户成员，或为系统管理员。否则 403。"""
+    if current_user.is_system or current_user.is_superuser:
+        return
+    result = await db.execute(
+        select(UserTenant.id).where(
+            UserTenant.user_id == current_user.id,
+            UserTenant.tenant_id == tenant_id,
+        ).limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this tenant",
+        )
+
+
 # ============ 公开接口（无需认证） ============
 
 @router.get("/tenants/public", response_model=list[PublicTenantResponse])
@@ -49,11 +70,24 @@ async def list_tenants(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("tenants:read")),
 ):
-    """获取租户列表"""
-    result = await db.execute(
-        select(Tenant).where(Tenant.is_deleted == False).order_by(Tenant.id)
-    )
-    tenants = result.scalars().all()
+    """获取租户列表（非系统管理员仅返回所属租户）"""
+    if current_user.is_system:
+        result = await db.execute(
+            select(Tenant).where(Tenant.is_deleted == False).order_by(Tenant.id)
+        )
+        tenants = result.scalars().all()
+    else:
+        result = await db.execute(
+            select(Tenant)
+            .join(UserTenant, UserTenant.tenant_id == Tenant.id)
+            .where(
+                UserTenant.user_id == current_user.id,
+                Tenant.is_deleted == False,
+            )
+            .order_by(Tenant.id)
+            .distinct()
+        )
+        tenants = result.scalars().all()
     return tenants
 
 
@@ -134,20 +168,20 @@ async def get_tenant(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取租户详情"""
+    """获取租户详情（需为租户成员或系统管理员；不返回任何密钥）"""
+    await _require_tenant_member(db, current_user, tenant_id)
+
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    # 构建响应，包含 webhook_url
+    # 构建响应；api_token / webhook_api_key 故意不返回
     return {
         "id": tenant.id,
         "name": tenant.name,
         "slug": tenant.slug,
         "config": tenant.config,
-        "api_token": tenant.api_token,
-        "webhook_api_key": tenant.webhook_api_key,
         "max_alerts": tenant.max_alerts,
         "max_users": tenant.max_users,
         "max_rules": tenant.max_rules,
@@ -187,9 +221,16 @@ async def update_tenant(
 async def generate_webhook_key(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("tenants:write")),
+    current_tenant_id: int = Depends(get_current_tenant_id),
 ):
-    """生成或重置租户的 Webhook API Key"""
+    """生成或重置租户的 Webhook API Key（仅本租户或系统管理员）"""
+    if not current_user.is_system and current_tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage webhook key for another tenant",
+        )
+
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -214,9 +255,16 @@ async def generate_webhook_key(
 async def get_webhook_key_info(
     tenant_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("tenants:read")),
+    current_tenant_id: int = Depends(get_current_tenant_id),
 ):
-    """获取租户的 Webhook URL 信息（不包含 API Key）"""
+    """获取租户的 Webhook URL 信息（不包含 API Key；仅本租户或系统管理员）"""
+    if not current_user.is_system and current_tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot view webhook key info for another tenant",
+        )
+
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if not tenant:
@@ -447,21 +495,28 @@ async def reject_user(
 async def list_users(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users:read")),
 ):
-    """获取当前租户的用户列表（包括未分配租户的用户）"""
-    # 查询所有用户，左连接当前租户的关联
-    result = await db.execute(
-        select(User, UserTenant)
-        .outerjoin(
-            UserTenant,
-            (UserTenant.user_id == User.id) & (UserTenant.tenant_id == tenant_id)
+    """获取当前租户的用户列表（系统管理员可查看全部用户）"""
+    if current_user.is_system:
+        result = await db.execute(
+            select(User).where(User.is_deleted == False).order_by(User.id)
         )
-        .where(User.is_deleted == False)
+        users = result.scalars().all()
+        return users
+
+    # 仅当前租户成员
+    result = await db.execute(
+        select(User)
+        .join(UserTenant, UserTenant.user_id == User.id)
+        .where(
+            User.is_deleted == False,
+            UserTenant.tenant_id == tenant_id,
+        )
         .order_by(User.id)
+        .distinct()
     )
-    rows = result.all()
-    users = [user for user, _ in rows]
+    users = result.scalars().all()
     return users
 
 
@@ -581,10 +636,20 @@ async def update_user(
 async def update_user_role(
     user_id: int,
     request: UserRoleUpdate,
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("users:write")),
 ):
-    """更新用户在指定租户的角色"""
+    """更新用户在指定租户的角色（非系统管理员仅能操作当前租户）"""
+    # 跨租户提权防护：每个目标租户必须等于当前租户，除非系统管理员
+    if not current_user.is_system:
+        for tr in request.tenant_roles:
+            if tr.tenant_id != tenant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot assign roles in another tenant",
+                )
+
     # 处理每个租户角色
     for tr in request.tenant_roles:
         # 检查角色是否存在且属于指定租户
@@ -634,7 +699,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """修改密码"""
+    """修改密码：改自己必须校验 old_password；改他人需 users:write 且同租户成员"""
     result = await db.execute(
         select(User)
         .join(UserTenant, UserTenant.user_id == User.id)
@@ -647,8 +712,30 @@ async def change_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if request.old_password and not verify_password(request.old_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Old password incorrect")
+    if user_id == current_user.id:
+        # 改自己：必须提供并校验旧密码
+        if not request.old_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="old_password is required",
+            )
+        if not verify_password(request.old_password, user.password_hash):
+            raise HTTPException(status_code=400, detail="Old password incorrect")
+    else:
+        # 改他人：必须有 users:write（或 admin/* / 系统管理员）
+        payload = get_token_payload()
+        permissions = payload.get("permissions", []) if payload else []
+        has_write = (
+            current_user.is_system
+            or "*" in permissions
+            or "admin" in permissions
+            or "users:write" in permissions
+        )
+        if not has_write:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied: users:write",
+            )
 
     user.password_hash = hash_password(request.new_password)
     await db.commit()
@@ -658,24 +745,33 @@ async def change_password(
 @router.post("/users/{user_id}/reset-permissions")
 async def reset_user_permissions(
     user_id: int,
+    tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("users:write")),
 ):
-    """重置用户权限 - 删除用户的所有租户关联"""
+    """重置用户权限 - 仅删除当前租户的关联；系统管理员可清全部"""
     # 不能重置自己的权限
     if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot reset your own permissions")
 
-    # 查找用户的所有租户关联
-    result = await db.execute(
-        select(UserTenant).where(UserTenant.user_id == user_id)
-    )
+    # 查找用户的租户关联
+    if current_user.is_system:
+        result = await db.execute(
+            select(UserTenant).where(UserTenant.user_id == user_id)
+        )
+    else:
+        result = await db.execute(
+            select(UserTenant).where(
+                UserTenant.user_id == user_id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
     user_tenants = result.scalars().all()
 
     if not user_tenants:
         raise HTTPException(status_code=404, detail="User has no tenant associations")
 
-    # 删除所有关联
+    # 删除本租户关联（系统管理员可删全部）
     for ut in user_tenants:
         await db.delete(ut)
 

@@ -18,9 +18,10 @@ from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.mq import get_mq_async
 from apps.core.security import verify_api_key
+from apps.core.schemas import AlertStatus, MessageResponse
 
 logger = structlog.get_logger()
-from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission, require_superuser
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember, WebhookLog
 from apps.tenant.models import Tenant, User
 from apps.alert.schemas import (
@@ -34,6 +35,7 @@ from apps.alert.schemas import (
     AlertTrendItem, AlertTrendResponse, SourceAlertStats, SourceAlertStatsResponse,
     DisposeRequest, DisposeRecordResponse,
     InstanceAlertGroupResponse,
+    AlertOverviewResponse,
 )
 from apps.alert.services.dispatcher import AlertDispatcher
 from apps.alert.services.alert_utils import build_alert_response
@@ -65,57 +67,26 @@ def generate_trace_id() -> str:
     return str(uuid.uuid4())[:12]
 
 
-async def _create_single_alert(
-    alert_data: AlertCreate,
-    tenant_id: int,
+async def _lookup_active_fingerprints(
     db: AsyncSession,
-    redis,
-    source_id: int = None,
-    status: str = "firing",
-) -> dict:
-    """创建单个告警并分发到 MQ"""
-    trace_id = alert_data.trace_id or generate_trace_id()
-    alert = _build_alert(alert_data, tenant_id, source_id, status, trace_id)
-    db.add(alert)
-    await db.flush()
+    tenant_id: int,
+    fingerprints: List[str],
+) -> set:
+    """一条 SQL 查出已有 firing/suppressed 告警的指纹集合"""
+    unique_fps = {fp for fp in fingerprints if fp}
+    if not unique_fps:
+        return set()
 
-    # 检查该指纹是否存在 firing/suppressed 状态的告警
-    fingerprint = alert_data.fingerprint or generate_fingerprint(alert_data, tenant_id, source_id)
-    existing_result = await db.execute(
-        select(Alert.id).where(
+    result = await db.execute(
+        select(Alert.fingerprint)
+        .where(
             Alert.tenant_id == tenant_id,
-            Alert.fingerprint == fingerprint,
+            Alert.fingerprint.in_(unique_fps),
             Alert.status.in_(["firing", "suppressed"]),
-        ).limit(1)
+        )
+        .distinct()
     )
-    existing_alert = existing_result.scalar_one_or_none()
-
-    # 记录告警历史：首次收到记录 received，后续触发记录 fired
-    if existing_alert:
-        history_action = "fired"
-        history_desc = "告警触发"
-    else:
-        history_action = "received"
-        history_desc = "告警接入"
-
-    history = AlertHistory(
-        tenant_id=tenant_id,
-        alert_id=alert.id,
-        action=history_action,
-        description=history_desc,
-        new_value={"status": status, "source": alert.source},
-    )
-    db.add(history)
-
-    mq = await get_mq_async()
-    await mq.send("alerts_raw", {
-        "alert_id": alert.id,
-        "tenant_id": tenant_id,
-        "trace_id": trace_id,
-        "action": "process"
-    })
-
-    return {"id": alert.id, "trace_id": trace_id, "db_alert": alert}
+    return set(result.scalars().all())
 
 
 async def _create_alert_batch(
@@ -124,17 +95,99 @@ async def _create_alert_batch(
     db: AsyncSession,
     redis,
     source_id: int = None,
+    status: str = "firing",
+    commit: bool = True,
 ) -> dict:
-    """批量创建告警并分发"""
-    results = []
-    for alert_data in alerts:
-        result = await _create_single_alert(alert_data, tenant_id, db, redis, source_id)
-        results.append(result)
+    """
+    批量创建告警并分发。
 
-    await db.commit()
+    - 一条 SELECT 预取已有 firing/suppressed 指纹（去重/聚合语义）
+    - 全部 Alert 一次 flush，History 批量 add
+    - MQ 不支持批量 send，循环发送但不逐条 commit
+    """
+    if not alerts:
+        return {"received": 0, "alerts": []}
+
+    # 1. 预计算指纹，一条 SQL 查已有活跃指纹
+    fingerprints = [
+        a.fingerprint or generate_fingerprint(a, tenant_id, source_id)
+        for a in alerts
+    ]
+    active_fps = await _lookup_active_fingerprints(db, tenant_id, fingerprints)
+
+    # 2. 构建全部 Alert（同批内重复指纹：首条 received，后续 fired）
+    built = []
+    for alert_data, fingerprint in zip(alerts, fingerprints):
+        trace_id = alert_data.trace_id or generate_trace_id()
+        alert = _build_alert(alert_data, tenant_id, source_id, status, trace_id)
+        # _build_alert 内部可能再次生成指纹，与预计算结果对齐
+        alert.fingerprint = fingerprint
+        built.append((alert, trace_id, fingerprint))
+
+    db.add_all([alert for alert, _, _ in built])
+    await db.flush()
+
+    # 3. 批量写 history
+    for alert, _trace_id, fingerprint in built:
+        if fingerprint in active_fps:
+            history_action = "fired"
+            history_desc = "告警触发"
+        else:
+            history_action = "received"
+            history_desc = "告警接入"
+            # 同批后续相同指纹视为再次触发
+            active_fps.add(fingerprint)
+
+        db.add(AlertHistory(
+            tenant_id=tenant_id,
+            alert_id=alert.id,
+            action=history_action,
+            description=history_desc,
+            new_value={"status": status, "source": alert.source},
+        ))
+
+    # 4. 一次 commit（可选），再发 MQ —— 避免逐条 commit
+    if commit:
+        await db.commit()
+
+    mq = await get_mq_async()
+    for alert, trace_id, _fingerprint in built:
+        await mq.send("alerts_raw", {
+            "alert_id": alert.id,
+            "tenant_id": tenant_id,
+            "trace_id": trace_id,
+            "action": "process"
+        })
+
     return {
-        "received": len(results),
-        "alerts": [{"id": r["id"], "trace_id": r["trace_id"]} for r in results]
+        "received": len(built),
+        "alerts": [{"id": alert.id, "trace_id": trace_id} for alert, trace_id, _ in built],
+    }
+
+
+async def _create_single_alert(
+    alert_data: AlertCreate,
+    tenant_id: int,
+    db: AsyncSession,
+    redis,
+    source_id: int = None,
+    status: str = "firing",
+) -> dict:
+    """创建单个告警并分发到 MQ（复用批量路径，单条不 commit 由调用方收口）"""
+    # 直接复用批量构建逻辑，但保持单条响应格式
+    batch = await _create_alert_batch(
+        [alert_data],
+        tenant_id,
+        db,
+        redis,
+        source_id=source_id,
+        status=status,
+        commit=False,
+    )
+    item = batch["alerts"][0]
+    return {
+        "id": item["id"],
+        "trace_id": item["trace_id"],
     }
 
 
@@ -357,6 +410,15 @@ async def create_source(
     current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """创建告警源"""
+    existing = await db.execute(
+        select(AlertSource).where(
+            AlertSource.tenant_id == tenant_id,
+            AlertSource.code == request.code,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Alert source code already exists")
+
     source = AlertSource(
         tenant_id=tenant_id,
         name=request.name,
@@ -392,6 +454,7 @@ async def update_source(
     if "code" in updates and updates["code"] != source.code:
         existing = await db.execute(
             select(AlertSource).where(
+                AlertSource.tenant_id == tenant_id,
                 AlertSource.code == updates["code"],
                 AlertSource.id != source_id,
             )
@@ -436,6 +499,7 @@ async def toggle_source(
     source_id: int,
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("alert_sources:write")),
 ):
     """切换告警源启用/禁用状态"""
     source = await db.get(AlertSource, source_id)
@@ -530,7 +594,7 @@ async def receive_webhook_by_source(
     - tenant_slug: 租户 slug (如 sentinelx)
     - source_type: 告警源类型 (prometheus/grafana/zabbix/aliyun/aliyun_cms/aliyun_cms2/tencent/huawei/custom)
     - identifier: 告警源 client_id (或 id)
-    - X-API-Key: 租户的 webhook API Key (可选)
+    - X-API-Key: 租户的 webhook API Key（若租户已配置则必填）
     支持 Content-Type: application/json 和 application/x-www-form-urlencoded
     """
     from apps.alert.adapters import AdapterFactory
@@ -561,9 +625,9 @@ async def receive_webhook_by_source(
     if not alert_source or alert_source.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail=f"AlertSource not found: {identifier}")
 
-    # 3. 验证 API Key (可选)
-    if x_api_key and tenant.webhook_api_key:
-        if not verify_api_key(x_api_key, tenant.webhook_api_key):
+    # 3. 验证 API Key：租户配置了 key 则必须提供正确 X-API-Key
+    if tenant.webhook_api_key:
+        if not x_api_key or not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 4. 根据 Content-Type 解析请求数据
@@ -690,10 +754,10 @@ async def receive_aliyun_cms_webhook(
     if not tenant.is_active:
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
-    # 2. 验证 API Key (可选，如果有配置的话)
+    # 2. 验证 API Key：租户配置了 key 则必须提供正确 X-API-Key
     tenant_id = tenant.id
-    if x_api_key and tenant.webhook_api_key:
-        if not verify_api_key(x_api_key, tenant.webhook_api_key):
+    if tenant.webhook_api_key:
+        if not x_api_key or not verify_api_key(x_api_key, tenant.webhook_api_key):
             raise HTTPException(status_code=401, detail="Invalid webhook API key")
 
     # 3. 解析 form data
@@ -749,6 +813,7 @@ async def list_alerts(
     stale_only: bool = Query(False, description="仅显示长时间未更新告警"),
     sort_by: Optional[str] = Query(None, description="排序字段: duration/severity/count"),
     sort_order: str = Query("desc", description="排序方向: asc/desc"),
+    assignee_id: Optional[int] = Query(None, description="处理人ID过滤"),
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -761,6 +826,8 @@ async def list_alerts(
         base_filter.append(Alert.severity == severity)
     if source:
         base_filter.append(Alert.source == source)
+    if assignee_id is not None:
+        base_filter.append(Alert.assignee_id == assignee_id)
     if keyword:
         base_filter.append(or_(
             Alert.title.ilike(f"%{keyword}%"),
@@ -842,8 +909,18 @@ async def list_alerts(
 async def get_alert_stats(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
-    """获取告警统计"""
+    """获取告警统计（Redis 短缓存，避免全表 distinct 高频打穿）"""
+    cache_key = f"alerts:stats:{tenant_id}"
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return AlertStats(**json.loads(cached))
+    except Exception:
+        # Redis 不可用时降级直查 DB
+        pass
+
     tenant_filter = Alert.tenant_id == tenant_id
 
     # 查询1: 总数 + 按状态分布 (1次DB调用)
@@ -882,7 +959,7 @@ async def get_alert_stats(
     info = sev_row[4] or 0
     unassigned = sev_row[5] or 0
 
-    # 查询3: 去重数量 (不同 fingerprint)
+    # 查询3: 去重数量 (不同 fingerprint；结果已 Redis 缓存)
     unique_result = await db.execute(
         select(func.count(distinct(Alert.fingerprint))).where(tenant_filter)
     )
@@ -897,7 +974,7 @@ async def get_alert_stats(
     )
     today = today_result.scalar() or 0
 
-    return AlertStats(
+    stats = AlertStats(
         total=total,
         firing=firing,
         resolved=resolved,
@@ -913,6 +990,51 @@ async def get_alert_stats(
         firing_critical=critical,
         firing_high=high,
         aggregated=aggregated,
+    )
+
+    try:
+        await redis.set(cache_key, stats.model_dump_json(), ex=45)
+    except Exception:
+        pass
+    return stats
+
+
+async def _count_dedup_fingerprints(
+    db: AsyncSession,
+    tenant_id: int,
+    status: str = "firing",
+    severity: Optional[str] = None,
+) -> int:
+    """按 fingerprint 去重计数（与前端 aggregate=true 的 total 对齐）。"""
+    conditions = [Alert.tenant_id == tenant_id, Alert.status == status]
+    if severity:
+        conditions.append(Alert.severity == severity)
+    subq = (
+        select(Alert.fingerprint)
+        .where(and_(*conditions))
+        .group_by(Alert.fingerprint)
+        .subquery()
+    )
+    result = await db.execute(select(func.count()).select_from(subq))
+    return int(result.scalar() or 0)
+
+
+@router.get("/alerts/overview", response_model=AlertOverviewResponse)
+async def get_alert_overview(
+    tenant_id: int = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """合并 stats + firing/critical/high 去重计数，减少列表页并发请求。"""
+    stats = await get_alert_stats(tenant_id=tenant_id, db=db, redis=redis)
+    firing_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing")
+    critical_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing", "critical")
+    high_dedup = await _count_dedup_fingerprints(db, tenant_id, "firing", "high")
+    return AlertOverviewResponse(
+        stats=stats,
+        firing_dedup=firing_dedup,
+        critical_dedup=critical_dedup,
+        high_dedup=high_dedup,
     )
 
 
@@ -1273,7 +1395,7 @@ async def update_alert(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("alerts:write")),
 ):
-    """更新告警"""
+    """更新告警（白名单字段 + 合法状态迁移）"""
     result = await db.execute(
         select(Alert).where(
             Alert.id == alert_id,
@@ -1284,6 +1406,55 @@ async def update_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
+    # 仅允许业务字段，禁止通过 setattr 改时间戳等系统字段
+    allowed_fields = {
+        "severity",
+        "assignee_id",
+        "assignee_name",
+        "annotations",
+        "silenced_until",
+        "status",
+    }
+    # 合法状态迁移
+    legal_status_transitions = {
+        "firing": {"acknowledged", "resolved", "suppressed"},
+        "acknowledged": {"resolved", "firing", "suppressed"},
+        "suppressed": {"firing", "resolved"},
+        "resolved": {"firing"},
+        "deduplicated": {"firing", "resolved"},
+        "aggregated": {"firing", "resolved"},
+    }
+
+    updates = request.model_dump(exclude_unset=True)
+    updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    previous_status = alert.status
+    previous_severity = alert.severity
+    now = datetime.now(timezone.utc)
+
+    if "status" in updates:
+        new_status = updates["status"]
+        if new_status != previous_status:
+            allowed_next = legal_status_transitions.get(previous_status, set())
+            if new_status not in allowed_next:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status transition: {previous_status} -> {new_status}",
+                )
+            # 同步维护时间戳，不允许客户端直接传入
+            if new_status == "acknowledged" and alert.acknowledged_at is None:
+                alert.acknowledged_at = now
+            elif new_status == "resolved" and alert.resolved_at is None:
+                alert.resolved_at = now
+            elif new_status == "suppressed" and alert.silenced_until is None and "silenced_until" not in updates:
+                # suppressed 且未提供 silenced_until 时不强制写时间戳
+                pass
+        else:
+            updates.pop("status", None)
+
+    if not updates:
+        return alert
+
     # 记录历史
     history = AlertHistory(
         tenant_id=tenant_id,
@@ -1291,12 +1462,13 @@ async def update_alert(
         action="updated",
         operator_id=current_user.id,
         operator_name=current_user.username,
-        old_value={"status": alert.status, "severity": alert.severity},
+        old_value={"status": previous_status, "severity": previous_severity},
+        new_value={k: (v if not isinstance(v, datetime) else v.isoformat()) for k, v in updates.items()},
     )
     db.add(history)
 
-    # 更新字段
-    for field, value in request.model_dump(exclude_unset=True).items():
+    # 更新白名单字段
+    for field, value in updates.items():
         setattr(alert, field, value)
 
     await db.commit()
@@ -1304,7 +1476,7 @@ async def update_alert(
     return alert
 
 
-@router.post("/alerts/{alert_id}/dispose", response_model=dict)
+@router.post("/alerts/{alert_id}/dispose", response_model=MessageResponse)
 async def dispose_alert(
     alert_id: int,
     request: DisposeRequest,
@@ -1324,24 +1496,29 @@ async def dispose_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     now = datetime.now(timezone.utc)
+    previous_status = alert.status
 
     # 根据处置类型更新告警状态
-    if request.action == 'acknowledge' and alert.status == 'firing':
-        alert.status = 'acknowledged'
+    if request.action == 'acknowledge' and alert.status == AlertStatus.FIRING.value:
+        alert.status = AlertStatus.ACKNOWLEDGED.value
         alert.acknowledged_at = now
-    elif request.action == 'resolve' and alert.status in ('firing', 'acknowledged'):
-        alert.status = 'resolved'
+    elif request.action == 'resolve' and alert.status in (AlertStatus.FIRING.value, AlertStatus.ACKNOWLEDGED.value):
+        alert.status = AlertStatus.RESOLVED.value
         alert.resolved_at = now
+    elif request.action == 'silence':
+        minutes = request.silence_minutes or 60
+        from datetime import timedelta as _td
+        alert.status = AlertStatus.SUPPRESSED.value
+        alert.silenced_until = now + _td(minutes=minutes)
 
-    # 创建处置记录（使用 AlertHistory 存储）
-    # 将 dispose_* 映射到新的操作类型
+    # 统一写入 dispose_* 前缀，与系统历史动作区分；读取时再映射回前端动作
     action_mapping = {
-        'acknowledge': 'acknowledged',
-        'resolve': 'resolved',
-        'silence': 'silenced',
-        'note': 'updated',
+        'acknowledge': 'dispose_acknowledge',
+        'resolve': 'dispose_resolve',
+        'silence': 'dispose_silence',
+        'note': 'dispose_note',
     }
-    history_action = action_mapping.get(request.action, 'updated')
+    history_action = action_mapping.get(request.action, 'dispose_note')
 
     history = AlertHistory(
         tenant_id=tenant_id,
@@ -1350,13 +1527,18 @@ async def dispose_alert(
         description=request.comment,
         operator_id=current_user.id,
         operator_name=current_user.username,
-        old_value={"status": alert.status},
-        new_value={"dispose_action": request.action, "comment": request.comment},
+        old_value={"status": previous_status},
+        new_value={
+            "dispose_action": request.action,
+            "comment": request.comment,
+            "previous_status": previous_status,
+            "new_status": alert.status,
+        },
     )
     db.add(history)
 
     await db.commit()
-    return {"message": "处置成功"}
+    return MessageResponse(message="处置成功")
 
 
 @router.get("/alerts/{alert_id}/dispose", response_model=list[DisposeRecordResponse])
@@ -1516,7 +1698,12 @@ async def diagnose_alert(
     # 转换 bytes 为字符串
     trace_data = _decode_redis_dict(trace_data_raw)
 
-    if trace_data.get("tenant_id") != tenant_id:
+    # Redis 中 tenant_id 可能是 str，统一转 int 再比较
+    try:
+        trace_tenant_id = int(trace_data.get("tenant_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if trace_tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 获取步骤
@@ -1617,6 +1804,19 @@ async def list_cloud_metrics(
     )
 
 
+def _require_system_admin(current_user: User) -> User:
+    """云产品指标为全局目录，写操作仅系统管理员可改。"""
+    if current_user.id == 0:
+        # API Key 虚拟用户：认证层已校验，视作平台级
+        return current_user
+    if not getattr(current_user, "is_system", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Global cloud metrics catalog requires system admin",
+        )
+    return current_user
+
+
 @router.post("/cloud-metrics/batch-delete")
 async def batch_delete_cloud_metrics(
     ids: List[int],
@@ -1624,7 +1824,8 @@ async def batch_delete_cloud_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
-    """批量删除云产品指标（软删除，设置为 inactive）"""
+    """批量删除云产品指标（软删除，设置为 inactive）；仅 system admin"""
+    _require_system_admin(current_user)
     if not ids:
         raise HTTPException(status_code=400, detail="ids cannot be empty")
 
@@ -1685,6 +1886,7 @@ async def sync_cloud_metrics(
     - 不传 alert_ids: 从最近的告警中同步
     - 传 alert_ids: 从指定告警中同步
     """
+    _require_system_admin(current_user)
     from apps.alert.services.cloud_metrics_sync import SyncService
 
     sync_service = SyncService(db)
@@ -1699,6 +1901,7 @@ async def sync_all_cloud_metrics(
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """全量同步：从所有告警中提取云产品指标"""
+    _require_system_admin(current_user)
     from apps.alert.services.cloud_metrics_sync import SyncService
 
     sync_service = SyncService(db)
@@ -1713,7 +1916,8 @@ async def create_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
-    """创建云产品指标"""
+    """创建云产品指标（仅 system admin）"""
+    _require_system_admin(current_user)
     metric = CloudProductMetric(
         product=request.product,
         namespace=request.namespace,
@@ -1750,7 +1954,8 @@ async def update_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
-    """更新云产品指标"""
+    """更新云产品指标（仅 system admin）"""
+    _require_system_admin(current_user)
     metric = await db.get(CloudProductMetric, metric_id)
     if not metric:
         raise HTTPException(status_code=404, detail="CloudProductMetric not found")
@@ -1770,7 +1975,8 @@ async def delete_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
-    """删除云产品指标（软删除，设置为 inactive）"""
+    """删除云产品指标（软删除，设置为 inactive）；仅 system admin"""
+    _require_system_admin(current_user)
     metric = await db.get(CloudProductMetric, metric_id)
     if not metric:
         raise HTTPException(status_code=404, detail="CloudProductMetric not found")
@@ -1808,6 +2014,8 @@ async def list_webhook_logs(
     status: Optional[str] = Query(None, description="筛选状态: success/parse_error/format_error/server_error"),
     source_type: Optional[str] = Query(None, description="筛选来源类型"),
     dismissed: Optional[bool] = Query(None, description="是否已忽略"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     tenant_id: int = Depends(get_current_tenant_id),
@@ -1822,6 +2030,14 @@ async def list_webhook_logs(
         query = query.where(WebhookLog.source_type == source_type)
     if dismissed is not None:
         query = query.where(WebhookLog.is_dismissed == (1 if dismissed else 0))
+    if start_time:
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        query = query.where(WebhookLog.created_at >= start_time)
+    if end_time:
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        query = query.where(WebhookLog.created_at <= end_time)
 
     # 总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -1860,6 +2076,7 @@ async def list_webhook_logs(
 
 class WebhookLogDismissRequest(BaseModel):
     id: Optional[int] = None
+    ids: Optional[List[int]] = None
     dismiss_all: Optional[bool] = False
 
 
@@ -1871,26 +2088,41 @@ async def dismiss_webhook_logs(
     current_user: User = Depends(require_permission("alerts:write")),
 ):
     """忽略 Webhook 日志"""
+    from sqlalchemy import update as sa_update
+
     if request.dismiss_all:
-        # 忽略所有未忽略的日志
+        # 单条批量 UPDATE，避免全量加载
         result = await db.execute(
-            select(WebhookLog).where(
+            sa_update(WebhookLog)
+            .where(
                 WebhookLog.tenant_id == tenant_id,
                 WebhookLog.is_dismissed == 0,
             )
+            .values(is_dismissed=1)
         )
-        logs = result.scalars().all()
-        for log in logs:
-            log.is_dismissed = 1
         await db.commit()
-        return {"message": f"Dismissed {len(logs)} webhook logs", "count": len(logs)}
-    elif request.id:
-        # 忽略单条日志
-        log = await db.get(WebhookLog, request.id)
-        if not log or log.tenant_id != tenant_id:
-            raise HTTPException(status_code=404, detail="Webhook log not found")
-        log.is_dismissed = 1
-        await db.commit()
-        return {"message": "Webhook log dismissed"}
-    else:
-        raise HTTPException(status_code=400, detail="Either id or dismiss_all must be provided")
+        return {"message": f"Dismissed {result.rowcount} webhook logs", "count": result.rowcount}
+
+    target_ids: List[int] = []
+    if request.id:
+        target_ids.append(request.id)
+    if request.ids:
+        target_ids.extend(request.ids)
+
+    if not target_ids:
+        raise HTTPException(status_code=400, detail="Either id, ids or dismiss_all must be provided")
+
+    # 去重并批量更新（租户过滤）
+    unique_ids = list(dict.fromkeys(target_ids))
+    result = await db.execute(
+        sa_update(WebhookLog)
+        .where(
+            WebhookLog.tenant_id == tenant_id,
+            WebhookLog.id.in_(unique_ids),
+        )
+        .values(is_dismissed=1)
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Webhook log not found")
+    return {"message": f"Dismissed {result.rowcount} webhook logs", "count": result.rowcount}

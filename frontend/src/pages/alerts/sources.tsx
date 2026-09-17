@@ -6,6 +6,7 @@ import { apiClient } from '@/services/api'
 import { generateCode } from '@/utils/code'
 import { toast } from '@/stores/toast-store'
 import { Modal } from '@/components/common/Modal'
+import type { AlertSource } from '@/types/alert'
 
 interface AlertSourceConfig {
   id: string
@@ -14,20 +15,6 @@ interface AlertSourceConfig {
   icon: React.ElementType
   接入方式: string
   配置说明: string[]
-}
-
-interface AlertSource {
-  id: number
-  client_id: string
-  name: string
-  code: string
-  source_type: string
-  config: Record<string, any>
-  description?: string
-  is_active: string
-  alert_count: number
-  last_alert_at?: string
-  created_at: string
 }
 
 const alertSourceTypes: AlertSourceConfig[] = [

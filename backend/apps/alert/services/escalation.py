@@ -4,11 +4,11 @@ SentinelX - 升级服务
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from apps.alert.models import Alert, AlertHistory
 from apps.rule.models import AlertRule
@@ -28,12 +28,23 @@ class EscalationService:
         3: 60,   # 第3级等待60分钟
     }
 
+    # 单次扫描批量上限，避免全表 firing 一次性载入
+    DEFAULT_BATCH_SIZE = 500
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def check_escalations(self) -> Dict[str, Any]:
+    async def check_escalations(
+        self,
+        tenant_id: Optional[int] = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        lookback_hours: Optional[int] = 24,
+    ) -> Dict[str, Any]:
         """
         检查并处理需要升级的告警
+        tenant_id: 可选，限定只扫描该租户（手动触发时必须传入）
+        batch_size: 单次扫描告警上限
+        lookback_hours: 仅扫描最近 N 小时触发的告警；None 表示不限
         返回: {escalated_count, notifications_sent, errors}
         """
         stats = {
@@ -42,35 +53,60 @@ class EscalationService:
             "errors": [],
         }
 
-        # 查找触发中且未确认的告警
-        result = await self.db.execute(
-            select(Alert).where(
-                Alert.status == "firing",
-                Alert.acknowledged_at.is_(None),
-                Alert.escalation_count < 4,  # 最多升级4次
-            )
+        # 查找触发中且未确认的告警（分批 + 可选时间窗）
+        query = select(Alert).where(
+            Alert.status == "firing",
+            Alert.acknowledged_at.is_(None),
+            Alert.escalation_count < 4,  # 最多升级4次
         )
-        alerts = result.scalars().all()
+        if tenant_id is not None:
+            query = query.where(Alert.tenant_id == tenant_id)
+        if lookback_hours is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+            query = query.where(Alert.fired_at >= cutoff)
+        query = query.order_by(Alert.fired_at.asc()).limit(batch_size)
 
+        result = await self.db.execute(query)
+        alerts = list(result.scalars().all())
+        if not alerts:
+            return stats
+
+        # 一条查询批量取每个 alert 的最后通知时间，消除 per-alert N+1
+        last_notify_map = await self._get_last_notification_times(
+            [a.id for a in alerts]
+        )
+
+        escalated_any = False
         for alert in alerts:
             try:
-                should_escalate, wait_minutes = await self._should_escalate(alert)
+                should_escalate, wait_minutes = self._should_escalate(
+                    alert,
+                    last_notification=last_notify_map.get(alert.id),
+                )
                 if should_escalate:
-                    await self._escalate_alert(alert)
+                    await self._escalate_alert(alert, commit=False)
+                    escalated_any = True
                     stats["escalated_count"] += 1
             except Exception as e:
                 logger.error("escalation_check_error", alert_id=alert.id, error=str(e))
                 stats["errors"].append({"alert_id": alert.id, "error": str(e)})
 
+        # 批量升级后一次 commit
+        if escalated_any:
+            await self.db.commit()
+
         return stats
 
-    async def _should_escalate(self, alert: Alert) -> tuple[bool, int]:
-        """判断告警是否应该升级"""
+    def _should_escalate(
+        self,
+        alert: Alert,
+        last_notification: Optional[datetime] = None,
+    ) -> tuple[bool, int]:
+        """判断告警是否应该升级（last_notification 需由调用方预加载）"""
         if alert.escalation_count >= len(self.ESCALATION_WAITS):
             return False, 0
 
         wait_minutes = self.ESCALATION_WAITS.get(alert.escalation_count, 60)
-        last_notification = await self._get_last_notification_time(alert)
 
         if last_notification:
             # 检查距离上次通知是否超过等待时间
@@ -87,18 +123,33 @@ class EscalationService:
 
         return True, wait_minutes
 
-    async def _get_last_notification_time(self, alert: Alert) -> datetime:
-        """获取告警最后一次通知时间"""
-        result = await self.db.execute(
-            select(AlertHistory).where(
-                AlertHistory.alert_id == alert.id,
-                AlertHistory.action.like("%notification%")
-            ).order_by(AlertHistory.created_at.desc()).limit(1)
-        )
-        history = result.scalar_one_or_none()
-        return history.created_at if history else None
+    async def _get_last_notification_times(
+        self,
+        alert_ids: List[int],
+    ) -> Dict[int, datetime]:
+        """批量获取告警最后通知时间：一条 GROUP BY 查询"""
+        if not alert_ids:
+            return {}
 
-    async def _escalate_alert(self, alert: Alert):
+        result = await self.db.execute(
+            select(
+                AlertHistory.alert_id,
+                func.max(AlertHistory.created_at).label("last_at"),
+            )
+            .where(
+                AlertHistory.alert_id.in_(alert_ids),
+                AlertHistory.action.like("%notification%"),
+            )
+            .group_by(AlertHistory.alert_id)
+        )
+        return {row.alert_id: row.last_at for row in result.all()}
+
+    async def _get_last_notification_time(self, alert: Alert) -> Optional[datetime]:
+        """获取告警最后一次通知时间（单条路径）"""
+        result = await self._get_last_notification_times([alert.id])
+        return result.get(alert.id)
+
+    async def _escalate_alert(self, alert: Alert, commit: bool = True):
         """执行告警升级"""
         old_count = alert.escalation_count
         alert.escalation_count += 1
@@ -121,16 +172,19 @@ class EscalationService:
             title=alert.title,
         )
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
 
-    async def get_escalation_candidates(self) -> List[Alert]:
-        """获取可能需要升级的告警列表"""
-        result = await self.db.execute(
-            select(Alert).where(
-                Alert.status == "firing",
-                Alert.acknowledged_at.is_(None),
-            ).order_by(Alert.escalation_count, Alert.fired_at)
+    async def get_escalation_candidates(self, tenant_id: Optional[int] = None) -> List[Alert]:
+        """获取可能需要升级的告警列表（可选按租户过滤）"""
+        query = select(Alert).where(
+            Alert.status == "firing",
+            Alert.acknowledged_at.is_(None),
         )
+        if tenant_id is not None:
+            query = query.where(Alert.tenant_id == tenant_id)
+        query = query.order_by(Alert.escalation_count, Alert.fired_at)
+        result = await self.db.execute(query)
         return result.scalars().all()
 
     async def check_and_escalate(self, alert_id: int) -> bool:
@@ -149,8 +203,11 @@ class EscalationService:
         if current_level >= 4:
             return False  # 已达最高级别
 
-        # 检查是否应该升级
-        should_escalate, wait_minutes = await self._should_escalate(alert)
+        # 检查是否应该升级（单条路径仍查一次 last notification）
+        last_notification = await self._get_last_notification_time(alert)
+        should_escalate, wait_minutes = self._should_escalate(
+            alert, last_notification=last_notification
+        )
         if should_escalate:
             await self._escalate_alert(alert)
 

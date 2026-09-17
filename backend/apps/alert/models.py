@@ -50,8 +50,8 @@ class Alert(Base):
 
     __tablename__ = "alerts"
     __table_args__ = (
-        # 普通索引
-        Index("idx_alerts_labels", "tenant_id", "labels"),
+        # 复合索引：按租户过滤状态 + 时间排序/范围查询
+        Index("idx_alerts_tenant_status_fired", "tenant_id", "status", "fired_at"),
         Index("idx_alerts_fired_at", "tenant_id", "fired_at"),
         Index("idx_alerts_status_severity", "tenant_id", "status", "severity"),
         # 实例告警聚合/明细查询
@@ -63,7 +63,7 @@ class Alert(Base):
             "alert_type",
             "fired_at",
         ),
-        # GIN索引用于JSONB labels查询
+        # GIN索引用于JSONB labels查询（B-tree on labels 无用，已移除 idx_alerts_labels）
         Index("ix_alerts_labels_gin", "labels", postgresql_using="gin"),
     )
 
@@ -141,6 +141,10 @@ class AlertHistory(Base):
     """告警历史"""
 
     __tablename__ = "alert_history"
+    __table_args__ = (
+        # 列表按租户 + 创建时间排序/分页
+        Index("idx_alert_history_tenant_created", "tenant_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, nullable=False, index=True)

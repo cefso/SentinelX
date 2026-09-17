@@ -64,3 +64,63 @@ class TokenPayload(BaseModel):
     permissions: List[str] = []
     exp: int
     type: str  # access / refresh
+
+
+class APIKeyCreateRequest(BaseModel):
+    """创建 API Key 请求体（与前端 JSON body 对齐）"""
+    name: str = Field(..., min_length=1, max_length=128)
+    expires_days: Optional[int] = Field(None, ge=1, le=3650)
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    user_id: int
+    username: str
+
+
+class APIKeyItem(BaseModel):
+    key_id: str
+    name: Optional[str] = None
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    is_active: bool = True
+    created_by: Optional[int] = None
+
+
+class APIKeyListResponse(BaseModel):
+    api_keys: List[APIKeyItem]
+
+
+class APIKeyCreateResponse(BaseModel):
+    api_key: str
+    full_api_key: str
+    message: str
+
+
+class CurrentUserResponse(BaseModel):
+    id: int
+    username: str
+    email: Optional[str] = None
+    is_system: bool = False
+    is_superuser: bool = False
+    phone: Optional[str] = None
+    created_at: Optional[str] = None
+    current_tenant: Optional[dict] = None
+    tenants: Optional[List[dict]] = None
+
+
+class PermissionsResponse(BaseModel):
+    permissions: List[str] = Field(default_factory=list)
+    is_superuser: bool = False
+    is_system: bool = False
+
+
+class PublicTenantItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+
+class PublicTenantListResponse(BaseModel):
+    """兼容前端部分页面按 {tenants} 解析；列表接口统一返回此结构。"""
+    tenants: List[PublicTenantItem]

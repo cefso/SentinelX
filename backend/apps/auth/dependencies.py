@@ -187,7 +187,8 @@ async def get_current_tenant_id(
 
 def require_permission(permission: str):
     """
-    权限检查依赖
+    权限检查依赖 —— 以 DB 为权威来源。
+
     用法:
         @router.get("/alerts")
         async def get_alerts(current_user: User = Depends(require_permission("alerts:read"))):
@@ -196,40 +197,78 @@ def require_permission(permission: str):
     支持通配符:
         - "read" 匹配所有 ":read" 结尾的权限
         - "admin" 或 "*" 匹配所有权限
+
+    说明:
+        JWT claim 中的 permissions 仅作历史兼容，不再作为放行依据。
+        角色降权 / 权限回收后，即使旧 token 仍在有效期内也会立即被拒绝。
     """
     async def _check_permission(
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ):
-        payload = get_token_payload()
-        permissions = payload.get("permissions", []) if payload else []
-
-        # 通配符匹配
-        if "*" in permissions or "admin" in permissions:
+        # API Key 虚拟用户（user_id=0）：密钥本身即凭证，保留全量权限
+        if current_user.id == 0:
             return current_user
 
-        # "read" 权限匹配所有 ":read" 结尾的权限
-        if permission == "read":
-            if any(p.endswith(":read") or p == "read" for p in permissions):
-                return current_user
-        elif permission in permissions:
-            return current_user
+        payload = get_token_payload() or {}
+        tenant_id = payload.get("current_tenant_id")
+        try:
+            tenant_id = int(tenant_id) if tenant_id is not None else None
+        except (TypeError, ValueError):
+            tenant_id = None
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: {permission}",
+        # is_system 已由 get_current_user 从 DB User 加载，以 DB 字段为准
+        permission_service = PermissionService(db)
+        authz = await permission_service.get_user_tenant_authz(
+            user_id=current_user.id,
+            tenant_id=tenant_id,
+            is_system=bool(current_user.is_system),
         )
+
+        if not permission_service.match_permission(authz["permissions"], permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission}",
+            )
+        return current_user
 
     return _check_permission
 
 
 def require_superuser():
-    """超级管理员检查"""
-    async def dependency(current_user: User = Depends(get_current_user)):
-        payload = get_token_payload()
-        is_superuser = payload.get("is_superuser", False) if payload else False
+    """
+    超级管理员检查 —— 以 DB 为权威来源。
 
-        if not is_superuser:
+    - User.is_system 以 DB 字段为准（get_current_user 已查库）
+    - 租户超级用户以 Role.code / Role.permissions 为准（DB 查询）
+    - JWT claim 中的 is_superuser 不再作为放行依据
+    """
+    async def dependency(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        # API Key 虚拟用户：认证层已校验密钥
+        if current_user.id == 0:
+            return current_user
+
+        # 系统管理员以 DB User.is_system 为准
+        if current_user.is_system:
+            return current_user
+
+        payload = get_token_payload() or {}
+        tenant_id = payload.get("current_tenant_id")
+        try:
+            tenant_id = int(tenant_id) if tenant_id is not None else None
+        except (TypeError, ValueError):
+            tenant_id = None
+
+        authz = await PermissionService(db).get_user_tenant_authz(
+            user_id=current_user.id,
+            tenant_id=tenant_id,
+            is_system=False,
+        )
+
+        if not authz["is_superuser"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Superuser access required",

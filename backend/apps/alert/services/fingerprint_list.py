@@ -3,7 +3,7 @@ SentinelX - 指纹视图列表（含虚拟策略聚合指纹行 + 抖动检测�
 """
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from sqlalchemy import and_, func, literal, select, union_all, Integer, String, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,13 +16,144 @@ from apps.alert.models import (
 )
 from apps.alert.schemas import AlertAggregatedItem, AlertAggregatedResponse
 from apps.alert.services.alert_utils import build_alert_response
+from apps.core.schemas import AlertSeverity, AlertStatus
 from apps.rule.models import AlertRule
 
 STRATEGY_GROUP_FP_PREFIX = "strategy-group:"
+# 条件B 最近 N 条 / 时间窗上界，避免无界扫描
+FLAPPING_RECENT_LIMIT = 10
+FLAPPING_LOOKBACK_HOURS = 24 * 7
+STALE_HOURS = 24
 
 
 def _strategy_group_fingerprint(group_id: int) -> str:
     return f"{STRATEGY_GROUP_FP_PREFIX}{group_id}"
+
+
+async def _load_recent_alerts_per_fingerprint(
+    db: AsyncSession,
+    tenant_id: int,
+    fingerprints: Sequence[str],
+    limit_per_fp: int = FLAPPING_RECENT_LIMIT,
+    lookback_hours: int = FLAPPING_LOOKBACK_HOURS,
+) -> dict[str, list]:
+    """每个 fingerprint 只取最近 limit 条（窗口函数），禁止全量拉取。"""
+    if not fingerprints:
+        return {}
+
+    lookback_start = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    rn = func.row_number().over(
+        partition_by=Alert.fingerprint,
+        order_by=Alert.fired_at.desc(),
+    ).label("rn")
+
+    ranked = (
+        select(
+            Alert.fingerprint,
+            Alert.status,
+            Alert.fired_at,
+            Alert.resolved_at,
+            rn,
+        )
+        .where(
+            and_(
+                Alert.tenant_id == tenant_id,
+                Alert.fingerprint.in_(list(fingerprints)),
+                Alert.fired_at >= lookback_start,
+            )
+        )
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(
+            ranked.c.fingerprint,
+            ranked.c.status,
+            ranked.c.fired_at,
+            ranked.c.resolved_at,
+        )
+        .where(ranked.c.rn <= limit_per_fp)
+        .order_by(ranked.c.fingerprint, ranked.c.fired_at.desc())
+    )
+
+    fp_alerts: dict[str, list] = defaultdict(list)
+    for row in result.all():
+        fp_alerts[row.fingerprint].append(row)
+    return fp_alerts
+
+
+def _is_flapping_from_recent(recent_alerts: list) -> bool:
+    """条件B：最近告警中 firing→resolved 交替 >= 2 且平均持续 < 10 分钟。"""
+    if len(recent_alerts) < 3:
+        return False
+
+    alternations = 0
+    durations = []
+    for i in range(len(recent_alerts) - 1):
+        curr_status = recent_alerts[i].status
+        prev_status = recent_alerts[i + 1].status
+        if (prev_status == "firing" and curr_status == "resolved") or (
+            prev_status == "resolved" and curr_status == "firing"
+        ):
+            alternations += 1
+        if recent_alerts[i].resolved_at and recent_alerts[i].fired_at:
+            dur = (recent_alerts[i].resolved_at - recent_alerts[i].fired_at).total_seconds()
+            durations.append(dur)
+
+    if alternations >= 2 and durations:
+        avg_duration = sum(durations) / len(durations)
+        return avg_duration < 600
+    return False
+
+
+async def _condition_a_flapping_fingerprints(
+    db: AsyncSession,
+    tenant_id: int,
+    extra_filter: Optional[List] = None,
+) -> set:
+    """条件A：1小时内同 fingerprint 告警数 >= 3。"""
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    conditions = [
+        Alert.tenant_id == tenant_id,
+        Alert.fired_at >= one_hour_ago,
+    ]
+    if extra_filter:
+        conditions.extend(extra_filter)
+
+    freq_result = await db.execute(
+        select(Alert.fingerprint)
+        .where(and_(*conditions))
+        .group_by(Alert.fingerprint)
+        .having(func.count() >= 3)
+    )
+    return {row[0] for row in freq_result.all()}
+
+
+async def _candidate_fingerprints_for_condition_b(
+    db: AsyncSession,
+    tenant_id: int,
+    extra_filter: Optional[List] = None,
+    exclude: Optional[set] = None,
+) -> List[str]:
+    """找出可能满足条件B 的 fingerprint（有界：时间窗内 >=3 条）。"""
+    lookback_start = datetime.now(timezone.utc) - timedelta(hours=FLAPPING_LOOKBACK_HOURS)
+    conditions = [
+        Alert.tenant_id == tenant_id,
+        Alert.fired_at >= lookback_start,
+    ]
+    if extra_filter:
+        conditions.extend(extra_filter)
+
+    result = await db.execute(
+        select(Alert.fingerprint)
+        .where(and_(*conditions))
+        .group_by(Alert.fingerprint)
+        .having(func.count() >= 3)
+    )
+    fps = [row[0] for row in result.all()]
+    if exclude:
+        fps = [fp for fp in fps if fp not in exclude]
+    return fps
 
 
 async def _detect_flapping_fingerprints(
@@ -39,69 +170,36 @@ async def _detect_flapping_fingerprints(
     if not fingerprints:
         return set()
 
-    flapping_fps = set()
-
-    # 条件A: 1小时内频率 >= 3
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-    freq_result = await db.execute(
-        select(Alert.fingerprint)
-        .where(
-            and_(
-                Alert.tenant_id == tenant_id,
-                Alert.fingerprint.in_(fingerprints),
-                Alert.fired_at >= one_hour_ago,
-            )
-        )
-        .group_by(Alert.fingerprint)
-        .having(func.count() >= 3)
+    flapping_fps = await _condition_a_flapping_fingerprints(
+        db, tenant_id, [Alert.fingerprint.in_(fingerprints)]
     )
-    flapping_fps.update(row[0] for row in freq_result.all())
 
-    # 条件B: 交替模式 + 短持续时间（仅对尚未标记的 fingerprint 检测）
     remaining = [fp for fp in fingerprints if fp not in flapping_fps]
     if remaining:
-        # 批量查询所有 fingerprint 的最近告警（避免 N+1）
-        all_recent_result = await db.execute(
-            select(Alert.fingerprint, Alert.status, Alert.fired_at, Alert.resolved_at)
-            .where(
-                and_(
-                    Alert.tenant_id == tenant_id,
-                    Alert.fingerprint.in_(remaining),
-                )
-            )
-            .order_by(Alert.fingerprint, Alert.fired_at.desc())
-        )
-        all_recent = all_recent_result.all()
-
-        # 按 fingerprint 分组
-        fp_alerts: dict[str, list] = defaultdict(list)
-        for row in all_recent:
-            fp_alerts[row.fingerprint].append(row)
-
+        fp_alerts = await _load_recent_alerts_per_fingerprint(db, tenant_id, remaining)
         for fp in remaining:
-            recent_alerts = fp_alerts.get(fp, [])[:10]
-            if len(recent_alerts) < 3:
-                continue
+            if _is_flapping_from_recent(fp_alerts.get(fp, [])):
+                flapping_fps.add(fp)
 
-            # 计算 firing→resolved 交替次数
-            alternations = 0
-            durations = []
-            for i in range(len(recent_alerts) - 1):
-                curr_status = recent_alerts[i].status
-                prev_status = recent_alerts[i + 1].status
-                if (prev_status == "firing" and curr_status == "resolved") or \
-                   (prev_status == "resolved" and curr_status == "firing"):
-                    alternations += 1
-                # 计算持续时间
-                if recent_alerts[i].resolved_at and recent_alerts[i].fired_at:
-                    dur = (recent_alerts[i].resolved_at - recent_alerts[i].fired_at).total_seconds()
-                    durations.append(dur)
+    return flapping_fps
 
-            if alternations >= 2 and durations:
-                avg_duration = sum(durations) / len(durations)
-                if avg_duration < 600:  # 10分钟
-                    flapping_fps.add(fp)
 
+async def _detect_flapping_fingerprints_for_filter(
+    db: AsyncSession,
+    tenant_id: int,
+    base_filter: List,
+) -> set:
+    """在分页前，对匹配 base_filter 的全量候选 fingerprint 做有界抖动检测。"""
+    cond_a = await _condition_a_flapping_fingerprints(db, tenant_id, base_filter)
+    candidates = await _candidate_fingerprints_for_condition_b(
+        db, tenant_id, base_filter, exclude=cond_a
+    )
+    flapping_fps = set(cond_a)
+    if candidates:
+        fp_alerts = await _load_recent_alerts_per_fingerprint(db, tenant_id, candidates)
+        for fp in candidates:
+            if _is_flapping_from_recent(fp_alerts.get(fp, [])):
+                flapping_fps.add(fp)
     return flapping_fps
 
 
@@ -132,12 +230,28 @@ async def list_alerts_fingerprint_aggregate(
 
     fp_filter = list(base_filter) + [Alert.id.not_in(strategy_member_ids)]
 
+    flapping_set: set = set()
+    # flapping_only：分页前算出有界 flapping 集合并下推 WHERE
+    if flapping_only:
+        flapping_set = await _detect_flapping_fingerprints_for_filter(
+            db, tenant_id, list(base_filter)
+        )
+        if not flapping_set:
+            return AlertAggregatedResponse(
+                items=[],
+                total=0,
+                alert_total=0,
+                page=page,
+                page_size=page_size,
+            )
+        fp_filter.append(Alert.fingerprint.in_(flapping_set))
+
     severity_order = case(
-        (Alert.severity == "critical", 1),
-        (Alert.severity == "high", 2),
-        (Alert.severity == "medium", 3),
-        (Alert.severity == "low", 4),
-        (Alert.severity == "info", 5),
+        (Alert.severity == AlertSeverity.CRITICAL.value, 1),
+        (Alert.severity == AlertSeverity.HIGH.value, 2),
+        (Alert.severity == AlertSeverity.MEDIUM.value, 3),
+        (Alert.severity == AlertSeverity.LOW.value, 4),
+        (Alert.severity == AlertSeverity.INFO.value, 5),
         else_=6,
     )
 
@@ -155,6 +269,10 @@ async def list_alerts_fingerprint_aggregate(
         .where(and_(*fp_filter))
         .group_by(Alert.fingerprint)
     )
+
+    strategy_base_filter = list(base_filter)
+    if flapping_only:
+        strategy_base_filter.append(Alert.fingerprint.in_(flapping_set))
 
     strategy_subq = (
         select(
@@ -177,7 +295,7 @@ async def list_alerts_fingerprint_aggregate(
         .where(
             AlertAggregateGroup.tenant_id == tenant_id,
             AlertAggregateGroup.alert_count > 1,
-            and_(*base_filter),
+            and_(*strategy_base_filter),
         )
         .group_by(
             AlertAggregateGroup.id,
@@ -189,13 +307,27 @@ async def list_alerts_fingerprint_aggregate(
 
     combined = union_all(fp_subq, strategy_subq).subquery()
 
+    # stale_only：最新告警为 firing 且 sort_at 超过 24h，在分页前过滤
+    stale_threshold = datetime.now(timezone.utc) - timedelta(hours=STALE_HOURS)
+    if stale_only:
+        stmt = (
+            select(combined)
+            .join(Alert, Alert.id == combined.c.latest_id)
+            .where(
+                combined.c.row_type == "fingerprint",
+                combined.c.sort_at < stale_threshold,
+                Alert.status == "firing",
+            )
+        )
+    else:
+        stmt = select(combined)
+
     # 动态排序
     if sort_by == "severity":
         order_col = combined.c.severity_rank
     elif sort_by == "count":
         order_col = combined.c.row_count
     else:
-        # 默认按持续时长（sort_at）排序
         order_col = combined.c.sort_at
 
     if sort_order == "asc":
@@ -203,20 +335,18 @@ async def list_alerts_fingerprint_aggregate(
     else:
         order_clause = order_col.desc()
 
-    total_result = await db.execute(select(func.count()).select_from(combined))
+    total_result = await db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    )
     total = total_result.scalar() or 0
 
-    # 计算实际告警总数（所有指纹的告警数之和）
     alert_total_result = await db.execute(
-        select(func.sum(combined.c.row_count)).select_from(combined)
+        select(func.sum(stmt.subquery().c.row_count))
     )
     alert_total = int(alert_total_result.scalar() or 0)
 
     page_result = await db.execute(
-        select(combined)
-        .order_by(order_clause)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        stmt.order_by(order_clause).offset((page - 1) * page_size).limit(page_size)
     )
     page_rows = page_result.all()
 
@@ -224,6 +354,7 @@ async def list_alerts_fingerprint_aggregate(
         return AlertAggregatedResponse(
             items=[],
             total=total,
+            alert_total=alert_total,
             page=page,
             page_size=page_size,
         )
@@ -236,13 +367,14 @@ async def list_alerts_fingerprint_aggregate(
     )
     alert_map = {row.Alert.id: (row.Alert, row.source_name) for row in alerts_result.all()}
 
-    # 检测抖动告警
-    fp_list = [row.row_key for row in page_rows if row.row_type == "fingerprint"]
-    flapping_fps = await _detect_flapping_fingerprints(db, tenant_id, fp_list)
+    # 当页抖动标记（未 flapping_only 时）
+    if flapping_only:
+        flapping_fps = flapping_set
+    else:
+        fp_list = [row.row_key for row in page_rows if row.row_type == "fingerprint"]
+        flapping_fps = await _detect_flapping_fingerprints(db, tenant_id, fp_list)
 
-    # 检测长时间未更新告警（最新消息超24h且未恢复）
     now = datetime.now(timezone.utc)
-    stale_threshold = now - timedelta(hours=24)
 
     items: List[AlertAggregatedItem] = []
     for row in page_rows:
@@ -254,10 +386,9 @@ async def list_alerts_fingerprint_aggregate(
         group_count = row.row_count
         is_strategy = row_type == "strategy_group"
 
-        # stale: 最新告警是 firing 且 sort_at 超过 24h
         is_stale = (
             not is_strategy
-            and alert_obj.status == "firing"
+            and alert_obj.status == AlertStatus.FIRING.value
             and row.sort_at is not None
             and row.sort_at.replace(tzinfo=timezone.utc) < stale_threshold
         )
@@ -278,12 +409,6 @@ async def list_alerts_fingerprint_aggregate(
                 stale=is_stale,
             )
         )
-
-    # 后置过滤：flapping_only / stale_only
-    if flapping_only:
-        items = [item for item in items if item.flapping]
-    if stale_only:
-        items = [item for item in items if item.stale]
 
     return AlertAggregatedResponse(
         items=items,

@@ -141,7 +141,7 @@ export function ChannelModal({ channel, onClose, onSuccess }: { channel: Channel
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Secret (可选)</label>
                 <input
-                  type="text"
+                  type="password"
                   value={config?.secret || ''}
                   onChange={(e) => updateConfig('secret', e.target.value)}
                   className="w-full px-3 py-2 border rounded-md"

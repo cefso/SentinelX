@@ -30,6 +30,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 第三方库分包，降低首屏 JS 体积、利于缓存
+        manualChunks: {
+          charts: ['recharts'],
+          markdown: ['react-markdown', 'remark-gfm'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
