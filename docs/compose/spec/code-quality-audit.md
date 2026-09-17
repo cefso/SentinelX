@@ -18,9 +18,11 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..be04578ea47eb0f7974bd007d07dd
 
 **第二轮**覆盖：JWT 权限以 DB 为权威（不再信任陈旧 claim）、指纹 flapping 有界扫描 + flapping_only/stale_only 分页前过滤、批量接警预取指纹 + 一次 flush/commit、升级检查 LIMIT/时间窗 + 批量 last-notification、`alerts` 复合索引迁移、渠道 config 响应脱敏、前端路由级 code splitting。
 
+**第三轮**覆盖：`/alerts/stats` Redis 短缓存；通知渠道发送前重校验 SSRF（覆盖存量配置）；规则 `regex` ReDoS 硬化（长度/嵌套量词/编译缓存 + 创建时校验）；云产品指标全局目录写操作限 system admin。
+
 **Verification**
 
-- `backend`: `pytest tests/ -q` → **PASS 207**
+- `backend`: `pytest tests/ -q` → **PASS 220**（含第三轮 hardening）
 - `frontend`: `tsc --noEmit` → **PASS**
 - 静态 import 检查通过
 - 独立 Review（第一轮）：**approve**，无阻塞 Critical
@@ -91,12 +93,20 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..be04578ea47eb0f7974bd007d07dd
 | High | JWT 权限/超级用户陈旧快照 | `require_permission`/`require_superuser` 以 DB 角色权限为准 |
 | Medium | 渠道 config 响应泄露密钥 | 敏感字段 `***` 脱敏 + update 回填还原 |
 
+#### 第三轮硬化
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| Medium | `/alerts/stats` 高频全表 distinct | Redis 45s 缓存，失败降级直查 |
+| Medium | 存量渠道发送前不校验 SSRF | dingtalk/feishu/wecom/webhook/slack 发送前 `validate_outbound_url` |
+| Medium | 规则 regex ReDoS | 运行时安全匹配 + 创建/更新时 Pydantic 校验 |
+| Medium | 云指标全局表任一租户可改 | 写/删/同步要求 system admin |
+
 ### 未修复 / 后续建议（按优先级）
 
-1. **Medium** `/alerts/stats` 全表 distinct、列表页 6–7 并发接口 — overview 合并 + Redis 缓存。
-2. **Medium** 规则 `regex` ReDoS；API Key 虚拟用户 id=0 全权；云指标全局表无租户边界。
-3. **Medium** 通知渠道存量 config 发送前不重校验 SSRF（仅创建时）。
-4. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、register 用户名/邮箱存在性枚举、TestClient 集成测试。
+1. **Medium** 列表页仍并发多个 `page_size=1` 聚合接口 — 可再合并 overview。
+2. **Medium** API Key 虚拟用户 id=0 全权、无创建者溯源。
+3. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、register 用户名/邮箱存在性枚举、TestClient 集成测试。
 
 ### Review 备注（非阻塞）
 

@@ -6,6 +6,7 @@ import httpx
 
 from apps.notify.channels.base import NotificationChannel
 from apps.alert.models import Alert
+from apps.notify.schemas import validate_outbound_url
 import structlog
 
 logger = structlog.get_logger()
@@ -32,6 +33,7 @@ class SlackChannel(NotificationChannel):
             return False, "Missing webhook_url"
 
         try:
+            validate_outbound_url(webhook_url, "webhook_url")
             color = SEVERITY_COLORS.get(alert.severity, "#6b7280")
 
             payload = {

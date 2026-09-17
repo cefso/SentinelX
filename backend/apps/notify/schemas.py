@@ -266,8 +266,10 @@ def _is_blocked_host(host: str) -> bool:
     )
 
 
-def _validate_url(value: str, field_name: str) -> None:
-    """验证URL格式并做基础 SSRF 拦截"""
+def validate_outbound_url(value: str, field_name: str = "url") -> None:
+    """验证URL格式并做基础 SSRF 拦截（创建/更新/发送前共用）。"""
+    if not value or not isinstance(value, str):
+        raise ValueError(f"{field_name} 必须是有效的HTTP/HTTPS URL")
     url_pattern = re.compile(
         r'^https?://'
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
@@ -282,6 +284,10 @@ def _validate_url(value: str, field_name: str) -> None:
     parsed = urlparse(value)
     if _is_blocked_host(parsed.hostname or ""):
         raise ValueError(f"{field_name} 不允许指向本机或内网地址")
+
+
+def _validate_url(value: str, field_name: str) -> None:
+    validate_outbound_url(value, field_name)
 
 
 # ============ 测试发送Schema ============

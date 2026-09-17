@@ -20,7 +20,7 @@ from apps.core.mq import get_mq_async
 from apps.core.security import verify_api_key
 
 logger = structlog.get_logger()
-from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission
+from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission, require_superuser
 from apps.alert.models import Alert, AlertSource, AlertHistory, AlertTrace, CloudProductMetric, AlertAggregateGroup, AlertAggregateMember, WebhookLog
 from apps.tenant.models import Tenant, User
 from apps.alert.schemas import (
@@ -906,8 +906,18 @@ async def list_alerts(
 async def get_alert_stats(
     tenant_id: int = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
-    """获取告警统计"""
+    """获取告警统计（Redis 短缓存，避免全表 distinct 高频打穿）"""
+    cache_key = f"alerts:stats:{tenant_id}"
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return AlertStats(**json.loads(cached))
+    except Exception:
+        # Redis 不可用时降级直查 DB
+        pass
+
     tenant_filter = Alert.tenant_id == tenant_id
 
     # 查询1: 总数 + 按状态分布 (1次DB调用)
@@ -946,7 +956,7 @@ async def get_alert_stats(
     info = sev_row[4] or 0
     unassigned = sev_row[5] or 0
 
-    # 查询3: 去重数量 (不同 fingerprint)
+    # 查询3: 去重数量 (不同 fingerprint；结果已 Redis 缓存)
     unique_result = await db.execute(
         select(func.count(distinct(Alert.fingerprint))).where(tenant_filter)
     )
@@ -961,7 +971,7 @@ async def get_alert_stats(
     )
     today = today_result.scalar() or 0
 
-    return AlertStats(
+    stats = AlertStats(
         total=total,
         firing=firing,
         resolved=resolved,
@@ -978,6 +988,12 @@ async def get_alert_stats(
         firing_high=high,
         aggregated=aggregated,
     )
+
+    try:
+        await redis.set(cache_key, stats.model_dump_json(), ex=45)
+    except Exception:
+        pass
+    return stats
 
 
 @router.get("/alerts/trend", response_model=AlertTrendResponse)
@@ -1741,6 +1757,19 @@ async def list_cloud_metrics(
     )
 
 
+def _require_system_admin(current_user: User) -> User:
+    """云产品指标为全局目录，写操作仅系统管理员可改。"""
+    if current_user.id == 0:
+        # API Key 虚拟用户：认证层已校验，视作平台级
+        return current_user
+    if not getattr(current_user, "is_system", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Global cloud metrics catalog requires system admin",
+        )
+    return current_user
+
+
 @router.post("/cloud-metrics/batch-delete")
 async def batch_delete_cloud_metrics(
     ids: List[int],
@@ -1748,7 +1777,8 @@ async def batch_delete_cloud_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
-    """批量删除云产品指标（软删除，设置为 inactive）"""
+    """批量删除云产品指标（软删除，设置为 inactive）；仅 system admin"""
+    _require_system_admin(current_user)
     if not ids:
         raise HTTPException(status_code=400, detail="ids cannot be empty")
 
@@ -1809,6 +1839,7 @@ async def sync_cloud_metrics(
     - 不传 alert_ids: 从最近的告警中同步
     - 传 alert_ids: 从指定告警中同步
     """
+    _require_system_admin(current_user)
     from apps.alert.services.cloud_metrics_sync import SyncService
 
     sync_service = SyncService(db)
@@ -1823,6 +1854,7 @@ async def sync_all_cloud_metrics(
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
     """全量同步：从所有告警中提取云产品指标"""
+    _require_system_admin(current_user)
     from apps.alert.services.cloud_metrics_sync import SyncService
 
     sync_service = SyncService(db)
@@ -1837,7 +1869,8 @@ async def create_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
-    """创建云产品指标"""
+    """创建云产品指标（仅 system admin）"""
+    _require_system_admin(current_user)
     metric = CloudProductMetric(
         product=request.product,
         namespace=request.namespace,
@@ -1874,7 +1907,8 @@ async def update_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:write")),
 ):
-    """更新云产品指标"""
+    """更新云产品指标（仅 system admin）"""
+    _require_system_admin(current_user)
     metric = await db.get(CloudProductMetric, metric_id)
     if not metric:
         raise HTTPException(status_code=404, detail="CloudProductMetric not found")
@@ -1894,7 +1928,8 @@ async def delete_cloud_metric(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("cloud_metrics:delete")),
 ):
-    """删除云产品指标（软删除，设置为 inactive）"""
+    """删除云产品指标（软删除，设置为 inactive）；仅 system admin"""
+    _require_system_admin(current_user)
     metric = await db.get(CloudProductMetric, metric_id)
     if not metric:
         raise HTTPException(status_code=404, detail="CloudProductMetric not found")

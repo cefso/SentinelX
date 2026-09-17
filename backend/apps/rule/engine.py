@@ -24,6 +24,38 @@ logger = structlog.get_logger()
 # 策略规则 code 前缀（不参与路由「规则匹配」统计）
 _STRATEGY_CODE_PREFIXES = ("_dedup_%", "_suppress_%", "_aggregate_%")
 
+# regex 算子硬化：限制模式长度、输入长度，并拒绝嵌套量词类灾难性回溯
+_REGEX_MAX_PATTERN_LEN = 256
+_REGEX_MAX_INPUT_LEN = 4096
+_REGEX_CACHE_MAX = 512
+_regex_cache: Dict[str, "re.Pattern"] = {}
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*[+*][^)]*\)[+*]")
+
+
+def _safe_regex_match(pattern: Any, value: Any) -> bool:
+    if pattern is None or value is None:
+        return False
+    if not isinstance(pattern, str) or len(pattern) > _REGEX_MAX_PATTERN_LEN:
+        return False
+    if _NESTED_QUANTIFIER_RE.search(pattern):
+        return False
+    text = str(value)
+    if len(text) > _REGEX_MAX_INPUT_LEN:
+        text = text[:_REGEX_MAX_INPUT_LEN]
+    compiled = _regex_cache.get(pattern)
+    if compiled is None:
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            return False
+        if len(_regex_cache) >= _REGEX_CACHE_MAX:
+            _regex_cache.clear()
+        _regex_cache[pattern] = compiled
+    try:
+        return bool(compiled.match(text))
+    except Exception:
+        return False
+
 
 def _stable_hash(value: str) -> str:
     """跨进程稳定的短哈希，用于 Redis 去重/聚合键。"""
@@ -112,7 +144,7 @@ class RuleEngine:
         "lte": lambda a, b: float(a) <= float(b) if a is not None else False,
         "contains": lambda a, b: b in str(a) if a is not None else False,
         "not_contains": lambda a, b: b not in str(a) if a is not None else True,
-        "regex": lambda a, b: bool(re.match(b, str(a))) if a is not None else False,
+        "regex": lambda a, b: _safe_regex_match(b, a),
         "in": lambda a, b: a in b if isinstance(b, list) else a == b,
         "not_in": lambda a, b: a not in b if isinstance(b, list) else a != b,
         "exists": lambda a, b: a is not None if b else a is None,
