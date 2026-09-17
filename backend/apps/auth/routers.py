@@ -13,7 +13,9 @@ from apps.core.utils import get_client_ip
 from apps.tenant.models import User
 from apps.auth.schemas import (
     LoginRequest, TokenResponse, RefreshTokenRequest, RegisterRequest,
-    SwitchTenantRequest, TenantInfo, APIKeyCreateRequest
+    SwitchTenantRequest, TenantInfo, APIKeyCreateRequest,
+    RegisterResponse, APIKeyListResponse, APIKeyCreateResponse,
+    CurrentUserResponse,
 )
 from apps.auth.services.auth import AuthService, PermissionService
 from apps.auth.dependencies import (
@@ -80,7 +82,7 @@ async def login(
         )
 
 
-@router.post("/auth/register")
+@router.post("/auth/register", response_model=RegisterResponse)
 async def register(
     request: RegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -97,11 +99,11 @@ async def register(
             tenant_id=request.tenant_id,
         )
 
-        return {
-            "message": "Registration submitted, pending approval",
-            "user_id": user.id,
-            "username": user.username,
-        }
+        return RegisterResponse(
+            message="Registration submitted, pending approval",
+            user_id=user.id,
+            username=user.username,
+        )
     except AuthenticationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -195,7 +197,7 @@ async def get_my_tenants(
     return {"tenants": tenants}
 
 
-@router.get("/auth/me")
+@router.get("/auth/me", response_model=CurrentUserResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -205,14 +207,17 @@ async def get_current_user_info(
     tenants = await auth_service.get_user_tenants(current_user.id)
     current_tenant = next((t for t in tenants if t["is_current"]), None)
 
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "is_system": current_user.is_system,
-        "current_tenant": current_tenant,
-        "tenants": tenants,
-    }
+    return CurrentUserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        is_system=current_user.is_system,
+        is_superuser=bool(current_tenant and current_tenant.get("is_superuser")) if current_tenant else False,
+        phone=getattr(current_user, "phone", None),
+        created_at=current_user.created_at.isoformat() if getattr(current_user, "created_at", None) else None,
+        current_tenant=current_tenant,
+        tenants=tenants,
+    )
 
 
 @router.get("/auth/permissions")
@@ -232,7 +237,7 @@ async def get_my_permissions(
 
 # ============ API Key管理 ============
 
-@router.post("/auth/api-keys")
+@router.post("/auth/api-keys", response_model=APIKeyCreateResponse)
 async def create_api_key(
     request: APIKeyCreateRequest,
     current_user: User = Depends(require_permission("api_keys:write")),
@@ -250,15 +255,14 @@ async def create_api_key(
         created_by=current_user.id if current_user and current_user.id else None,
     )
 
-    # 返回完整API Key (只显示一次)
-    return {
-        "api_key": api_key,
-        "full_api_key": full_api_key,
-        "message": "Store the full API key securely. It will not be shown again.",
-    }
+    return APIKeyCreateResponse(
+        api_key=api_key,
+        full_api_key=full_api_key,
+        message="Store the full API key securely. It will not be shown again.",
+    )
 
 
-@router.get("/auth/api-keys")
+@router.get("/auth/api-keys", response_model=APIKeyListResponse)
 async def list_api_keys(
     current_user: User = Depends(require_permission("api_keys:read")),
     db: AsyncSession = Depends(get_db),
@@ -268,7 +272,7 @@ async def list_api_keys(
     payload = get_token_payload()
     api_key_auth = APIKeyAuth(db)
     keys = await api_key_auth.list_api_keys(payload.get("current_tenant_id") if payload else None)
-    return {"api_keys": keys}
+    return APIKeyListResponse(api_keys=keys)
 
 
 @router.delete("/auth/api-keys/{key_id}")

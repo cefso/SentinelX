@@ -40,11 +40,17 @@ Base = declarative_base()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话的依赖注入"""
+    """获取数据库会话的依赖注入。
+
+    - handler 已显式 commit 时不再二次 commit
+    - 仍有挂起事务（含仅 flush 的写路径）时在此提交
+    - 异常统一 rollback
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
+            if session.in_transaction():
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

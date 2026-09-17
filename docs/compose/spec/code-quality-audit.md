@@ -22,9 +22,11 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..d32d01c130a56b59a1a8f41abcb1b
 
 **第四轮**覆盖：`/alerts/overview` 合并 stats + 去重触发/级别计数（列表页 4 请求 → 1）；dispose `silence` 写 `status=suppressed` + `silenced_until`；注册用户名/邮箱冲突统一错误文案；API Key 增加 `created_by` 溯源字段与迁移。
 
+**第五轮**覆盖：关键端点补 `response_model`（register/me/api-keys/dispose）；`get_db` 改为仅在事务仍打开时提交（handler 已 commit 不二次提交）；`AlertStatus`/`AlertSeverity` StrEnum 并用于指纹视图/处置路径；OpenAPI 契约冒烟测试。
+
 **Verification**
 
-- `backend`: `pytest tests/ -q` → **PASS 228**（含第三/四轮）
+- `backend`: `pytest tests/ -q` → **PASS 236**（含第五轮 openapi 契约测试）
 - `frontend`: `tsc --noEmit` → **PASS**
 - 静态 import 检查通过
 - 独立 Review（第一轮）：**approve**，无阻塞 Critical
@@ -113,11 +115,22 @@ commits: 000eb7aa618ebd661cddc696f185e7a2a8f4ea52..d32d01c130a56b59a1a8f41abcb1b
 | Low | 注册用户枚举 | username/email 冲突统一文案 |
 | Medium | API Key 无创建者 | `created_by` 字段 + alembic `20260918_api_key_created_by` |
 
+#### 第五轮 Low/Info
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| Low | 手工 dict 无 response_model | register / me / api-keys create+list / dispose |
+| Low | get_db 无条件 commit | 仅 `in_transaction()` 时提交 |
+| Low | 状态/级别魔法字符串 | `apps.core.schemas.AlertStatus/AlertSeverity`，指纹视图与 dispose 已用 |
+| Low | 缺契约冒烟测试 | `test_openapi_contract.py` |
+
 ### 未修复 / 后续建议（按优先级）
 
-1. **Low/Info** 响应补 `response_model`、分页契约统一、OpenAPI codegen 共享类型、`get_db` 无条件 commit、前端 token localStorage、TestClient 集成测试。
-2. **Low** `alert/routers.py` 仍偏大，可按域拆分。
-3. **Low** 魔法状态/级别字符串可抽 StrEnum。
+1. **Low** 其余手工 dict 端点继续补 `response_model`；分页 `page/page_size` vs `limit/offset` 统一。
+2. **Low** OpenAPI codegen 共享前后端类型（引入流水线）。
+3. **Low** 前端 token 仍存 localStorage（迁 httpOnly cookie 需会话架构调整）。
+4. **Low** `alert/routers.py` 按域拆分；状态枚举全面替换其余魔法串。
+5. **Info** SSRF 可选 DNS 解析校验；TestClient 可扩到需 DB 的集成路径。
 
 ### Review 备注（非阻塞）
 

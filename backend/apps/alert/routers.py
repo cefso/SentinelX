@@ -18,6 +18,7 @@ from apps.core.database import get_db
 from apps.core.redis import get_redis
 from apps.core.mq import get_mq_async
 from apps.core.security import verify_api_key
+from apps.core.schemas import AlertStatus, MessageResponse
 
 logger = structlog.get_logger()
 from apps.auth.dependencies import get_current_user, get_current_tenant_id, require_permission, require_superuser
@@ -1474,7 +1475,7 @@ async def update_alert(
     return alert
 
 
-@router.post("/alerts/{alert_id}/dispose", response_model=dict)
+@router.post("/alerts/{alert_id}/dispose", response_model=MessageResponse)
 async def dispose_alert(
     alert_id: int,
     request: DisposeRequest,
@@ -1497,16 +1498,16 @@ async def dispose_alert(
     previous_status = alert.status
 
     # 根据处置类型更新告警状态
-    if request.action == 'acknowledge' and alert.status == 'firing':
-        alert.status = 'acknowledged'
+    if request.action == 'acknowledge' and alert.status == AlertStatus.FIRING.value:
+        alert.status = AlertStatus.ACKNOWLEDGED.value
         alert.acknowledged_at = now
-    elif request.action == 'resolve' and alert.status in ('firing', 'acknowledged'):
-        alert.status = 'resolved'
+    elif request.action == 'resolve' and alert.status in (AlertStatus.FIRING.value, AlertStatus.ACKNOWLEDGED.value):
+        alert.status = AlertStatus.RESOLVED.value
         alert.resolved_at = now
     elif request.action == 'silence':
         minutes = request.silence_minutes or 60
         from datetime import timedelta as _td
-        alert.status = 'suppressed'
+        alert.status = AlertStatus.SUPPRESSED.value
         alert.silenced_until = now + _td(minutes=minutes)
 
     # 统一写入 dispose_* 前缀，与系统历史动作区分；读取时再映射回前端动作
@@ -1536,7 +1537,7 @@ async def dispose_alert(
     db.add(history)
 
     await db.commit()
-    return {"message": "处置成功"}
+    return MessageResponse(message="处置成功")
 
 
 @router.get("/alerts/{alert_id}/dispose", response_model=list[DisposeRecordResponse])

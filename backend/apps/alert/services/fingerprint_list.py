@@ -16,6 +16,7 @@ from apps.alert.models import (
 )
 from apps.alert.schemas import AlertAggregatedItem, AlertAggregatedResponse
 from apps.alert.services.alert_utils import build_alert_response
+from apps.core.schemas import AlertSeverity, AlertStatus
 from apps.rule.models import AlertRule
 
 STRATEGY_GROUP_FP_PREFIX = "strategy-group:"
@@ -246,11 +247,11 @@ async def list_alerts_fingerprint_aggregate(
         fp_filter.append(Alert.fingerprint.in_(flapping_set))
 
     severity_order = case(
-        (Alert.severity == "critical", 1),
-        (Alert.severity == "high", 2),
-        (Alert.severity == "medium", 3),
-        (Alert.severity == "low", 4),
-        (Alert.severity == "info", 5),
+        (Alert.severity == AlertSeverity.CRITICAL.value, 1),
+        (Alert.severity == AlertSeverity.HIGH.value, 2),
+        (Alert.severity == AlertSeverity.MEDIUM.value, 3),
+        (Alert.severity == AlertSeverity.LOW.value, 4),
+        (Alert.severity == AlertSeverity.INFO.value, 5),
         else_=6,
     )
 
@@ -387,7 +388,7 @@ async def list_alerts_fingerprint_aggregate(
 
         is_stale = (
             not is_strategy
-            and alert_obj.status == "firing"
+            and alert_obj.status == AlertStatus.FIRING.value
             and row.sort_at is not None
             and row.sort_at.replace(tzinfo=timezone.utc) < stale_threshold
         )
